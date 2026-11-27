@@ -25,6 +25,8 @@ const S = require("../../../scripts/stand.cjs") as {
   manifest: (a: { mainSha: string; stand: string; included: Pr[]; skipped: Skip[]; at?: string }) =>
     { main: string; stand: string; at: string; included: Array<{ number: number; sha: string; title: string; where: string }>; skipped: Skip[] };
   renderIssue: (m: ReturnType<typeof S.manifest>, url: string) => string;
+  BUILD_IMAGE: string;
+  buildArgv: (a: { wt: string; cmd: string; subject: string; uid: number; gid: number }) => [string, string[]];
   gitMerger: (cwd: string, date: string) => (base: string, p: Pr) => { ok: boolean; commit?: string; files?: string[] };
 };
 const pr = (number: number, more: Partial<Pr> = {}): Pr => ({ number, sha: String(number).padStart(40, "a"), title: `PR ${number}`, body: "", baseRef: "main", headRef: `b${number}`, files: [`f${number}.ts`], ...more });
@@ -198,6 +200,29 @@ describe("stand: the real git merges (merge-tree, commit-tree) on a throw-away r
     expect(S.mergeAll({ mainSha: main, order, merge }).stand).toBe(r.stand);
     // a merge commit has both parents: main's history and the PR's
     expect(git("rev-list", "--parents", "-n", "1", r.stand).split(" ")).toHaveLength(3);
+  });
+});
+
+describe("stand: the code of the PRs is built only inside a throw-away container (security review of #3125 п.1)", () => {
+  const [cmd, argv] = S.buildArgv({ wt: "/tmp/wt", cmd: "npm ci", subject: "Merge pull request #1", uid: 1001, gid: 118 });
+  it("docker run --rm, only the worktree mounted, the runner's user, no variable but HOME and SUBJECT", () => {
+    expect(cmd).toBe("docker");
+    expect(argv.slice(0, 2)).toEqual(["run", "--rm"]);
+    expect(argv).toContain("/tmp/wt:/w");
+    expect(argv.filter((a) => a === "-v")).toHaveLength(1);
+    expect(argv[argv.indexOf("--user") + 1]).toBe("1001:118");
+    const vars = argv.flatMap((a, i) => (argv[i - 1] === "-e" ? [a.split("=")[0]] : []));
+    expect(vars).toEqual(["HOME", "SUBJECT"]);
+    expect(argv).not.toContain("--privileged");
+    expect(argv.join(" ")).not.toMatch(/docker\.sock|--network[= ]host|--pid|ACTIONS_|GITHUB_TOKEN/);
+    expect(argv.slice(-4)).toEqual([S.BUILD_IMAGE, "bash", "-c", "npm ci"]);
+  });
+  it("the CLI builds every candidate through buildArgv and passes the container no environment of the runner", () => {
+    const src = readFileSync(join(__dirname, "../../../scripts/stand.cjs"), "utf8");
+    const build = src.slice(src.indexOf('} else if (cmd === "build")'), src.indexOf('} else if (cmd === "issue")'));
+    expect(build).toContain("buildArgv({ wt,");
+    expect(build).toContain("env: { PATH: process.env.PATH, HOME: process.env.HOME }");
+    expect(build).not.toMatch(/run\("bash"/);
   });
 });
 

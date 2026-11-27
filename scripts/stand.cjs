@@ -13,7 +13,8 @@
  * The pure part (plan, mergeAll, findBreaker, manifest, renderIssue) is tested in apps/mobile/test/stand.test.ts. The CLI part
  * runs git (merge-tree, commit-tree — no checkout, no code of a PR is run) and the build (only in the job with no keys):
  *   node scripts/stand.cjs merge  --out manifest.json [--exclude manifest-build.json] [--push]   (job merge / merge-again)
- *   node scripts/stand.cjs build  --manifest manifest.json --out manifest-build.json --dist <dir>  (job build: no keys, read-only)
+ *   node scripts/stand.cjs build  --manifest manifest.json --out manifest-build.json --dist <dir>  (job build: no keys, read-only;
+ *                                 every candidate is built in `docker run --rm` with only the worktree mounted, buildArgv)
  *   node scripts/stand.cjs issue  --manifest manifest.json --url <link>                             (job deploy: the pinned task)
  * Merge commits are made with a fixed author and date (gitMerger), so the same input gives the same SHA in every job: the
  * write job checks that the SHA the build job built is the one it pushes.
@@ -204,7 +205,19 @@ function gitMerger(cwd, date) {
   };
 }
 
-module.exports = { LABEL, BRANCH, ALIAS, STAND_ISSUE, MAX_BREAKERS, BUILD_CMD, dependencyOf, plan, mergeAll, findBreaker, whereLine, manifest, renderIssue, gitMerger };
+/**
+ * The build of one candidate runs in a throw-away container (security review of #3125 п.1): the code of the PRs (npm ci
+ * postinstall, typecheck, expo export) sees only the worktree mounted at /w — not the runner's processes, its environment
+ * (ACTIONS_RUNTIME_TOKEN of the artifact and cache steps) or its files, so it cannot write the caches main reads. The container
+ * gets no variable but SUBJECT, runs as the runner's user (the worktree stays removable) and is removed after the build.
+ */
+const BUILD_IMAGE = "node:22-bookworm";
+function buildArgv({ wt, cmd, subject, uid, gid }) {
+  return ["docker", ["run", "--rm", "--user", `${uid}:${gid}`, "-e", "HOME=/tmp", "-e", `SUBJECT=${subject}`,
+    "-v", `${wt}:/w`, "-w", "/w", BUILD_IMAGE, "bash", "-c", cmd]];
+}
+
+module.exports = { BUILD_IMAGE, buildArgv, LABEL, BRANCH, ALIAS, STAND_ISSUE, MAX_BREAKERS, BUILD_CMD, dependencyOf, plan, mergeAll, findBreaker, whereLine, manifest, renderIssue, gitMerger };
 
 // ---------------------------------------------------------------------------------------------------------------------- CLI
 if (require.main === module) {
@@ -293,7 +306,8 @@ if (require.main === module) {
       git(["worktree", "add", "--detach", wt, sha]);
       const subject = git(["show", "-s", "--format=%s", m.main]);
       try {
-        run("bash", ["-c", env.STAND_BUILD_CMD || BUILD_CMD], { cwd: wt, stdio: "inherit", env: { ...process.env, SUBJECT: subject } });
+        const [c, a] = buildArgv({ wt, cmd: env.STAND_BUILD_CMD || BUILD_CMD, subject, uid: process.getuid(), gid: process.getgid() });
+        run(c, a, { stdio: "inherit", env: { PATH: process.env.PATH, HOME: process.env.HOME } });
         return true;
       } catch { return false; }
     };
