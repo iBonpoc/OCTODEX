@@ -344,6 +344,16 @@ describe("stand.yml: who writes, where the code of the PRs runs, where the key i
     for (const d of downloads.filter((x) => /name: stand-(build|dist)/.test(x))) expect(d).toMatch(/\/untrusted/);
     expect(job("deploy")).toMatch(/find dist -type l[\s\S]*cp -R dist\/\. "\$GITHUB_WORKSPACE\/apps\/mobile\/dist\/"/);
   });
+  it("deploy decides from the write jobs what goes online; the build job's stand must equal it (review of #3125 п.4)", () => {
+    const d = job("deploy");
+    expect(d).toContain("CHANGED: ${{ needs.merge-again.result == 'success' }}");
+    expect(d).toContain("STAND: ${{ needs.merge-again.result == 'success' && needs.merge-again.outputs.stand || needs.merge.outputs.stand }}");
+    expect(d).not.toContain("needs.build.outputs.changed");
+    expect(d).toContain('[ "$BUILT" = "$STAND" ] || { echo "::error::the build job built');
+    expect(d).toMatch(/require\(process\.argv\[1\]\)\.stand' "\$f"\)" = "\$STAND"/);
+    expect(job("merge-again")).toContain("stand: ${{ steps.again.outputs.stand }}");
+    expect(job("merge")).toContain("stand: ${{ steps.merge.outputs.stand }}");
+  });
   it("deploy: the environment preview-web, static files checked as in the preview, the alias stand, the pinned task", () => {
     const d = job("deploy");
     expect(d).toMatch(/environment: preview-web/);

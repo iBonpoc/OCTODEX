@@ -140,6 +140,8 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write
+    outputs:
+      stand: ${{ steps.again.outputs.stand }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -155,7 +157,8 @@ jobs:
         with:
           name: stand-build
           path: ${{ runner.temp }}/untrusted
-      - name: The same merges without the PRs that break the build
+      - id: again
+        name: The same merges without the PRs that break the build
         env:
           GH_TOKEN: ${{ github.token }}
           BUILT: ${{ needs.build.outputs.stand }}
@@ -178,9 +181,17 @@ jobs:
     permissions:
       contents: read
       issues: write
+    # what goes online is decided here from the write jobs (review of #3125 п.4): the stand of merge-again when it ran, else
+    # the stand of merge; the build job's word («changed», its stand) is only checked against it
     env:
-      CHANGED: ${{ needs.build.outputs.changed }}
+      CHANGED: ${{ needs.merge-again.result == 'success' }}
+      STAND: ${{ needs.merge-again.result == 'success' && needs.merge-again.outputs.stand || needs.merge.outputs.stand }}
+      BUILT: ${{ needs.build.outputs.stand }}
     steps:
+      - name: The built commit is the stand of the write job
+        run: |
+          [[ "$STAND" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::no stand from the write job"; exit 1; }
+          [ "$BUILT" = "$STAND" ] || { echo "::error::the build job built $BUILT, the write job made $STAND"; exit 1; }
       - uses: actions/checkout@v4
         with:
           ref: main
@@ -238,4 +249,5 @@ jobs:
           URL: ${{ steps.web.outputs.url }}
         run: |
           f="$RUNNER_TEMP/trusted/manifest.json"; [ "$CHANGED" = "true" ] && f="$RUNNER_TEMP/trusted/manifest-final.json"
+          [ "$(node -p 'require(process.argv[1]).stand' "$f")" = "$STAND" ] || { echo "::error::the manifest is not of $STAND"; exit 1; }
           node scripts/stand.cjs issue --manifest "$f" --url "$URL"
