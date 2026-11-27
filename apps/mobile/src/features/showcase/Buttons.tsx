@@ -5,7 +5,8 @@ import { useI18n } from "@/i18n";
 import { Fab } from "@/nav/Fab";
 import { ActionBar } from "@/ui/actionBar";
 import { ButtonPair } from "@/ui/pairs";
-import { Button, IconButton } from "@/ui/controls";
+import { Button, IconButton, StatusChip } from "@/ui/controls";
+import { GroupRow, ListGroup } from "@/ui/groupedList";
 import { Icon, Press, T } from "@/ui/primitives";
 import { DEFAULT_TAX, computeAllOptional, computeCustomOption, type CustomOption, type CustomSettings } from "@octo/estimating-engine";
 import { TotalsBreakdown } from "@/features/estimate/TotalsBreakdown";
@@ -88,6 +89,26 @@ export function ButtonsSection() {
       <Card>
         <ButtonPair testID="showcase-btn-pair" main={{ label: t("ds.btn.primary"), icon: "check", onPress: press }} second={{ label: t("ds.btn.secondary"), variant: "secondary", onPress: press }} />
         <ButtonPair testID="showcase-btn-pair-long" main={{ label: t("ds.btn.pairLong"), onPress: press }} second={{ label: t("ds.btn.ghost"), variant: "ghost", onPress: press }} />
+      </Card>
+      {/* §7.5 (#3064, founder 27.11): no column of buttons — the wrong example on purpose (a listed exception of the guard), then the right one */}
+      <Card>
+        <View testID="showcase-btn-column" style={{ gap: space[3] }}>
+          <T v="heading">{t("ds.btn.col")}</T>
+          <StatusChip status="bad" label={t("ds.btn.colWrong")} soft />
+          <View style={{ gap: space[2] }}>
+            <Button label={t("ds.btn.colA")} icon="sliders" variant="secondary" onPress={press} />
+            <Button label={t("ds.btn.colB")} icon="box" variant="secondary" onPress={press} />
+            <Button label={t("ds.btn.colC")} icon="note" variant="secondary" onPress={press} />
+            <Button label={t("ds.btn.colMain")} icon="check" onPress={press} />
+          </View>
+          <StatusChip status="ok" label={t("ds.btn.colRight")} soft />
+          <Button label={t("ds.btn.colMain")} icon="check" onPress={press} />
+          <ListGroup title={t("ds.btn.colGroup")}>
+            <GroupRow title={t("ds.btn.colA")} lead={{ icon: "sliders" }} chevron onPress={press} />
+            <GroupRow title={t("ds.btn.colB")} lead={{ icon: "box" }} chevron onPress={press} />
+            <GroupRow title={t("ds.btn.colC")} lead={{ icon: "note" }} chevron onPress={press} />
+          </ListGroup>
+        </View>
       </Card>
       <Card>
         <T v="heading">{t("ds.btn.kinds")}</T>
