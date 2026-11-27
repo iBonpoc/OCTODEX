@@ -5,7 +5,7 @@
  * its rows' constants live here for that.
  */
 import { useState } from "react";
-import { ScrollView, View } from "react-native";
+import { View } from "react-native";
 import { useI18n } from "@/i18n";
 import type { DictKey } from "@/i18n";
 import { component, radius, space } from "@octo/design-tokens";
@@ -13,6 +13,7 @@ import { ChoiceChips } from "@/ui/controls";
 import { Press, T } from "@/ui/primitives";
 import { fillStyle } from "@/ui/fill";
 import { useTheme } from "@/theme/ThemeProvider";
+import { ScrollFadeRow } from "@/ui/scrollFade";
 import { fracLabel } from "../canvas/format";
 import { sixteenthBehind, sixteenthsOpenAtStart } from "./fracSlot";
 
@@ -24,6 +25,7 @@ export const ODD_SIXTEENTHS = [1, 3, 5, 7, 9, 11, 13, 15] as const;
 export const eighthKey = (e16: number): string | null => (e16 % 2 === 0 ? String(e16 / 2) : null);
 
 const NONE = "-";
+
 
 export function FracPicker({ value, onChange, active, testID }: {
   /** the fraction in sixteenths, 0..15 */
@@ -40,13 +42,16 @@ export function FracPicker({ value, onChange, active, testID }: {
   const [more, setMore] = useState(sixteenthsOpenAtStart(value));
   const behind = sixteenthBehind(value, more);
   const eighth = eighthKey(value);
+  // the fade's colour on a phone: the field's ground at the fraction, else the window's glass (the web fades the chips themselves)
+  const ground = active ? c.in : c.ov;
+  // design-review #3066 №11: both rows fade at an edge with more chips past it (DS «ScrollFade» — the row was cut at the window's edge)
   return (
     // the same padding either way (the rows do not shift): the ground only changes
     <View
       testID={testID}
-      style={{ gap: space[2], padding: space[1], borderRadius: radius.field, backgroundColor: active ? c.in : "transparent" }}
+      style={{ gap: space[2], padding: space[1], borderRadius: radius.field, backgroundColor: active ? ground : "transparent" }}
     >
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="always">
+      <ScrollFadeRow ground={ground}>
         <View style={{ flexDirection: "row", gap: space[2], alignItems: "center" }}>
           <ChoiceChips
             nowrap
@@ -67,16 +72,16 @@ export function FracPicker({ value, onChange, active, testID }: {
             <T v="button" w={more || behind ? "semibold" : undefined} style={{ color: more || behind ? c.ink : c.mut }}>{t("mod.gutters.attr.fracMore" as DictKey)}</T>
           </Press>
         </View>
-      </ScrollView>
+      </ScrollFadeRow>
       {more ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="always" testID={`${testID}-sixteenths`}>
+        <ScrollFadeRow ground={ground} testID={`${testID}-sixteenths`}>
           <ChoiceChips
             nowrap
             items={ODD_SIXTEENTHS.map((i) => ({ key: String(i), label: fracLabel(i) }))}
             value={eighth === null ? String(value) : NONE}
             onChange={(key) => onChange(Number(key))}
           />
-        </ScrollView>
+        </ScrollFadeRow>
       ) : null}
     </View>
   );
