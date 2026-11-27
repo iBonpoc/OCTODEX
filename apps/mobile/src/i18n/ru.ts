@@ -5750,6 +5750,7 @@ export const ru = {
   "c3072.closed": "Закрытые",
   "c3072.leads": "Лиды",
   "c3072.allNotes": "Все заметки · {n}",
+  "c3072.ahead": "Впереди",
 } as const;
 
 export type DictKey = keyof typeof ru;
