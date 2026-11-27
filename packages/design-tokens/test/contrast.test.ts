@@ -272,6 +272,15 @@ describe.each(names)("%s high contrast (iOS «Повышение контрас�
       for (const st of Object.keys(highContrast[name].status) as StatusName[]) expect(ratio(parse(h.status[st].text), ground), st).toBeGreaterThanOrEqual(7);
     });
   }
+  // GORIX-DS §3.1: the word on a status plate (`status.*.on` over `status.*.fill` on the card) — light ≥ 7:1; dark never weaker than plain
+  it("status words on their own plate (status.*.on over status.*.fill)", () => {
+    for (const st of ["ok", "info", "warn", "bad"] as const) {
+      const plate = over(c.status[st].fill, str(card));
+      const r = ratio(parse(h.status[st].on), plate);
+      if (name === "light") expect(r, st).toBeGreaterThanOrEqual(7);
+      else expect(r, st).toBeGreaterThanOrEqual(ratio(parse(c.status[st].on), plate) - 0.01);
+    }
+  });
   it("never weaker than the plain theme, on every surface", () => {
     for (const ground of Object.values(all)) {
       expect(ratio(parse(h.mut), ground)).toBeGreaterThanOrEqual(ratio(parse(c.mut), ground) - 0.01);
