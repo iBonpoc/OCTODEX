@@ -37,7 +37,9 @@ describe("an estimate that went out (#3058)", () => {
     const repo = readFileSync(new URL("../src/cloud/repo.ts", import.meta.url), "utf8");
     expect(repo).toContain("lastSentAt: (versionOf.get(s(e.sent_version_id))?.sent_at");
     const editor = readFileSync(new URL("../src/app/estimate/new.tsx", import.meta.url), "utf8");
-    expect(editor).toContain('const sentBefore = !!existing && (existing.status !== "draft" || !!sentOnceAt(existing));');
+    // the rule itself, not a variable name: «Отправить изменения» for an estimate that ever went out — in the header's ➤ here, in
+    // barSteps' `sentBefore` once #2970 lands (both read the same words)
+    expect(editor).toContain('existing.status !== "draft" || !!sentOnceAt(existing)');
     const send = readFileSync(new URL("../src/features/sendEstimate.ts", import.meta.url), "utf8");
     expect(send).toContain('firstSend: e.status === "draft" && !sentOnceAt(e)');
   });
