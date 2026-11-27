@@ -262,7 +262,7 @@ export function GroupRowBody({ title, titleNote, extra, figureRight, subtitle, l
       ) : null}
       <View style={{ flex: 1, minWidth: 0 }}>
         <View testID={ids?.title} style={titleNote ? { flexDirection: "row", flexWrap: "wrap", alignItems: "baseline", columnGap: space[2] } : undefined}>
-          <T v="body" w="semibold" tone={check?.done || quiet ? "mut" : "ink"} numberOfLines={wrap || wordCol ? 2 : 1} style={[check?.done ? { textDecorationLine: "line-through" } : null, titleNote ? { flexShrink: 1 } : null]}>
+          <T v="body" w="semibold" tone={check?.done || quiet ? "mut" : "ink"} numberOfLines={wrap || wordCol || titleNote ? 2 : 1} style={[check?.done ? { textDecorationLine: "line-through" } : null, titleNote ? { flexShrink: 1 } : null]}>
             {title}
           </T>
           {titleNote ? (
@@ -282,7 +282,9 @@ export function GroupRowBody({ title, titleNote, extra, figureRight, subtitle, l
         ) : null}
         {/* #3017: with the phone in the name's line the right side keeps only the call — the status and the sum go to line 3
             («⊗ Просрочен 9 дн  $1,840.00 · Сегодня 1:30 PM · …»): the name, the phone and the address keep the whole width */}
-        {extra || (titleNote && (status || (value && !figureRight))) ? (
+        {/* #3026 (founder 27.11: «не помещается сумма… не помещается уведомление»; design/crm review — B): a card with a mark keeps
+            3 lines — line 3 is the sum and the mark, whole; the deeds then live in the object (Jobber, HCP: one mark in a list row) */}
+        {(titleNote && !figureRight && status ? false : !!extra) || (titleNote && (status || (value && !figureRight))) ? (
           // the deeds keep at least 40 % of the line; less left after the sum and the status — they take their own line (never «С…»);
           // the sum first and never cut (#2672, design-review 27.11)
           <RowView gap={space[2]} style={{ flexWrap: "wrap", rowGap: 0 }}>
@@ -292,7 +294,7 @@ export function GroupRowBody({ title, titleNote, extra, figureRight, subtitle, l
               </T>
             ) : null}
             {titleNote && status ? <StatusPill status={status.status} label={status.label} draft={status.draft} /> : null}
-            {extra ? (
+            {extra && !(titleNote && !figureRight && status) ? (
               <T v="caption" tone="mut" numberOfLines={1} style={{ flexShrink: 1, flexGrow: 1, flexBasis: 0, minWidth: "40%" }}>
                 {extra}
               </T>
