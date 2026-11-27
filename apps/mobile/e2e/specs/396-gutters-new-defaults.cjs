@@ -7,7 +7,7 @@
  * a change is kept only by «Сохранить» («Закрыть» with a change asks, «Не сохранять» drops it); «⋯ → Как рисовать новые» opens it too;
  * «Новые — так же» in a gutter's own window: saved with it on, the next gutter is drawn like it.
  */
-const { skipLength, pastDoubleTap, doubleTapUntil, pickAttr, attrShown, winSave, winClose } = require("../gutters.cjs");
+const { skipLength, pastDoubleTap, doubleTapUntil, pickAttr, attrShown, winSave, winClose, pairFits, tilesEven } = require("../gutters.cjs");
 const { sheetGone } = require("../sheet.cjs");
 const KEY = "octo.db.v5";
 
@@ -87,6 +87,9 @@ exports.run = async (h) => {
   h.expect((await tid("attr-length").count()) === 0 && (await tid("attr-story").count()) === 0, "no length and no story among the new gutters' rows");
   await choose("attr-color", "brown");
   await p.waitForFunction(() => /Brown/.test(document.querySelector('[data-testid="draw-new-defaults"]')?.textContent || ""), null, { timeout: 5000 });
+  // #3015 / #3051: «Для новых» — Размер · Цвет in one line, nothing cut; the profile tiles even
+  { const bad = await pairFits(p, "attr-size", "attr-color"); h.expect(bad === "", `size · colour in one line (${bad || "ok"})`); }
+  { const bad = await tilesEven(p, "attr-profile"); h.expect(bad === "", `the profile tiles are even (${bad})`); }
   await h.shot("new-runs");
   await closeNew();
 

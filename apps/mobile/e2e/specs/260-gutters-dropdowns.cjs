@@ -3,7 +3,7 @@
  * (#677 founder 09.11: «Материал, профиль, толщина — селекторы»; «Строка "Размер" слишком широкая»). Every view.
  * Finds things by testID; waits on what it checks (no pauses).
  */
-const { openProps, skipLength, pickAttr, attrShown, attrKeys, attrChosen, openAttrMore } = require("../gutters.cjs");
+const { openProps, skipLength, pickAttr, attrShown, attrKeys, attrChosen, openAttrMore, tilesEven, pairFits } = require("../gutters.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -33,11 +33,13 @@ exports.run = async (h) => {
   const mat = await tid("attr-material-button").boundingBox();
   const full = await tid("attr-color-button").boundingBox(); // the colour has a row of its own
   h.expect(size.width < full.width * 0.8, `the size field is narrower than the full row (${Math.round(size.width)} vs ${Math.round(full.width)})`);
-  // the material and the gauge share one row (founder 27.11, #2984: «в одну линию на одной строке»)
-  if (await tid("attr-gauge-button").count()) {
-    const g = await tid("attr-gauge-button").boundingBox();
-    h.expect(Math.abs(g.y - mat.y) < 2 && g.x > mat.x + mat.width - 1, `material · gauge in one row (${Math.round(mat.y)} / ${Math.round(g.y)})`);
+  // the material and the gauge share one row (founder 27.11, #2984), Размер · Этаж too — side by side, nothing cut (#3051)
+  for (const [x, y] of [["attr-size", "attr-story"], ...((await tid("attr-gauge-button").count()) ? [["attr-material", "attr-gauge"]] : [])]) {
+    const bad = await pairFits(p, x, y);
+    h.expect(bad === "", `pair in one line (${bad || `${x} · ${y}`})`);
   }
+  // #3051: the profile tiles are one width and height, in one row
+  { const bad = await tilesEven(p, "attr-profile"); h.expect(bad === "", `the profile tiles are even (${bad})`); }
   // the profile: tiles with icons (#2986) — a pick checks it and the window says it
   const profiles = await attrKeys(p, "attr-profile");
   h.expect(profiles.length >= 2 && (await tid("attr-profile-button").count()) === 0, `the profile tiles (${profiles.length})`);

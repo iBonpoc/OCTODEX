@@ -19,7 +19,10 @@ function Tile({
   onPress,
   testID,
   disabled,
+  dense,
 }: {
+  /** a row of four or more: the smaller word (#3051) */
+  dense?: boolean;
   label: string;
   icon: IconKey;
   selected?: boolean;
@@ -37,11 +40,14 @@ function Tile({
       onPress={onPress}
       disabled={disabled}
       visibleHeight={component.optionTile.h}
+      containerStyle={{ flexGrow: 1 }}
       accessibilityRole={action ? "button" : "radio"}
       accessibilityState={action ? { disabled: !!disabled } : { selected: on, disabled: !!disabled }}
       {...(!action && web ? ({ "aria-checked": on } as object) : null)}
       accessibilityLabel={label}
       style={{
+        // fills its cell: every tile of a row is as tall as the tallest (a name on two lines, a larger text size) — #3051
+        flexGrow: 1,
         minHeight: component.optionTile.h,
         borderRadius: radius.inner,
         borderWidth: component.hairline,
@@ -49,13 +55,16 @@ function Tile({
         alignItems: "center",
         justifyContent: "center",
         gap: space[1],
-        paddingHorizontal: space[2],
+        // 4 at the sides: a row of four on 390 reads «Corrugated» whole (#3051)
+        paddingHorizontal: space[1],
         paddingVertical: space[2],
         ...(on ? fillStyle(c) : { backgroundColor: "transparent" }),
       }}
     >
       <Icon name={icon} s={size.iconMd} color={c.ink} />
-      <T v="caption" w={on ? "semibold" : "regular"} style={{ color: c.ink }} center numberOfLines={2}>
+      {/* a row of 4–5 (a trade module's window): `micro`, so the longest word of the supplier's chart («Corrugated») reads whole in the
+          side panel's 360 too (#3051) */}
+      <T v={dense ? "micro" : "caption"} w={on ? "semibold" : "regular"} style={{ color: c.ink }} center numberOfLines={2}>
         {label}
       </T>
       {on ? <CheckMark placement="corner" testID={testID ? `${testID}-check` : undefined} /> : null}
@@ -103,7 +112,7 @@ export function OptionTiles<K extends string>({
       >
         {items.map((it) => (
           <View key={it.key} style={{ flex: 1 }}>
-            <Tile testID={testID ? `${testID}-${it.key}` : undefined} label={it.label} icon={it.icon} selected={it.key === value} disabled={ro} onPress={() => onChange(it.key)} />
+            <Tile dense={n >= 4} testID={testID ? `${testID}-${it.key}` : undefined} label={it.label} icon={it.icon} selected={it.key === value} disabled={ro} onPress={() => onChange(it.key)} />
           </View>
         ))}
       </View>
