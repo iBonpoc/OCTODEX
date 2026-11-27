@@ -178,6 +178,8 @@ export interface ModuleDef {
    *  coalesceKey was taken back): its payload now, or null — cannot (then that «Отменить» is too late) */
   rebuild?: (op: { kind: string; payload: Record<string, unknown> }, d: import("@/data/types").DB) => Record<string, unknown> | null;
   titleKey: DictKey;
+  /** #3065: the module's own mark on «Компания → Модули» (not the «Настройки» gear); none — the gear */
+  icon?: import("@/ui/primitives").IconKey;
   hintKey: DictKey;
   trialDays: number;
   /** the add-on's price a month (founder О1); payment itself is the step «Оплаты» */

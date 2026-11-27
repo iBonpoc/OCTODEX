@@ -31,6 +31,8 @@ function measure(data: unknown, by: { leadId?: string; propertyId?: string; lead
 const gutters: ModuleDef = {
   key: "gutters",
   titleKey: "mod.gutters.title",
+  // #3065: the module's mark — the measure (as a draft measurement's row), not the gear of its «Настройки»
+  icon: "measure",
   hintKey: "mod.gutters.hint",
   trialDays: 7,
   priceCentsMonthly: 3000,
