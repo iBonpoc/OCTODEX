@@ -95,12 +95,16 @@ async function waitPastCompanyMidnight() {
     const ctx = await browser.newContext({ viewport: { width: layout.width, height: layout.width === 390 ? 844 : 900 }, locale: "en-US", reducedMotion: "reduce" });
     await installClock(ctx);
     await ctx.addInitScript((o) => {
+      // #3024: the demo without the modules' demo data (the test client's measurement): a spec counts its own; a spec that wants
+      // them says `exports.moduleDemo = true`
+      if (o.noModuleDemo) localStorage.setItem("octo.e2e.noModuleDemo.v1", "1");
+      else localStorage.removeItem("octo.e2e.noModuleDemo.v1");
       if (localStorage.getItem("octo.lang.v1")) return;
       localStorage.setItem("octo.lang.v1", JSON.stringify(o.lang));
       localStorage.setItem("octo.role.v1", JSON.stringify(o.role));
       localStorage.setItem("octo.theme.v1", JSON.stringify(o.theme));
       localStorage.setItem("octo.hints.v1", JSON.stringify(["today", "company", "clients", "estimate-builder", "inbox", "triage", "money", "jobs", "team", "catalog", "plan", "visits"]));
-    }, { lang: "ru", role: "director", theme: layout.theme, ...(spec.init || {}) });
+    }, { lang: "ru", role: "director", theme: layout.theme, noModuleDemo: !spec.moduleDemo, ...(spec.init || {}) });
     const page = await ctx.newPage();
     page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
     page.on("console", (m) => m.type() === "error" && errors.push(`console: ${m.text()}`));
