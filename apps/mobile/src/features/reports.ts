@@ -10,6 +10,7 @@ import { periodRange } from "./metrics";
 import { daysOverdue, paymentsIn, type PaymentPeriod } from "./moneyLists";
 import { todayKey, type DayKey } from "./calendar";
 import { dayKeyIn } from "./zone";
+import { sentOnceAt } from "@/features/estimateStatus";
 
 export type ReportId = "owed" | "collected" | "sales" | "sources" | "categories";
 export const REPORTS: readonly ReportId[] = ["owed", "collected", "sales", "sources", "categories"];
@@ -49,7 +50,8 @@ export function salesReport(db: Pick<DB, "estimates">, p: PaymentPeriod, today: 
   return salesFunnel(
     db.estimates.map((e) => {
       const signed = e.status === "approved" && inPeriod(e.approvedAt, p, today);
-      return { sent: inPeriod(e.sentAt, p, today), signed, cents: signed ? estimateListAmount(e).cents : 0 };
+      // #3059: edited after it went out — still sent (sentOnceAt)
+      return { sent: inPeriod(sentOnceAt(e), p, today), signed, cents: signed ? estimateListAmount(e).cents : 0 };
     }),
   );
 }
