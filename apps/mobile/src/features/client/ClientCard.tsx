@@ -173,7 +173,8 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
 
   /* ---------- the strip ---------- */
   const keys = clientSectionKeys(role, f.hasMoney, r.properties.length > 1);
-  const current: ClientSectionKey = keys.includes(section) ? section : "overview";
+  // a tech has no «Выезды» of their own: an address `?tab=visits` opens «Работы», where the visits are (#3060 п.3)
+  const current: ClientSectionKey = keys.includes(section) ? section : section === "visits" && keys.includes("work") ? "work" : "overview";
   const workN = office ? r.jobs.length : f.visits.length;
   const sections = useMemo(
     () =>
