@@ -672,7 +672,6 @@ describe("design system: no column of buttons (DS §7.5, #3065)", () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const ts = require("typescript") as typeof import("typescript");
   const BUTTON_COLUMNS_LEFT: Record<string, number> = {
-    "app/(tabs)/triage.tsx": 1,
     "app/auth/sign-in.tsx": 2,
     "app/company/intake.tsx": 1,
     "app/estimate/new.tsx": 1,
@@ -680,7 +679,6 @@ describe("design system: no column of buttons (DS §7.5, #3065)", () => {
     "features/CompanyTerms.tsx": 1,
     "features/PhotoStrip.tsx": 1,
     "features/RelatedBlock.tsx": 1,
-    "features/StuckOps.tsx": 1,
     "features/VisitChecklist.tsx": 1,
     "features/VisitForm.tsx": 2,
     "features/lead/LeadSheets.tsx": 3,
