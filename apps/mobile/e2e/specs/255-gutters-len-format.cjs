@@ -6,7 +6,7 @@
  * - back to «Футы и дюймы»: the review is in feet-inches again (the setting is the company's, one place).
  * Finds things by testID and by the order of the chips (rule 19); waits on what it checks.
  */
-const { skipLength, openView, pressWhenStill } = require("../gutters.cjs");
+const { skipLength, openView, pressWhenStill, docsFor } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -23,6 +23,7 @@ exports.run = async (h) => {
   };
   /** the next frame printed: its HTML (the print dialog is not opened) */
   const printed = async (id) => {
+    await docsFor(p, id); // #2989: the crew's documents are in «⋯ → Документы бригады»
     await p.evaluate(() => {
       window.__pdf = null;
       for (const f of document.querySelectorAll("iframe")) f.dataset.seen = "1";

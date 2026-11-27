@@ -19,14 +19,18 @@ import type { PickerItem } from "@/ui/pickerSheet";
 import { SelectField } from "@/ui/selectField";
 import { ColorField } from "@/ui/colorField";
 import { ToggleRow } from "@/ui/toggleRow";
+import { OptionTiles } from "@/ui/optionTile";
 import { Icon, Press, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Menu, useSheetClose } from "@/ui/overlays";
 import { RowView } from "@/ui/surfaces";
-import { COLORS, ELBOW_STYLES, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, boughtElbowCounts, dsStoryPatch, dsStoryShown, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
+import { COLORS, ELBOW_STYLES, PROFILE_ICON, SIZES_BY_PROFILE, DS_SIZES, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, boughtElbowCounts, dsStoryPatch, dsStoryShown, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
 import { colorChoices } from "./colorChoices";
 import { dsMoreSet, dsRareShown } from "./attrShown";
+import { holdForOwnBad, markOwnBad } from "./ownBad";
+import { dsOwnFt } from "./dsOwnFt";
+import { readOwnDsSize, readOwnRunSize } from "../canvas/ownSize";
 import { FracPicker } from "./FracPicker";
 import { FRAC_SLOT } from "./fracSlot";
 import { feetResetsRest, inchesComplete, inchesTooBig, mmDraft, nextStage, tapeDraft, unitPickStep, type EntryStage } from "./lengthEntry";
@@ -325,10 +329,14 @@ export function QuickLength({ run, onLength, onDone, onCancel, start, fmt = "fti
     // the body scrolls, the buttons stay under it in view (the input window gives it its room — InputWindow `scroll={false}`)
     <View testID="quick-length" style={{ gap: space[3], flexShrink: 1 }}>
       <ScrollView keyboardShouldPersistTaps="handled" style={{ flexShrink: 1 }} contentContainerStyle={{ gap: space[3] }} showsVerticalScrollIndicator={false}>
-      <T v="heading" w="semibold">{t(k("quickTitle"))}</T>
+      {/* the unit choice stands by the title (design-review #3066 №2): the fields' row keeps room for «Далее», nothing jumps */}
+      <RowView style={{ gap: space[2], alignItems: "center", justifyContent: "space-between" }}>
+        <T v="heading" w="semibold" style={{ flexShrink: 1 }}>{t(k("quickTitle"))}</T>
+        {unit === "ftin" ? <UnitPick unit={unit} onUnit={pickUnit} testID="quick-length-unit" /> : null}
+      </RowView>
       {unit === "ftin" ? (
         <>
-          <RowView style={{ gap: space[2], flexWrap: "wrap", alignItems: "center" }}>
+          <RowView style={{ gap: space[1], alignItems: "center" }}>
             <View style={{ width: component.qtyFieldW }} testID="quick-length-ft">
               <TextField type="integer" value={ft} onChangeText={(v) => { edit(setFt)(v); if (feetResetsRest({ firstOpen: start === undefined, restTouched: restTouched.current })) { setInc("0"); setE16(0); } }} label={t(k("ft"))} onSubmit={goNext} onFocus={() => setStage("ft")} chain autoFocus selectOnFocus />
             </View>
@@ -337,7 +345,12 @@ export function QuickLength({ run, onLength, onDone, onCancel, start, fmt = "fti
               <TextField type="number" value={inc} onChangeText={(v) => { restTouched.current = true; edit(setInc)(v); const big = inchesTooBig(v); setBad(big); setStage(inchesComplete(v) && !big ? "frac" : "in"); }} label={t(k("in"))} onSubmit={stage === "frac" ? apply : goNext} onFocus={() => setStage((s0) => (s0 === "frac" ? s0 : "in"))} focusNow={inFocus} chain selectOnFocus />
             </View>
             <FracText value={e16} testID="quick-length-frac" />
-            <UnitPick unit={unit} onUnit={pickUnit} testID="quick-length-unit" />
+            {/* «Далее» — a step of the typing, with the fields (the phone's number pad has no «next» key, #1316); the window's own row below holds
+                two buttons only, «Отменить · Применить» (DS Б1а; founder 27.11, #3064 «никаких столбиков кнопок»). At the fraction it is not needed:
+                its place stays (disabled, no testID), so the rows under it never jump (design-review #3066 №2) */}
+            {stage !== "frac"
+              ? <View testID="quick-length-next" style={{ marginLeft: "auto" }}><Button label={t(k("next"))} variant="secondary" onPress={goNext} /></View>
+              : <View style={{ marginLeft: "auto" }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><Button label={t(k("next"))} variant="secondary" disabled onPress={goNext} /></View>}
           </RowView>
           <FracPicker value={e16} onChange={(v) => { edited.current = true; restTouched.current = true; setE16(v); setBad(false); }} active={stage === "frac"} testID="quick-length-fracs" />
           <Pull ft={ft} inc={inc} e16={e16} onPull={(x) => { edited.current = true; restTouched.current = true; setFt(String(x.ft)); setInc(String(x.inch)); setE16(x.sixteenths); setBad(false); }} testID="quick-length-tape" />
@@ -354,10 +367,9 @@ export function QuickLength({ run, onLength, onDone, onCancel, start, fmt = "fti
       <T v="caption" tone="mut">{t(k("quickDrawn"), { len: fmtLen(drawn, fmt) })}</T>
       {bad ? <View testID="quick-length-bad"><StatusChip status="warn" label={t(k(unit === "mm" ? "badLengthMm" : "badLength"))} soft /></View> : null}
       </ScrollView>
-      <RowView style={{ gap: space[2], justifyContent: "flex-end" }}>
-        {unit === "ftin" && stage !== "frac" ? <View testID="quick-length-next"><Button label={t(k("next"))} size="sm" variant="secondary" onPress={goNext} /></View> : null}
-        <View testID="quick-length-cancel"><Button label={t(k("quickCancel"))} size="sm" variant="ghost" onPress={onCancel} /></View>
-        <View testID="quick-length-apply"><Button label={t(k("apply"))} size="sm" onPress={apply} /></View>
+      <RowView style={{ gap: space[2], justifyContent: "space-between" }}>
+        <View testID="quick-length-cancel"><Button label={t(k("quickCancel"))} variant="ghost" onPress={onCancel} /></View>
+        <View testID="quick-length-apply"><Button label={t(k("apply"))} onPress={apply} /></View>
       </RowView>
     </View>
   );
@@ -382,6 +394,27 @@ function FieldRow({ children }: { children: React.ReactNode }) {
     <RowView style={{ gap: space[2], alignItems: "flex-start" }}>
       {kids.map((ch, i) => <View key={i} style={{ flex: 1, minWidth: 0 }}>{ch}</View>)}
     </RowView>
+  );
+}
+
+/**
+ * A value picked by sight (founder 27.11, #2980 / #2986: «должен быть не селектор, это должны быть иконки»): the label over a
+ * row of tiles, an icon over the name each (DS §9 А2б, the places of the list). The tiles are `<testID>-<key>`.
+ */
+/** a «Свой» field whose text is no value tells the window: «Сохранить» then holds it and shows the warning (#3090, `ownBad.ts`) */
+function useOwnBad(id: string, isBad: boolean, reveal: () => void) {
+  useEffect(() => {
+    markOwnBad(id, isBad ? reveal : null);
+    return () => markOwnBad(id, null);
+  }, [id, isBad]); // eslint-disable-line react-hooks/exhaustive-deps -- reveal only sets a flag
+}
+
+function Tiles<K extends string>({ label, testID, items, value, onChange }: { label: string; testID: string; items: { key: K; label: string; icon: React.ComponentProps<typeof OptionTiles>["items"][number]["icon"] }[]; value: K; onChange: (v: K) => void }) {
+  return (
+    <View style={{ gap: space[1] }}>
+      <T v="caption" tone="mut" numberOfLines={1}>{label}</T>
+      <OptionTiles label={label} testID={testID} items={items} value={value} onChange={onChange} />
+    </View>
   );
 }
 
@@ -411,10 +444,10 @@ function Stock<A extends { material: string; gauge?: string }>({ a, set, ch }: {
   const materials = withCurrent(ch.offer.materials, a.material);
   const gauges = withCurrent(ch.offer.gauges[a.material] ?? [], a.gauge);
   return (
-    <>
+    <FieldRow>
       <Choice label={t(k("material"))} testID="attr-material" offered={ch.offer.materials} items={materials.map((m) => ({ key: m, label: t(k(`m.${m}`)) }))} value={a.material} onChange={(material) => set({ material } as Partial<A>)} />
       {gauges.length ? <Choice label={t(k("gauge"))} testID="attr-gauge" offered={ch.offer.gauges[a.material]} items={gauges.map((g) => ({ key: g, label: g }))} value={a.gauge ?? gauges[0]!} onChange={(gauge) => set({ gauge } as Partial<A>)} /> : null}
-    </>
+    </FieldRow>
   );
 }
 
@@ -472,19 +505,22 @@ export function RunAttrsView({
   const kits = withCurrent(hangerKitsFor(a.profile, ch), a.hanger);
   return (
     <>
-      {/* «Для новых желобов»: its title, «Сбросить» and the line under it are the owner's (DrawScreen), above these rows */}
+      {/* «Новые gutter»: its title, the line under it and «Как в настройках компании» are the owner's (DrawScreen) */}
       {forNew ? null : <View testID="attr-title"><T v="heading" w="semibold">{no ? t(k("runNo"), { n: no }) : t(k("run"))}</T></View>}
       {/* the length of the line in the company's format (and in feet when it is another): the window's title no longer carries it (v43: «линия · 3,810 мм · 12′ 6″») */}
       {forNew ? null : <View testID="attr-line-len"><T v="caption" tone="mut">{t(k("lineLen"), { len: lineLenText(run.lengthIn ?? drawnLengthIn(run), ch.lenFormat) })}</T></View>}
       {forNew ? null : <Tape run={run} onLength={onLength} fmt={ch.lenFormat} />}
+      {/* the profile by its cross-section (#2986): tiles, the names of the supplier's chart; first —
+          the sizes offered follow it, and under «Размер» it fell under the window's buttons (crm + design review #3007) */}
+      <Tiles label={t(k("profile"))} testID="attr-profile" items={profiles.map((p) => ({ key: p, label: t(k(`p.${p}`)), icon: PROFILE_ICON[p] }))} value={a.profile} onChange={(profile) => onAttrs({ profile })} />
       <FieldRow>
-        <Choice label={t(k("size"))} testID="attr-size" offered={ch.offer.sizes[a.profile]} items={sizes.map((s) => ({ key: s, label: inch(s) }))} value={a.size} onChange={(size) => onAttrs({ size })} />
-        {forNew ? null : <Choice label={t(k("story"))} testID="attr-story" items={(["1", "2", "3", "4"] as const).map((n) => ({ key: n, label: t("mod.gutters.story", { n }) }))} value={String(storyOf(a.story)) as "1"} onChange={(n) => onAttrs({ story: Number(n) })} />}
+        <SizePick key={`${run.id}.${a.profile}`} testID="attr-size" offered={ch.offer.sizes[a.profile]} sizes={sizes} known={SIZES_BY_PROFILE[a.profile]} label={inch} value={a.size} read={readOwnRunSize} hint="9″" onSize={(size) => onAttrs({ size })} />
+        {/* «Для новых»: no storey — the colour takes its place, two short fields in one row (founder 27.11, #3015) */}
+        {forNew ? (MILL_ONLY.has(a.material) ? null : <ColorPick a={a} set={onAttrs} ch={ch} />) : <Choice label={t(k("story"))} testID="attr-story" items={(["1", "2", "3", "4"] as const).map((n) => ({ key: n, label: t(k("storyMenu"), { n }) }))} value={String(storyOf(a.story)) as "1"} onChange={(n) => onAttrs({ story: Number(n) })} />}
       </FieldRow>
       {/* the colour on a line of its own: in a row of three its name was cut to «Бе…» (design-review G1 PR2 №1, rule 2 — a sample always
           beside its whole name) */}
-      {MILL_ONLY.has(a.material) ? null : <ColorPick a={a} set={onAttrs} ch={ch} />}
-      <Choice label={t(k("profile"))} testID="attr-profile" offered={ch.offer.profiles} items={profiles.map((p) => ({ key: p, label: t(k(`p.${p}`)) }))} value={a.profile} onChange={(profile) => onAttrs({ profile })} />
+      {forNew || MILL_ONLY.has(a.material) ? null : <ColorPick a={a} set={onAttrs} ch={ch} />}
       <More open0={false} id={run.id} label={t(k("moreRun"))}>
         {/* G2 (#2412): the hangers of the chart by name (NAMES-41) need the model's new kits — the list shows the kits there are */}
         <Choice list label={t(k("hanger"))} testID="attr-hanger" offered={hangerKitsFor(a.profile, ch)} items={kits.map((id) => ({ key: id, label: t(k(`k.${id}`)), leading: { icon: "channel" as const } }))} value={a.hanger} onChange={(hanger) => onAttrs({ hanger })} />
@@ -571,10 +607,10 @@ function DsKindPick({ ds, onAttrs, ch }: { ds: DrawnDownspout; onAttrs: (p: Part
   const cur = dsKindOf(ds.shape, ds.dsStyle);
   const shown = DS_KINDS.filter((x) => x.key === cur.key || ch.offer.dsStyles.includes(x.style));
   return (
-    <Choice
+    <Tiles
       label={t(k("dsKind"))}
       testID="attr-ds-kind"
-      items={shown.map((x) => ({ key: x.key, label: t(k(`kind.${x.key}`)).replace("\n", " ") }))}
+      items={shown.map((x) => ({ key: x.key, label: t(k(`kind.${x.key}`)), icon: x.icon }))}
       value={cur.key}
       onChange={(key) => { const x = DS_KINDS.find((d) => d.key === key)!; onAttrs({ shape: x.shape, dsStyle: x.style }); }}
     />
@@ -583,7 +619,7 @@ function DsKindPick({ ds, onAttrs, ch }: { ds: DrawnDownspout; onAttrs: (p: Part
 
 /**
  * The downspout's window (#2412 круг 4.3): Вид · Размер in one row; elbows, offsets; Низ (a menu, «Ничего» first) and
- * Верх (a list); «Ещё» — the colour, material, wall and its hook, its own length, the rare parts. G2 (#2412): its own
+ * Верх (a list); its own height under «Размер · Этаж» (#3090); «Ещё» — the colour, material, wall and its hook, the rare parts. G2 (#2412): its own
  * storey, Elbow / Offset A·B with an angle, the heads of the chart, the hooks by shape.
  */
 export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, run, forNew, no, rulesOver }: { /** the company's rules (settings): the length line counts by them, as the estimate does */ rulesOver?: GutterRulesOverride; /** its number among the drawing's downspouts (D{n} on the canvas): «Downspout № 2» */ no?: number; ds: DrawnDownspout; onAttrs: (p: Partial<DsAttrs>) => void; ch?: Choices; /** its gutter: «Как у gutter» */ run?: DrawnRun["attrs"]; /** «Новые водостоки» of this drawing (#1563 PR B): the same rows, its own title */ forNew?: boolean }) {
@@ -595,7 +631,9 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, run, forNew, no,
   const head = ds.head ?? (ds.funnel ? "funnel" : "none");
   const runStory = storyOf(run?.story);
   const ln = dsLengthLine(ds, runStory, rulesOver);
-  const lenText = ln.own ? t(k("dsLenOwn"), { ft: ln.ft }) : ln.stories === 0 ? t(k("dsLenRoof")) : t(k("dsLenStory"), { ft: ln.ft });
+  // the height by the storey is said in the empty field («По этажу: 10»), not on a line of its own under it (review #3090: two «высоты» in a row);
+  // the line stays only where something has to be done — a pipe onto the lower roof has no height by the storey
+  const auto = forNew || ln.stories === 0 ? t(k("heightAuto")) : t(k("heightAutoFt"), { ft: ln.ft });
   return (
     <>
       {forNew ? null : <View testID="attr-title"><T v="heading" w="semibold">{no ? t(k("dsNo"), { n: no }) : t(k("ds"))}</T></View>}
@@ -603,45 +641,104 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, run, forNew, no,
           the shared field has a padding the mock's has not — the words come first) */}
       <DsKindPick ds={ds} onAttrs={onAttrs} ch={ch} />
       <FieldRow>
-        <Choice label={t(k("size"))} testID="attr-ds-size" offered={ch.offer.dsSizes[ds.shape]} items={sizes.map((s) => ({ key: s, label: dsSize(s) }))} value={ds.size} onChange={(size) => onAttrs({ size })} />
+        <SizePick key={`${ds.id}.${ds.shape}`} testID="attr-ds-size" offered={ch.offer.dsSizes[ds.shape]} sizes={sizes} known={DS_SIZES[ds.shape]} label={dsSize} value={ds.size} read={(v) => readOwnDsSize(ds.shape, v)} hint={ds.shape === "round" ? "5″" : "3x5"} onSize={(size) => onAttrs({ size })} />
         {/* its own storey (G2 #2465): the length of the pipe follows it; written only when it differs from the gutter's (rule 16) */}
-        {forNew ? null : <Choice label={t(k("story"))} testID="attr-ds-story" items={(["1", "2", "3", "4"] as const).map((n) => ({ key: n, label: t(k("storyWin"), { n }) }))} value={String(dsStoryShown(ds, runStory)) as "1"} onChange={(n) => onAttrs(dsStoryPatch(runStory, Number(n)))} />}
+        {forNew ? (MILL_ONLY.has(ds.material) ? null : <ColorPick a={ds} set={onAttrs} ch={ch} run={run} />) : <Choice label={t(k("story"))} testID="attr-ds-story" items={(["1", "2", "3", "4"] as const).map((n) => ({ key: n, label: t(k("storyMenu"), { n }) }))} value={String(dsStoryShown(ds, runStory)) as "1"} onChange={(n) => onAttrs(dsStoryPatch(runStory, Number(n)))} />}
       </FieldRow>
-      {forNew ? null : <View testID="attr-ds-length-line"><T v="caption" tone="mut">{lenText}</T></View>}
+      {/* its own height in sight (#3090 п.4, review #3007: «Высота 10 ft» stood with no field, the field was under «Ещё»);
+          empty, it says the height by the storey; the line for a lower roof asks for «Своя высота» */}
+      <DsLength key={ds.id} ds={ds} onAttrs={onAttrs} auto={auto} />
+      {forNew || ln.own || ln.stories !== 0 ? null : <View testID="attr-ds-length-line"><StatusChip status="warn" label={t(k("dsLenRoof"))} soft /></View>}
       <Elbows ds={ds} onAttrs={onAttrs} />
       <Offsets ds={ds} onAttrs={onAttrs} />
+      {/* Низ · Верх: two short menus in one row (#3015) */}
+      <FieldRow>
       <Choice label={t(k("bottom"))} testID="attr-bottom" offered={ch.offer.bottoms} items={bottoms.map((b) => ({ key: b, label: t(k(`b.${b}`)), top: b === "none" }))} value={ds.bottom.kind} onChange={(kind) => onAttrs({ bottom: { ...ds.bottom, kind } })} />
-      <Choice list label={t(k("head"))} testID="attr-head" items={DS_HEADS.map((h) => ({ key: h, label: t(k(`h.${h}`)), top: h === "none", ...(h === "none" ? {} : { leading: { icon: "downspout" as const } }) }))} value={head} onChange={(h) => onAttrs({ head: h === "none" ? undefined : h, funnel: undefined })} />
+      <Choice label={t(k("head"))} testID="attr-head" items={DS_HEADS.map((h) => ({ key: h, label: t(k(`h.${h}`)), top: h === "none" }))} value={head} onChange={(h) => onAttrs({ head: h === "none" ? undefined : h, funnel: undefined })} />
+      </FieldRow>
       <More open0={dsMoreSet(ds, run)} id={ds.id} label={t(k("moreDs"))}>
-        {MILL_ONLY.has(ds.material) ? null : <ColorPick a={ds} set={onAttrs} ch={ch} run={run} />}
+        {forNew || MILL_ONLY.has(ds.material) ? null : <ColorPick a={ds} set={onAttrs} ch={ch} run={run} />}
         <Stock a={ds} set={onAttrs} ch={ch} />
+        <DsRare key={`rare-${ds.id}`} ds={ds} onAttrs={onAttrs} />
+        {/* the wall and its bracket last (founder 27.11, #2985: «крепление к стене ниже опустить») */}
         <Choice label={t(k("wall"))} testID="attr-wall" items={WALLS.map((x) => ({ key: x, label: t(k(`w.${x}`)) }))} value={w.wall} onChange={(wall) => onAttrs({ wall })} />
         <Choice list label={t(k("wallKit"))} testID="attr-wall-kit" offered={wallKitsFor(ds.shape, w.wall, ch)} items={wallKits.map((id) => ({ key: id, label: t(k(`wk.${id}`)), leading: { icon: "downspout" as const } }))} value={w.kit} onChange={(kit) => onAttrs({ wall: kit })} />
-        <DsLength ds={ds} onAttrs={onAttrs} />
-        <DsRare key={ds.id} ds={ds} onAttrs={onAttrs} />
       </More>
     </>
   );
 }
 
-/** the downspout's length (#1276, founder 12.11: «размер, цвет и длина — выпадающими»): by the storey, or a number of feet — it was a stepper behind «Ещё» */
-const DS_LENGTHS_FT = [6, 8, 9, 10, 12, 14, 16, 18, 20, 24, 28, 30, 35, 40, 50, 60] as const;
-function DsLength({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAttrs>) => void }) {
+/**
+ * The size field with «Свой» last (founder 27.11, #2981): a size of its own is typed under the field — whole inches, read at once
+ * (a good one goes in — the window's draft, kept by «Сохранить»; anything else goes in nowhere and is said when the field is left,
+ * not at every key: review #3007, #3090 п.7). Its part is not in the price list: the estimate line says
+ * «нет цены» (answer in #2981). A size of its own already set is one of the field's values, the field open on it.
+ */
+function SizePick({ testID, sizes, known, value, offered, label, read, onSize, hint }: { testID: string; sizes: string[]; /** the module's sizes: any other is one of its own */ known: readonly string[]; value: string; offered?: readonly string[]; label: (s: string) => string; read: (text: string) => string | null; onSize: (s: string) => void; hint: string }) {
   const { t } = useI18n();
-  const cur = Math.round((ds.heightIn ?? 0) / 12);
-  const fts: number[] = [...DS_LENGTHS_FT];
-  if (cur && !fts.includes(cur)) fts.push(cur); // a length set before (or by the stepper of old) stays pickable
-  fts.sort((x, y) => x - y);
+  const std = known.includes(value);
+  const [ownOpen, setOwnOpen] = useState(!std);
+  const [own, setOwn] = useState(std ? "" : value);
+  const [bad, setBad] = useState(false);
+  useOwnBad(`${testID}-own`, ownOpen && read(own) === null, () => setBad(true));
   return (
-    <Choice
-      label={t(k("dsLength"))}
-      testID="attr-ds-length"
-      items={[{ key: "0", label: t(k("heightAuto")), top: true }, ...fts.map((n) => ({ key: String(n), label: `${n}′` }))]}
-      value={String(cur)}
-      onChange={(v) => onAttrs({ heightIn: Number(v) ? Number(v) * 12 : undefined })}
-    />
+    <View style={{ gap: space[2] }}>
+      <Choice
+        label={t(k("size"))} testID={testID} offered={offered}
+        items={[...sizes.filter((x) => std || x !== value).map((x) => ({ key: x, label: label(x) })), { key: "@own", label: t(k("sizeOwn")) }]}
+        value={ownOpen ? "@own" : value}
+        onChange={(v) => {
+          if (v === "@own") return setOwnOpen(true);
+          setOwnOpen(false);
+          setBad(false);
+          onSize(v);
+        }}
+      />
+      {ownOpen ? (
+        <View style={{ gap: space[1] }}>
+          <View testID={`${testID}-own`} style={{ gap: space[1] }}>
+            <T v="caption" tone="mut" numberOfLines={1}>{t(k("sizeOwnLabel"))}</T>
+            <TextField type="text" value={own} placeholder={hint} label={t(k("sizeOwnLabel"))} onChangeText={(v) => { setOwn(v); const s = read(v); if (s !== null) { setBad(false); onSize(s); } }} onBlurText={() => setBad(read(own) === null)} />
+          </View>
+          {bad && own.trim() !== "" ? <View testID={`${testID}-own-bad`}><StatusChip status="warn" label={t(k("badOwnSize"), { hint })} soft /></View> : null}
+        </View>
+      ) : null}
+    </View>
   );
 }
+
+/**
+ * The downspout's own height (#1276; founder 27.11, #2985: «что такое длина, я не понимаю. И зачем для этого селектор»): a number
+ * of feet, empty — by the storey (the line above says which). It was a menu of 16 lengths named «Длина». Read at once: a good
+ * number (1–100 ft) goes in, anything else goes in nowhere and is said when the field is left (#3090 п.7); emptied — back to the storey.
+ */
+function DsLength({ ds, onAttrs, auto }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAttrs>) => void; /** what the empty field says: the height by the storey («По этажу: 10») */ auto: string }) {
+  const { t } = useI18n();
+  const [text, setText] = useState(ds.heightIn ? String(Math.round((ds.heightIn / 12) * 2) / 2) : "");
+  const [bad, setBad] = useState(false);
+  useOwnBad("attr-ds-length", dsOwnFt(text) === "bad", () => setBad(true));
+  return (
+    <View style={{ gap: space[1] }}>
+      <View testID="attr-ds-length" style={{ gap: space[1] }}>
+        {/* the label over the field, as every field of the window has it (TextField's own label is the screen reader's) */}
+        <T v="caption" tone="mut" numberOfLines={1}>{t(k("dsLength"))}</T>
+        <TextField
+          type="number" value={text} suffix="ft" placeholder={auto} label={t(k("dsLength"))}
+          onChangeText={(v) => {
+            setText(v);
+            const n = dsOwnFt(v);
+            if (n !== "bad") { setBad(false); onAttrs({ heightIn: n === null ? undefined : n * 12 }); }
+          }}
+          onBlurText={() => setBad(dsOwnFt(text) === "bad")}
+        />
+      </View>
+      {bad ? <View testID="attr-ds-length-bad"><StatusChip status="warn" label={t(k("badDsOwn"))} soft /></View> : null}
+    </View>
+  );
+}
+
+/** a typed offset length: up to 24″, to 1/16″; null — no length */
+const offsetOwnIn = (v: string): number | null => { const n = Math.round(Number(v) * DENOM) / DENOM; return v.trim() !== "" && n > 0 && n <= 24 ? n : null; };
 
 /** an offset row A / B (v43): the count and the length — 1″ · 2″ · 4″ or its own (a custom part; the engine marks lengths it does not stock) */
 function OffsetRow({ ds, style, onAttrs }: { ds: DrawnDownspout; style: OffsetStyle; onAttrs: (p: Partial<DsAttrs>) => void }) {
@@ -653,6 +750,7 @@ function OffsetRow({ ds, style, onAttrs }: { ds: DrawnDownspout; style: OffsetSt
   const [own, setOwn] = useState(std ? "" : String(row.lengthIn));
   const [ownOpen, setOwnOpen] = useState(!std);
   const [ownBad, setOwnBad] = useState(false);
+  useOwnBad(`attr-offset${style === "A" ? "" : `-${style}`}-own`, ownOpen && offsetOwnIn(own) === null, () => setOwnBad(true));
   const rest = offsetRest(ds, style); // the other lengths of an old drawing: not rewritten (rule 16)
   const len = row.qty > 0 ? row.lengthIn : pend;
   const put = (lengthIn: number) => (row.qty > 0 ? onAttrs(offsetsPatch(ds, style, { lengthIn })) : setPend(lengthIn));
@@ -674,8 +772,8 @@ function OffsetRow({ ds, style, onAttrs }: { ds: DrawnDownspout; style: OffsetSt
       {ownOpen ? (
         <View style={{ gap: space[1] }}>
           <View testID={`attr-offset${sfx}-own`}>
-            {/* read at once, like the gutter's length: a good number (up to 24″, 1/16″) goes in; anything else says so and goes in nowhere */}
-            <TextField type="number" value={own} suffix={t(k("in"))} onChangeText={(v) => { setOwn(v); const n = Math.round(Number(v) * DENOM) / DENOM; const ok = v.trim() !== "" && n > 0 && n <= 24; setOwnBad(!ok); if (ok) put(n); }} label={t(k("offsetOwn"))} />
+            {/* read at once, like the gutter's length: a good number (up to 24″, 1/16″) goes in; anything else goes in nowhere, said when the field is left (#3090 п.7) */}
+            <TextField type="number" value={own} suffix={t(k("in"))} onChangeText={(v) => { setOwn(v); const n = offsetOwnIn(v); if (n !== null) { setOwnBad(false); put(n); } }} onBlurText={() => setOwnBad(offsetOwnIn(own) === null)} label={t(k("offsetOwn"))} />
           </View>
           {ownBad ? <View testID={`attr-offset${sfx}-own-bad`}><StatusChip status="warn" label={t(k("badOffset"))} soft /></View> : null}
         </View>
@@ -750,7 +848,7 @@ export function WinButtons({ onClose, onSave }: { onClose: () => void; onSave: (
         <Button label={t(k("close"))} variant="secondary" size="bar" full onPress={sheetClose ?? onClose} />
       </View>
       <View style={{ flex: 1, minWidth: 0 }} testID="attr-win-save">
-        <Button label={t(k("save"))} size="bar" full onPress={onSave} />
+        <Button label={t(k("save"))} size="bar" full onPress={() => { if (!holdForOwnBad()) onSave(); }} />
       </View>
     </View>
   );
