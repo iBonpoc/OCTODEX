@@ -10,7 +10,7 @@
  * Finds things by testID; waits on what it checks.
  */
 
-const { doubleTap, canvasAt } = require("../gutters.cjs");
+const { doubleTap, canvasAt, pickAttr, winSave } = require("../gutters.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -103,7 +103,7 @@ exports.run = async (h) => {
   // the sheet stays open after the choice (founder 09.11, версия 474): the choice shows, then the sheet is closed
   const kind1 = kind === "Outside" ? "Inside" : "Outside";
   await waitFor(async () => ((await tid("corner-kind").locator('[aria-checked="true"]').innerText()).trim() === kind1), `${kind1} picked`);
-  await p.getByRole("button", { name: /^(Закрыть|Close|Cerrar)$/ }).last().click({ position: { x: 10, y: 10 } });
+  await winSave(p); // the kind kept by «Сохранить» (DS §7.3, #3071)
   await waitFor(async () => (await tid("corner-sheet").count()) === 0, "the sheet closes");
   await canvasAt(p, corner.x + corner.width / 2, corner.y + corner.height / 2); // …and has gone off the canvas
   await doubleTap(p, corner.x + corner.width / 2, corner.y + corner.height / 2);
@@ -117,7 +117,11 @@ exports.run = async (h) => {
   const a = 120, bb = 120.125;
   const c = Math.sqrt(a * a + bb * bb - 2 * a * bb * Math.cos((110 * Math.PI) / 180));
   await tid("tri-c").locator("input").first().fill(String(Math.floor(c / 12)));
-  await tid("tri-c").locator("input").nth(1).fill(String(Math.round((c % 12) * 8) / 8));
+  // the inches whole, the fraction from its menu (#3071: fractions as in the length window, not «4.75»)
+  const e8 = Math.round((c % 12) * 8);
+  await tid("tri-c").locator("input").nth(1).fill(String(Math.floor(e8 / 8)));
+  if (e8 % 8) await pickAttr(p, "tri-c-frac", String((e8 % 8) * 2));
+  h.expect(!/\.\d/.test(await tid("tri-b").innerText()), `B prefilled with a fraction, no decimal inches (${(await tid("tri-b").innerText()).replace(/\s+/g, " ")})`);
   await tid("tri-count").getByRole("button").click();
   await waitFor(async () => /110/.test(await tid("corner-cut-angle").innerText()), "the corner is 110° now");
   h.expect(/110/.test(await tid("tri-result").innerText()), "the triangle says 110°");

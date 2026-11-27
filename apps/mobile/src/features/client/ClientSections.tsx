@@ -154,8 +154,10 @@ export function ClientOverview({ c, f, onSection, withNow }: {
   const nowVisitId = f.now && (f.now.kind === "working" || f.now.kind === "scheduled") ? f.now.visit.id : undefined;
   // v2 макет 3: the card's own visit is a row too — the card holds the job, the rows the days (not the visit twice: the card has no visit line)
   void nowVisitId;
-  const ahead = f.visits.filter((v) => isOpenVisit(v) && dayOffsetOf(isoDayKey(v.start)) >= 0).slice(0, 2);
-  const aheadRow = useAheadRow(f);
+  // #3072 (leader): one visit row for the whole app (useClientVisitRow) and one bound — every open visit (a missed one is «важно
+  // сейчас» too), the overview keeps two
+  const ahead = f.visits.filter(isOpenVisit).slice(0, 2);
+  const visitRow = useClientVisitRow(f);
   const openTasks = r.tasks.filter((x) => !x.doneAt);
   const dw = useDayWord();
   const toggleTask = (x: (typeof openTasks)[number]) => {
@@ -189,7 +191,7 @@ export function ClientOverview({ c, f, onSection, withNow }: {
         {/* #3068 (founder 27.11: «в обзоре не нравится… важно знать… код ворот… заметка… прикреплена, откреплена»): no «Важно знать» —
             the access, the people and the notes of a place are in «Объекты», the client's pinned notes first in «Журнал» */}
         <ListGroup separate title={t("ov3061.ahead")} testID="client-ahead">
-          {ahead.map((v) => aheadRow(v))}
+          {ahead.map((v) => visitRow(v, `client-ahead-${v.id}`))}
         </ListGroup>
       </GroupedList>
       {OVERVIEW_LOOK === "B" && office
@@ -251,49 +253,6 @@ export function ClientOverview({ c, f, onSection, withNow }: {
       />
     </View>
   );
-}
-
-/** «8:30» of «8:30 AM» (the field's day: v2 draws the hours without AM / PM, the full time is on the visit) */
-const bareTime = (s: string) => plateHalves(s, s)[0];
-
-/**
- * A day row of the overview (v2 макет 3): «Сегодня 8:30–12:30 / Bathroom remodel · Alex» with «◷ Скоро» (today: «◷ Идёт» once on
- * site), another day «Завтра 9:00 / Final walkthrough…» with «Длит. 1 ч 30 мин» on the right. A visit of one task says the task.
- */
-/** «Сегодня 8:30–12:30 / Bathroom remodel · Alex  ◷ Скоро» — a row of the overview's top group (#2363 F02: the time is never cut,
- *  the pill is one word: «Опаздывает», not «Опаздывает · не выехал» — the detail is on the visit itself) */
-function useAheadRow(f: ClientFacts) {
-  const { t, time, day, duration } = useI18n();
-  const dw = useDayWord();
-  const { db } = f;
-  return (v: Visit) => {
-    const off = dayOffsetOf(isoDayKey(v.start));
-    const dayWord = dw(v.start);
-    const end = new Date(new Date(v.start).getTime() + v.durationMin * 60_000).toISOString();
-    const going = v.step === "on_site" || v.step === "working";
-    const today = off === 0;
-    const tech = memberName(db, v.techId, t)?.split(" ")[0];
-    const past = new Date(v.start).getTime() <= Date.now();
-    const own = visitStatus(v, db.members, Date.now(), lateAfterOf(db));
-    const ownWord = own.label === "late.enRoute" || own.label === "late.notLeft" ? "st.late" : own.label;
-    const todayPill = going ? { status: "info" as const, label: t("px2.cv.going") } : past ? { status: own.status, label: t(ownWord) } : { status: "info" as const, label: t("px2.cv.soon") };
-    const job = findJob(db, v.jobId);
-    const jobWord = (job?.estimateId ? f.r.estimates.find((e) => e.id === job.estimateId)?.title : undefined) || job?.title;
-    const line = v.scope.length === 1 ? v.scope[0]! : [jobWord, tech].filter(Boolean).join(" · ");
-    return (
-      <GroupRow
-        key={v.id}
-        testID={`client-ahead-${v.id}`}
-        lead={{ icon: "calendar" }}
-        // #3061 (both reviews): the time in full, «1:00 PM» — never a bare «1:00» that reads as the night (rule 7)
-        title={today ? `${dayWord} ${bareTime(time(v.start))}–${time(end)}` : `${dayWord} · ${time(v.start)}`}
-        subtitle={line || undefined}
-        status={today ? todayPill : undefined}
-        cols={today ? undefined : [{ label: t("px2.cv.dur"), value: duration(v.durationMin) }]}
-        onPress={() => router.push(`/visit/${v.id}`)}
-      />
-    );
-  };
 }
 
 const placeName = (db: DB, j: Job) => {

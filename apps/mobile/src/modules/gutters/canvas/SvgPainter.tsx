@@ -72,7 +72,10 @@ const CornerMark = memo(function CornerMark({ k, color, fill, halo }: { k: Scene
       {/* the angle marked as in a drawing: a dash-dot arc across it (founder 12.11); its chip says the words and the degrees */}
       {k.arc ? <Path id={`arc-${k.id}`} d={`M${k.arc.from[0]} ${k.arc.from[1]}A${k.arc.r} ${k.arc.r} 0 0 ${k.arc.sweep} ${k.arc.to[0]} ${k.arc.to[1]}`} fill="none" stroke={color} strokeWidth={drawing.runW / 4} strokeDasharray={`${drawing.runW} ${drawing.runW / 2} ${drawing.runW / 4} ${drawing.runW / 2}`} /> : null}
       {/* a picked gutter's joint is a handle (#818): a ring round the mark, a rect like the caps' */}
-      {k.handle || k.picked ? <Rect id={k.picked ? `picked-${k.id}` : `handle-${k.id}`} x={x - R} y={y - R} width={R * 2} height={R * 2} rx={radius.chip} fill="none" stroke={halo} strokeWidth={drawing.labelGap} /> : null}
+      {k.handle ? <Rect id={`handle-${k.id}`} x={x - R} y={y - R} width={R * 2} height={R * 2} rx={radius.chip} fill="none" stroke={halo} strokeWidth={drawing.labelGap} /> : null}
+      {/* the corner itself picked (#3066, #3071 design №7): a ROUND ring a step wider — «picked», not the square ring of a handle to drag
+          (DS §15); a Rect rounded to a circle, never a <circle> (e2e count the downspouts' circles) */}
+      {k.picked ? <Rect id={`picked-${k.id}`} x={x - R - drawing.labelGap} y={y - R - drawing.labelGap} width={(R + drawing.labelGap) * 2} height={(R + drawing.labelGap) * 2} rx={R + drawing.labelGap} fill="none" stroke={halo} strokeWidth={drawing.labelGap} /> : null}
       <Path d={`M${x} ${y - r}L${x + r} ${y}L${x} ${y + r}L${x - r} ${y}Z`} fill={k.kind === "in" ? color : fill} stroke={color} strokeWidth={drawing.runW / 2} />
     </G>
   );
