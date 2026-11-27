@@ -28,9 +28,9 @@ import { minuteIn } from "@/features/zone";
 import { Button, ChoiceChips, IconButton, Stepper, TextField } from "@/ui/controls";
 import { OptionRows } from "@/ui/optionRow";
 import { ToggleRow } from "@/ui/toggleRow";
-import { T } from "@/ui/primitives";
+import { Icon, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { Card, Divider, RowView } from "@/ui/surfaces";
+import { Card, Divider, ListRow, RowView } from "@/ui/surfaces";
 import { mailtoHref, smsHref } from "@/features/contactLinks";
 import { memberName } from "@/features/team";
 import { cancelNotice } from "@/features/cancelNotify";
@@ -329,9 +329,12 @@ export function NotifySheet({ visitId, onClose }: { visitId: ID | null; onClose:
   return (
     <Sheet visible={!!v} onClose={onClose} title={t("vf.notify.title")}>
       <T v="body">{text}</T>
-      {sms ? <Button label={t("vf.notify.sms")} icon="sms" variant="secondary" full onPress={() => { Linking.openURL(sms).catch(() => {}); done(); }} /> : null}
-      {mail ? <Button label={t("vf.notify.email")} icon="mail" variant="secondary" full onPress={() => { Linking.openURL(mail).catch(() => {}); done(); }} /> : null}
-      <Button label={t("vf.notify.copy")} icon="copy" variant="secondary" full onPress={() => { Clipboard.setStringAsync(text).catch(() => {}); toast.show(t("vf.notify.copied")); done(); }} />
+      {/* DS §7.5 (#3065): the channel is a row of one choice (as the iOS share sheet), not a column of buttons; «Не сейчас» — the one quiet button */}
+      <View testID="vf-notify-channels">
+        {sms ? <ListRow title={t("vf.notify.sms")} left={<Icon name="sms" />} onPress={() => { Linking.openURL(sms).catch(() => {}); done(); }} /> : null}
+        {mail ? <ListRow title={t("vf.notify.email")} left={<Icon name="mail" />} onPress={() => { Linking.openURL(mail).catch(() => {}); done(); }} /> : null}
+        <ListRow title={t("vf.notify.copy")} left={<Icon name="copy" />} chevron={false} onPress={() => { Clipboard.setStringAsync(text).catch(() => {}); toast.show(t("vf.notify.copied")); done(); }} />
+      </View>
       <Button label={t("vf.notify.later")} variant="ghost" full onPress={onClose} />
     </Sheet>
   );
@@ -365,9 +368,12 @@ export function CancelNotifySheet({ visitId, onClose }: { visitId: ID | null; on
     <Sheet visible={!!n} onClose={onClose} title={t("visitP2.notify.title")}>
       <T v="body">{n.text}</T>
       {!sms && !mail ? <T v="caption" tone="mut">{t("visitP2.notify.noContact")}</T> : null}
-      {sms ? <Button label={t("vf.notify.sms")} icon="sms" variant="secondary" full onPress={() => open(sms, "sms")} /> : null}
-      {mail ? <Button label={t("vf.notify.email")} icon="mail" variant="secondary" full onPress={() => open(mail, "email")} /> : null}
-      <Button label={t("vf.notify.copy")} icon="copy" variant="secondary" full onPress={() => { Clipboard.setStringAsync(n.text).catch(() => {}); toast.show(t("vf.notify.copied")); onClose(); }} />
+      {/* DS §7.5 (#3065): the channel — rows of one choice, not a column of buttons */}
+      <View testID="vc-notify-channels">
+        {sms ? <ListRow title={t("vf.notify.sms")} left={<Icon name="sms" />} onPress={() => open(sms, "sms")} /> : null}
+        {mail ? <ListRow title={t("vf.notify.email")} left={<Icon name="mail" />} onPress={() => open(mail, "email")} /> : null}
+        <ListRow title={t("vf.notify.copy")} left={<Icon name="copy" />} chevron={false} onPress={() => { Clipboard.setStringAsync(n.text).catch(() => {}); toast.show(t("vf.notify.copied")); onClose(); }} />
+      </View>
       <Button label={t("vf.notify.later")} variant="ghost" full onPress={onClose} />
     </Sheet>
   );

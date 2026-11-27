@@ -155,11 +155,11 @@ export function testClient(c: SeedClock, jobChecklist: (prefix: string) => Check
     { id: "j11", number: "JOB-0011", customerId: TEST_CLIENT_ID, propertyId: "p8", jobTypeId: "jt-service", title: "Pressure washing", status: "unscheduled", amountCents: 0 },
   ];
   const visits: Visit[] = [
-    { id: "v8", jobId: "j9", techId: "m-ivan", assigneeIds: ["m-ivan", "m-dima"], start: c.at(-17, 8, 0), durationMin: 480, step: "paid", closed: true,
+    { id: "v8", jobId: "j9", techId: "m-alex", assigneeIds: ["m-alex", "m-ivan"], start: c.at(-17, 8, 0), durationMin: 480, step: "paid", closed: true,
       scope: ["Paint living room, bedroom and office", "Ceilings in all three rooms"], checklist: jobChecklist("v8").map((x) => ({ ...x, done: true })), photos: [{ id: "ph-v8-1", kind: "before" }, { id: "ph-v8-2", kind: "after" }], amountDueCents: 0 },
-    { id: "v9", jobId: "j10", techId: "m-dima", start: c.at(-3, 10, 0), durationMin: 180, step: "paid", closed: true, note: "Tenant Luis will open the door.",
+    { id: "v9", jobId: "j10", techId: "m-alex", assigneeIds: ["m-alex", "m-dima"], start: c.at(-3, 10, 0), durationMin: 180, step: "paid", closed: true, note: "Tenant Luis will open the door.",
       scope: ["Patch 2 drywall holes in the hallway"], checklist: jobChecklist("v9").map((x) => ({ ...x, done: true })), photos: [{ id: "ph-v9-1", kind: "before" }, { id: "ph-v9-2", kind: "after" }], amountDueCents: 0 },
-    { id: "v10", jobId: "j10", techId: "m-dima", start: c.at(2, 13, 0), durationMin: 120, step: "scheduled", note: "Bring 2 GFCI outlets.",
+    { id: "v10", jobId: "j10", techId: "m-alex", assigneeIds: ["m-alex", "m-dima"], start: c.at(2, 13, 0), durationMin: 120, step: "scheduled", note: "Bring 2 GFCI outlets.",
       scope: ["Replace 3 kitchen outlets, 2 of them GFCI", "Prime and paint the patches"], checklist: jobChecklist("v10"), photos: [], amountDueCents: 0 },
     // the measurement visit (an inspection, no job)
     { id: "v11", propertyId: "p8", leadId: "l6", kind: "inspection", techId: "m-alex", start: c.at(-5, 15, 0), durationMin: 45, step: "done", closed: true,
@@ -201,7 +201,7 @@ export function testClient(c: SeedClock, jobChecklist: (prefix: string) => Check
     { id: "a4", subjectType: "customer", subjectId: TEST_CLIENT_ID, kind: "sms", direction: "out", contactId: "pp-c8-1", body: "Confirming the measurement tomorrow at 3 pm.", at: c.daysAgo(6), actorId: "m-alex" },
     { id: "a5", subjectType: "customer", subjectId: TEST_CLIENT_ID, kind: "call", direction: "in", contactId: "pp-c8-2", body: "Karen asked to add the garage outlet to the estimate.", at: c.daysAgo(4), actorId: "m-alex" },
     { id: "a6", subjectType: "customer", subjectId: TEST_CLIENT_ID, kind: "email", direction: "out", contactId: "pp-c8-1", body: "Sent the estimate EST-0007.", at: sentAt7, actorId: "m-alex" },
-    { id: "a7", subjectType: "customer", subjectId: TEST_CLIENT_ID, kind: "sms", direction: "out", contactId: "pp-c8-3", body: "Hola Luis, mañana a la 1 pm vamos a cambiar los enchufes.", at: c.minutesAgo(240), actorId: "m-dima" },
+    { id: "a7", subjectType: "customer", subjectId: TEST_CLIENT_ID, kind: "sms", direction: "out", contactId: "pp-c8-1", body: "Hi Daniel, the outlets at the rental are booked for 1 pm — Alex will be there.", at: c.minutesAgo(240), actorId: "m-alex" },
     { id: "a8", subjectType: "estimate", subjectId: "e7", kind: "status", meta: { from: "draft", to: "sent" }, at: sentAt7, actorId: "m-alex" },
     { id: "a9", subjectType: "job", subjectId: "j10", kind: "status", meta: { from: "scheduled", to: "in_progress" }, at: c.daysAgo(3), actorId: "m-dima" },
     { id: "a10", subjectType: "lead", subjectId: "l6", kind: "status", meta: { from: "booked", to: "estimate_sent" }, at: sentAt7, actorId: "m-alex" },

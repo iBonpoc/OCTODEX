@@ -101,7 +101,6 @@ describe("design system: components", () => {
     "features/PhotoStrip.tsx": 2,
     "features/estimate/SwipeRow.tsx": 1,
     "features/showcase/Rows.tsx": 1,
-    "modules/gutters/draw/CornerSheet.tsx": 1,
     "modules/gutters/draw/DrawScreen.tsx": 2,
     "modules/gutters/draw/FracPicker.tsx": 1,
     "modules/gutters/settings/SettingsScreen.tsx": 1,
@@ -658,5 +657,82 @@ describe("design system: no curve, animation time or layer written in place (Ш 
   it("DEBT has no line that is already paid", () => {
     const keys = new Set(left().map((h) => h.key));
     expect([...DEBT].filter((k) => !keys.has(k))).toEqual([]);
+  });
+});
+
+/**
+ * DS §7.5 (founder 27.11.2026, #3064, #3065): no column of buttons. In one JSX container (a card, a sheet, a block) at most one
+ * main and one second button: ≥ 3 `Button`s there is red — the sections are GroupRows «›» of a ListGroup, the rare actions «⋯».
+ * Counted as a button: `<Button>`, a `<View>`/fragment around one, `cond ? <Button/> : …`, `cond && <Button/>`; `<ButtonPair>` = 2;
+ * `.map(…)` returning a button = 3 (a column of them). The old places are listed by file with their number of such containers;
+ * the list only goes down (rule 29) — the waves of #3065 take them away.
+ */
+describe("design system: no column of buttons (DS §7.5, #3065)", () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const ts = require("typescript") as typeof import("typescript");
+  const BUTTON_COLUMNS_LEFT: Record<string, number> = {
+    "app/estimate/new.tsx": 1, // stays: founder 23.11 (audit MAP wave 1 п.6, picture n09) — the four ways to add, two pairs over the lines
+    "features/showcase/Buttons.tsx": 2, // stays: the «wrong» example of §7.5 on purpose; the two ButtonPair samples (row | column) side by side
+    "features/showcase/ProtoV2.tsx": 1,
+    "modules/ModulePlaces.tsx": 2,
+    "modules/gutters/settings/SettingsScreen.tsx": 1,
+    "modules/gutters/view/ViewScreen.tsx": 1,
+    "ui/confirmDialog.tsx": 2, // stays: a dialog may have three answers in a column (HIG Alerts; «Сохранить изменения?», DS §7.5)
+    "ui/dateField.tsx": 1, // the quick days «Сегодня · Завтра · Без даты» are a choice, not actions — goes when they become ChoiceChips
+  };
+  type N = import("typescript").Node;
+  const tagOf = (n: N) => (ts.isJsxElement(n) ? n.openingElement.tagName.getText() : ts.isJsxSelfClosingElement(n) ? n.tagName.getText() : null);
+  const kids = (n: N) => (ts.isJsxElement(n) || ts.isJsxFragment(n) ? n.children.filter((c) => !(ts.isJsxText(c) && !c.text.trim())) : []);
+  const btn = (n: N | undefined): number => {
+    if (!n) return 0;
+    if (ts.isParenthesizedExpression(n)) return btn(n.expression);
+    const t = tagOf(n);
+    if (t === "Button") return 1;
+    if (t === "ButtonPair") return 2;
+    if (t === "View" || ts.isJsxFragment(n)) { const k = kids(n); return k.length === 1 ? btn(k[0]) : 0; }
+    if (ts.isJsxExpression(n)) return btn(n.expression);
+    if (ts.isConditionalExpression(n)) return Math.max(btn(n.whenTrue), btn(n.whenFalse));
+    if (ts.isBinaryExpression(n) && n.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) return btn(n.right);
+    if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && n.expression.name.text === "map") {
+      const fn = n.arguments[0];
+      if (fn && ts.isArrowFunction(fn)) {
+        let body: N | undefined = fn.body;
+        if (ts.isBlock(body)) body = body.statements.find(ts.isReturnStatement)?.expression;
+        return btn(body) ? 3 : 0;
+      }
+    }
+    return 0;
+  };
+  const columns = (file: string, src: string) => {
+    const sf = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const at: number[] = [];
+    const visit = (n: N) => {
+      if ((ts.isJsxElement(n) || ts.isJsxFragment(n)) && kids(n).reduce((s, x) => s + btn(x), 0) >= 3) at.push(sf.getLineAndCharacterOfPosition(n.getStart()).line + 1);
+      ts.forEachChild(n, visit);
+    };
+    visit(sf);
+    return at;
+  };
+  it("no new container with ≥ 3 buttons; the old ones only go down", () => {
+    const now: Record<string, number[]> = {};
+    for (const f of code.filter((x) => x.endsWith(".tsx") && !x.includes(join("showcase", "graphite")))) {
+      const src = readFileSync(f, "utf8");
+      if (!/<Button/.test(src)) continue;
+      const at = columns(f, src);
+      if (at.length) now[relative(ROOT, f).split("\\").join("/")] = at;
+    }
+    const over = Object.entries(now).filter(([k, a]) => a.length > (BUTTON_COLUMNS_LEFT[k] ?? 0)).map(([k, a]) => `${k}: lines ${a.join(", ")} (${a.length} > ${BUTTON_COLUMNS_LEFT[k] ?? 0})`);
+    const less = Object.entries(BUTTON_COLUMNS_LEFT).filter(([k, n]) => (now[k]?.length ?? 0) < n).map(([k, n]) => `${k}: ${now[k]?.length ?? 0} < ${n} — lower the list`);
+    expect(over, `a column of buttons (DS §7.5): sections → GroupRow «›» in a ListGroup, rare → «⋯», at most one main + one second:\n${over.join("\n")}`).toEqual([]);
+    expect(less, less.join("\n")).toEqual([]);
+  });
+  it("the counter sees what it must (guards the guard)", () => {
+    const B = '<Button label="a" onPress={f} />';
+    expect(columns("a.tsx", `const x = <View>${B}${B}${B}</View>;`)).toHaveLength(1);
+    expect(columns("a.tsx", `const x = <Card><View testID="w">${B}</View>{ok ? ${B} : null}{on && ${B}}</Card>;`)).toHaveLength(1);
+    expect(columns("a.tsx", `const x = <View>{xs.map((a) => <View key={a}>${B}</View>)}</View>;`)).toHaveLength(1);
+    expect(columns("a.tsx", `const x = <View><ButtonPair main={m} second={s} />${B}</View>;`)).toHaveLength(1);
+    expect(columns("a.tsx", `const x = <View>${B}${B}<ListGroup><GroupRow title="a" /></ListGroup></View>;`)).toHaveLength(0);
+    expect(columns("a.tsx", `const x = <View><View>${B}<T>a</T></View>${B}</View>;`)).toHaveLength(0);
   });
 });
