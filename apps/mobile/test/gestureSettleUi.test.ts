@@ -206,8 +206,8 @@ describe("#1403 guard: the wiring in CanvasView, the drawing screen and the grid
     expect(canvas).toMatch(/usePinchGesture\(pinchConfig\)/);
     expect(canvas).not.toMatch(/use(Pan|Pinch)Gesture\(\{/);
     const draw = src("draw/DrawScreen.tsx");
-    // every gesture of the drawing screen that runs with the canvas's pinch / pan has a config made once
-    const withPinch = [...draw.matchAll(/const (\w+) = use(\w+)Gesture\(([\s\S]*?)\n {2}\}/g)].filter((m) => m[3]!.includes("simultaneousWith: [canvas.pinch, canvas.pan]"));
+    // every gesture of the drawing screen that runs with the canvas's pinch / pan / turn (#2988) has a config made once
+    const withPinch = [...draw.matchAll(/const (\w+) = use(\w+)Gesture\(([\s\S]*?)\n {2}\}/g)].filter((m) => m[3]!.includes("simultaneousWith: [canvas.pinch, canvas.pan, canvas.rot]"));
     expect(withPinch.map((m) => m[1])).toEqual(["pan", "tap"]);
     for (const m of withPinch) expect(m[3]!.startsWith("useJsGestureConfig<")).toBe(true);
   });
