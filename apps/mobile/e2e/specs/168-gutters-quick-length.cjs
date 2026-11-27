@@ -12,10 +12,12 @@
  *   09.11, #675): no unit row above the fields, a tap on «дюйм» → a menu of the units;
  * - the value on a pill of the main button's colours under the tape, at the red needle (`tape.*`, #674 → #2412);
  * - a gutter, then «Отменить» → it is gone; another, then a tap outside the sheet → gone too (a stray line);
- * - a length label tapped → the length sheet of that gutter («Отменить» there changes nothing);
+ * - a length label tapped → the length sheet of that gutter («Отменить» there changes nothing); 820/1280 (#3080, design-review #3066 №13):
+ *   no window — the gutter is picked and its length is edited in the column (`attr-length`), mm there; the window of a new gutter dims the column;
  * - nothing drawn (a tap) → no sheet.
  * Finds things by testID; waits on what it checks.
  */
+const { settle } = require("../settle.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -178,40 +180,68 @@ exports.run = async (h) => {
   await waitFor(async () => (await runs()).some((r) => r.geom?.lengthIn === 260), "260″ in inches");
   await waitFor(async () => /21′ 8″/.test(await tid("draw-selected").innerText()), "shown as 21′ 8″");
   await tid("draw-svg").first().waitFor();
-  const lab = await p.getByTestId("draw-svg").first().locator('[id^="lbl-len:"]').filter({ hasText: "21′ 8″" }).first().boundingBox();
-  // a length label tapped → its length sheet; mm: 1000 → 39⅜″
-  await p.mouse.click(lab.x + lab.width / 2, lab.y + lab.height / 2);
-  await tid("quick-length").waitFor({ timeout: 5000 });
-  await pickUnit("мм");
-  await field("quick-length-one").fill("1000");
-  // the metric tape: millimetre marks — two marks longer, 1002 mm in the field; back
-  await tid("quick-length-tape-more").getByRole("button").click();
-  await tid("quick-length-tape-more").getByRole("button").click();
-  await waitFor(async () => (await field("quick-length-one").inputValue()) === "1002", "the mm tape: two marks → 1002 mm");
-  h.expect(/1,002 mm/.test(await tid("quick-length-tape-value").innerText()), "the big value says 1,002 mm");
-  await field("quick-length-one").fill("1000");
-  await tid("quick-length-apply").getByRole("button").click();
-  await waitFor(async () => (await runs()).some((r) => r.geom?.lengthIn === 39.375), "1000 mm → 39⅜″");
-  // metres too (founder 09.11): 3 m → 118⅛″
-  const lab3 = await p.getByTestId("draw-svg").first().locator('[id^="lbl-len:"]').filter({ hasText: "3′ 3⅜″" }).first().boundingBox();
-  await p.mouse.click(lab3.x + lab3.width / 2, lab3.y + lab3.height / 2);
-  await tid("quick-length").waitFor({ timeout: 5000 });
-  await pickUnit("м");
-  await field("quick-length-one").fill("3");
-  await tid("quick-length-apply").getByRole("button").click();
-  await waitFor(async () => (await runs()).some((r) => r.geom?.lengthIn === 118.125), "3 m → 118⅛″");
-  // the label again, «Отменить» there changes nothing
-  const lab2 = await p.getByTestId("draw-svg").first().locator('[id^="lbl-len:"]').filter({ hasText: "9′ 10⅛″" }).first().boundingBox();
-  await p.mouse.click(lab2.x + lab2.width / 2, lab2.y + lab2.height / 2);
-  await tid("quick-length").waitFor({ timeout: 5000 });
-  await tid("quick-length-cancel").getByRole("button").click();
-  await waitFor(async () => (await tid("quick-length").count()) === 0, "closed");
-  h.expect((await runs()).length === 4 && (await runs()).some((r) => r.geom?.lengthIn === 118.125), "«Отменить» on a label's sheet keeps the gutter");
+  const wide = (p.viewportSize()?.width ?? 0) > 390;
+  if (!wide) {
+    const lab = await p.getByTestId("draw-svg").first().locator('[id^="lbl-len:"]').filter({ hasText: "21′ 8″" }).first().boundingBox();
+    // a length label tapped → its length sheet; mm: 1000 → 39⅜″
+    await p.mouse.click(lab.x + lab.width / 2, lab.y + lab.height / 2);
+    await tid("quick-length").waitFor({ timeout: 5000 });
+    await pickUnit("мм");
+    await field("quick-length-one").fill("1000");
+    // the metric tape: millimetre marks — two marks longer, 1002 mm in the field; back
+    await tid("quick-length-tape-more").getByRole("button").click();
+    await tid("quick-length-tape-more").getByRole("button").click();
+    await waitFor(async () => (await field("quick-length-one").inputValue()) === "1002", "the mm tape: two marks → 1002 mm");
+    h.expect(/1,002 mm/.test(await tid("quick-length-tape-value").innerText()), "the big value says 1,002 mm");
+    await field("quick-length-one").fill("1000");
+    await tid("quick-length-apply").getByRole("button").click();
+    await waitFor(async () => (await runs()).some((r) => r.geom?.lengthIn === 39.375), "1000 mm → 39⅜″");
+    // metres too (founder 09.11): 3 m → 118⅛″
+    const lab3 = await p.getByTestId("draw-svg").first().locator('[id^="lbl-len:"]').filter({ hasText: "3′ 3⅜″" }).first().boundingBox();
+    await p.mouse.click(lab3.x + lab3.width / 2, lab3.y + lab3.height / 2);
+    await tid("quick-length").waitFor({ timeout: 5000 });
+    await pickUnit("м");
+    await field("quick-length-one").fill("3");
+    await tid("quick-length-apply").getByRole("button").click();
+    await waitFor(async () => (await runs()).some((r) => r.geom?.lengthIn === 118.125), "3 m → 118⅛″");
+    // the label again, «Отменить» there changes nothing
+    const lab2 = await p.getByTestId("draw-svg").first().locator('[id^="lbl-len:"]').filter({ hasText: "9′ 10⅛″" }).first().boundingBox();
+    await p.mouse.click(lab2.x + lab2.width / 2, lab2.y + lab2.height / 2);
+    await tid("quick-length").waitFor({ timeout: 5000 });
+    await tid("quick-length-cancel").getByRole("button").click();
+    await waitFor(async () => (await tid("quick-length").count()) === 0, "closed");
+    h.expect((await runs()).length === 4 && (await runs()).some((r) => r.geom?.lengthIn === 118.125), "«Отменить» on a label's sheet keeps the gutter");
+  } else {
+    // 820/1280 (#3080, design-review #3066 №13): a label tapped picks the gutter — its length is in the column, no window over it
+    const tapLabel = async (text) => {
+      const box = await p.getByTestId("draw-svg").first().locator('[id^="lbl-len:"]').filter({ hasText: text }).first().boundingBox();
+      await p.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      await waitFor(async () => /\d/.test(await field("attr-length-ft").inputValue().catch(() => "")), `the column holds the length of «${text}»`);
+      await settle(p);
+      h.expect((await tid("quick-length").count()) === 0, `«${text}» tapped: no length window over the column`);
+    };
+    await tapLabel("21′ 8″");
+    h.expect((await field("attr-length-ft").inputValue()) === "21" && (await field("attr-length-in").inputValue()) === "8", "the column: 21 ft 8 in");
+    // mm in the column: 1000 → 39⅜″; 3000 → 118⅛″ (the sixteenth nearest 118.11″)
+    await tid("attr-length-unit-mm").click();
+    await field("attr-length-mm").fill("1000");
+    await waitFor(async () => (await runs()).some((r) => r.geom?.lengthIn === 39.375), "the column: 1000 mm → 39⅜″");
+    await field("attr-length-mm").fill("3000");
+    await waitFor(async () => (await runs()).some((r) => r.geom?.lengthIn === 118.125), "the column: 3000 mm → 118⅛″");
+    await tid("attr-length-unit-ftin").click();
+    await tapLabel("9′ 10⅛″");
+    h.expect((await runs()).length === 4 && (await runs()).some((r) => r.geom?.lengthIn === 118.125), "a label tapped changes nothing");
+  }
 
   // a stray line: «Отменить» → gone; a tap outside → gone
   const y4 = y - b.height * 0.27;
   await stroke([x0, y4], [x1, y4]);
   await tid("quick-length").waitFor({ timeout: 5000 });
+  // 820/1280: the column under the window of a new gutter is dimmed and takes no touch (#3080)
+  if (wide) {
+    const panel = await tid("draw-panel").evaluate((el) => ({ o: Number(getComputedStyle(el).opacity), pe: getComputedStyle(el).pointerEvents }));
+    h.expect(panel.o < 1 && panel.pe === "none", `the column dims under the length window (${JSON.stringify(panel)})`);
+  }
   await tid("quick-length-cancel").getByRole("button").click();
   await waitFor(async () => (await runs()).length === 4, "«Отменить»: the new gutter is gone");
   await stroke([x0, y4], [x1, y4]);
