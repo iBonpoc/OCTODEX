@@ -334,7 +334,15 @@ describe("stand.yml: who writes, where the code of the PRs runs, where the key i
     const b = job("build");
     expect(b).toMatch(/permissions:\n\s+contents: read\n/);
     expect(b).not.toMatch(/secrets\.|environment:|cache:|actions\/cache/);
-    expect(b).toContain("node scripts/stand.cjs build --manifest manifest.json");
+    expect(b).toContain(`node scripts/stand.cjs build --manifest "$RUNNER_TEMP/trusted/manifest.json"`);
+  });
+  it("every artifact is downloaded under runner.temp (trusted / untrusted), never next to scripts/ (review of #3125 п.5)", () => {
+    const downloads = s.split("uses: actions/download-artifact@v4").slice(1).map((d) => d.split("\n      - ")[0]);
+    expect(downloads.length).toBeGreaterThanOrEqual(6);
+    for (const d of downloads) expect(d, d).toMatch(/path: \$\{\{ runner\.temp \}\}\/(trusted|untrusted)/);
+    // what the build job made is untrusted; the dist goes next to the app only after its checks
+    for (const d of downloads.filter((x) => /name: stand-(build|dist)/.test(x))) expect(d).toMatch(/\/untrusted/);
+    expect(job("deploy")).toMatch(/find dist -type l[\s\S]*cp -R dist\/\. "\$GITHUB_WORKSPACE\/apps\/mobile\/dist\/"/);
   });
   it("deploy: the environment preview-web, static files checked as in the preview, the alias stand, the pinned task", () => {
     const d = job("deploy");

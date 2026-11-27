@@ -112,12 +112,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # artifacts never land next to scripts/ (review of #3125 п.5)
       - uses: actions/download-artifact@v4
         with:
           name: stand-manifest
+          path: ${{ runner.temp }}/trusted
       - id: build
         name: Typecheck + web build (a broken combination → the PR found by halving the list is dropped)
-        run: node scripts/stand.cjs build --manifest manifest.json --out manifest-build.json --dist "$RUNNER_TEMP/stand-dist" --worktree "$RUNNER_TEMP/stand-wt"
+        run: node scripts/stand.cjs build --manifest "$RUNNER_TEMP/trusted/manifest.json" --out "$RUNNER_TEMP/manifest-build.json" --dist "$RUNNER_TEMP/stand-dist" --worktree "$RUNNER_TEMP/stand-wt"
       - uses: actions/upload-artifact@v4
         with:
           name: stand-dist
@@ -127,7 +129,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: stand-build
-          path: manifest-build.json
+          path: ${{ runner.temp }}/manifest-build.json
           retention-days: 7
           if-no-files-found: error
 
@@ -147,20 +149,23 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: stand-manifest
+          path: ${{ runner.temp }}/trusted
+      # from the job that ran the code of the PRs: only its numbers are read, and only those that were in (stand.cjs)
       - uses: actions/download-artifact@v4
         with:
           name: stand-build
+          path: ${{ runner.temp }}/untrusted
       - name: The same merges without the PRs that break the build
         env:
           GH_TOKEN: ${{ github.token }}
           BUILT: ${{ needs.build.outputs.stand }}
         run: |
           [[ "$BUILT" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::bad commit from the build"; exit 1; }
-          node scripts/stand.cjs merge --from manifest.json --exclude manifest-build.json --expect "$BUILT" --out manifest-final.json --push
+          node scripts/stand.cjs merge --from "$RUNNER_TEMP/trusted/manifest.json" --exclude "$RUNNER_TEMP/untrusted/manifest-build.json" --expect "$BUILT" --out "$RUNNER_TEMP/manifest-final.json" --push
       - uses: actions/upload-artifact@v4
         with:
           name: stand-manifest-final
-          path: manifest-final.json
+          path: ${{ runner.temp }}/manifest-final.json
           retention-days: 7
           if-no-files-found: error
 
@@ -184,22 +189,24 @@ jobs:
         with:
           node-version: 22
       - run: npm ci
-      - name: Take the built files (static files only)
+      - name: Take the built files (static files only, checked before they go next to the app)
         uses: actions/download-artifact@v4
         with:
           name: stand-dist
-          path: apps/mobile/dist
+          path: ${{ runner.temp }}/untrusted/dist
       # the manifest of the write job (not the build job's: that one ran code of the PRs)
       - uses: actions/download-artifact@v4
         if: env.CHANGED != 'true'
         with:
           name: stand-manifest
+          path: ${{ runner.temp }}/trusted
       - uses: actions/download-artifact@v4
         if: env.CHANGED == 'true'
         with:
           name: stand-manifest-final
+          path: ${{ runner.temp }}/trusted
       - name: The built files are a plain static site
-        working-directory: apps/mobile
+        working-directory: ${{ runner.temp }}/untrusted
         run: |
           # as preview-deploy.yml: only static files go online (no server code, no links, an index page, a sane size)
           [ -f dist/index.html ] || { echo "::error::dist has no index.html"; exit 1; }
@@ -207,6 +214,8 @@ jobs:
           [ -z "$(find dist -type l)" ] || { echo "::error::dist has symbolic links"; exit 1; }
           size_mb="$(du -sm dist | cut -f1)"
           [ "$size_mb" -le 300 ] || { echo "::error::dist is $size_mb MB"; exit 1; }
+          mkdir -p "$GITHUB_WORKSPACE/apps/mobile/dist"
+          cp -R dist/. "$GITHUB_WORKSPACE/apps/mobile/dist/"
       - name: Deploy the stand (the fixed alias «stand»)
         id: web
         working-directory: apps/mobile
@@ -228,5 +237,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           URL: ${{ steps.web.outputs.url }}
         run: |
-          f=manifest.json; [ "$CHANGED" = "true" ] && f=manifest-final.json
+          f="$RUNNER_TEMP/trusted/manifest.json"; [ "$CHANGED" = "true" ] && f="$RUNNER_TEMP/trusted/manifest-final.json"
           node scripts/stand.cjs issue --manifest "$f" --url "$URL"
