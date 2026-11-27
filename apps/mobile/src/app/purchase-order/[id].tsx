@@ -125,11 +125,14 @@ export default function PurchaseOrderScreen() {
   };
   const canRecv = canReceive(role) && ["sent", "partially_received", "received"].includes(found.status);
   const startReceive = () => setReceiving(Object.fromEntries(found.lines.map((l) => [l.id, l.receivedQty === "0" ? "" : l.receivedQty])));
-  // DS §7.5 (#3065): at most one main + one second button under the order; the rest — «⋯» in the header. Editing: «Отправить» +
-  // «Сохранить»; «Получено» (a sent order) and «Отменить заказ» — in «⋯». Not editing: «Получено» is the one main.
+  // DS §7.5 (#3065): at most one main + one second button under the order; the rest — «⋯» in the header.
   const canCancel = office && ["draft", "sent", "partially_received"].includes(found.status);
-  const items: MenuItem<"receive" | "cancel">[] = [
-    ...(edit && canRecv ? [{ key: "receive" as const, label: t("po.receive"), icon: "check" as const, testID: "po-receive" }] : []),
+  // design + crm review (#3065): a sent order without changes — the next step «Отметить получение» is the one main; «Отправить снова»
+  // (the same version again) goes to «⋯». With changes — «Отправить (версия N)» + «Сохранить», «Получено» in «⋯».
+  const receiveMain = canRecv && !dirty;
+  const items: MenuItem<"receive" | "send" | "cancel">[] = [
+    ...(edit && canRecv && !receiveMain ? [{ key: "receive" as const, label: t("po.receive"), icon: "check" as const, testID: "po-receive" }] : []),
+    ...(edit && receiveMain && o.supplierId && o.lines.length && !dateBad ? [{ key: "send" as const, label: t("po.sendAgain", { n: found.revision + 1 }), icon: "send" as const, testID: "po-send-again" }] : []),
     ...(canCancel ? [{ key: "cancel" as const, label: t("po.cancel"), icon: "close" as const, destructive: true, ownAsk: true, testID: "po-cancel" }] : []),
   ];
   const more = items.length ? (
@@ -218,7 +221,7 @@ export default function PurchaseOrderScreen() {
         {total !== undefined ? <T v="heading" tabular>{t("po.total", { amount: money(total) })}</T> : null}
       </Card>
 
-      {edit ? (
+      {edit && !receiveMain ? (
         <ButtonPair
           ids={{ main: "po-send", second: "po-save" }}
           main={{ label: found.status === "sent" ? t("po.sendAgain", { n: found.revision + 1 }) : t("po.send"), icon: "send", disabled: !o.supplierId || !o.lines.length || dateBad, onPress: send }}
@@ -239,6 +242,7 @@ export default function PurchaseOrderScreen() {
         onSelect={(k) => {
           setMoreAt(null);
           if (k === "receive") startReceive();
+          else if (k === "send") send();
           else setAskCancel(true);
         }}
         onClose={() => setMoreAt(null)}
