@@ -63,6 +63,9 @@ export interface MenuItem<K extends string> {
   icon?: IconKey;
   selected?: boolean;
   destructive?: boolean;
+  /** a destructive item whose screen asks its own question (what goes with it — «Удалить замер», #2013): red and last, but the
+   *  template's «Удалить …?» is not asked again (two questions in a row, Gutters #3016) */
+  ownAsk?: boolean;
   /** pale (`dimOpacity`) but pressable: the press explains why it cannot be done */
   dim?: boolean;
   /** the first item of its own group (after a line): actions after the choices of a label menu — «Сделать основным» (DS §9 А14а) */

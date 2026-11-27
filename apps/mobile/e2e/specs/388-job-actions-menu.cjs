@@ -39,9 +39,8 @@ exports.run = async (h) => {
   const tabs = await tid("job-screen-sections-overview").boundingBox();
   const main = await tid("job-next-start").boundingBox();
   h.expect(tabs && main.y < tabs.y, "the main step stands above the sections' line");
-  // «В пути» — the second step beside it
-  const enroute = await tid("job-next-enroute").boundingBox();
-  h.expect(enroute && Math.abs(enroute.y + enroute.height / 2 - (main.y + main.height / 2)) <= 4 && enroute.x > main.x, "«В пути» stands beside the main step");
+  // #2995 (crm + design review 27.11): ONE button — no «В пути» beside it; «Сообщить «В пути»» lives in «⋯» (checked below)
+  h.expect((await p.getByTestId("job-next-enroute").locator("visible=true").count()) === 0, "no second button «В пути» beside the main step");
   const more = await tid("job-screen-more").boundingBox();
   const create = await tid("job-screen-create").boundingBox();
   h.expect(more && create && more.x > create.x, "«⋯» is the last on the right of the header, after «＋»");
@@ -76,13 +75,13 @@ exports.run = async (h) => {
   await objSection(p, "job-screen", "notes");
   await p.getByPlaceholder("Собака во дворе, где парковаться…").locator("visible=true").first().waitFor({ timeout: 4000 });
 
-  // the technician: «В пути» in sight beside the main step, not in «⋯»
+  // the technician (#2995): one button «Начать выезд» (the visit's own screen holds «В путь»); «Сообщить «В пути»» in «⋯»
   await h.seed("octo.role.v1", "tech");
   await h.go("/job/j1");
   await tid("job-next-start").waitFor({ timeout: 8000 });
-  await tid("job-next-enroute").waitFor({ timeout: 3000 });
+  h.expect((await p.getByTestId("job-next-enroute").locator("visible=true").count()) === 0, "the tech: no second button beside «Начать выезд»");
   await openMenu();
-  h.expect(!(await menuOrder()).includes("job-act-enRoute"), "the tech: «В пути» is not repeated in «⋯»");
+  h.expect((await menuOrder()).includes("job-act-enRoute"), "the tech: «Сообщить «В пути»» is in «⋯»");
   await closeMenu();
   await h.seed("octo.role.v1", "director");
 
