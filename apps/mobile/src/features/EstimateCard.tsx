@@ -29,7 +29,7 @@ import { Button, IconButton, Segmented, StatusChip, TextField } from "@/ui/contr
 import { T } from "@/ui/primitives";
 import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, RowView, SectionTitle } from "@/ui/surfaces";
-import { canChangeEstimateCategory, estimateStatusView, isEstimateEditable } from "@/features/estimateStatus";
+import { canChangeEstimateCategory, estimateStatusView, estimateView, isEstimateEditable, sentOnceAt } from "@/features/estimateStatus";
 import { ServiceCategoryRow } from "@/features/ServiceCategoryPicker";
 import { canCountersign, canManageLink, canSeeClientLink, canSignDraftOnSite, hisWarning, mySignature } from "@/features/estimateSign";
 import { EstimateReasonSheet } from "@/features/EstimateReasonSheet";
@@ -80,7 +80,8 @@ function useEstimateCore(e: Estimate, openSend?: boolean) {
   const [tplOpen, setTplOpen] = useState(false);
   const customer = db.customers.find((c) => c.id === e.customerId);
   const property = db.properties.find((p) => p.id === e.propertyId);
-  const st = estimateStatusView(e.status);
+  // #3058: a draft that went out before reads «Изменена после отправки»
+  const st = estimateView(e);
   const q = (msg: string) => (store.online ? msg : t("offline.queued"));
   const universal = isUniversal(e);
   const facts = [
@@ -95,7 +96,7 @@ function useEstimateCore(e: Estimate, openSend?: boolean) {
   const job = db.jobs.find((j) => j.estimateId === e.id);
 
   // C5 for the PDF (spec 33 П23.10): an unsigned estimate's PDF goes to the client by hand — the same check as «Отправить»
-  const pdfIssues = (e.status === "draft" || e.status === "sent") && e.doc ? sendIssues(e.doc, { firstSend: e.status === "draft" }) : null;
+  const pdfIssues = (e.status === "draft" || e.status === "sent") && e.doc ? sendIssues(e.doc, { firstSend: e.status === "draft" && !sentOnceAt(e) }) : null;
   // C5b (spec 33 П23.11): the modules' words on an open estimate (e.g. «the measurement changed after it»)
   const notes = estimateNotes(db, e);
   const pdf = (checked = false) => {
