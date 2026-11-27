@@ -12,6 +12,9 @@ const { atMinute, dayKey, todayKey } = require("../companyTime.cjs");
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
 const money = (c) => usd.format(c / 100);
 
+// #3029: an overview shows whole dollars (half up); under $1 — with cents
+const whole = (c) => (Math.abs(c) < 100 ? `$${(Math.abs(c) / 100).toFixed(2)}` : `$${Math.floor((Math.abs(Math.round(c)) + 50) / 100).toLocaleString("en-US")}`);
+
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/reports");
@@ -59,18 +62,18 @@ exports.run = async (h) => {
   // 2 leads today (the third is yesterday's), 1 won = 50 %; one job, two invoices before tax $1,500.01 → average $1,500.01
   h.expect(a.includes("Roof 159"), "direction name");
   h.expect(/Лиды\s+2\b/.test(a) && /Стали клиентами\s+1 · 50%/.test(a), `leads of Roof 159: ${a}`);
-  // the card's own figure, with cents (#2888: it used to round to «$1,500»), right before its label
-  h.expect(/(^|\n)\$1,500\.01\s*\n\s*Выручка/.test(a), `revenue of Roof 159 = $1,500.01 (${a})`);
-  h.expect(a.includes(money(150001)), `average ticket $1,500.01 (${a})`);
+  // the card's own figure right before its label — an overview: whole dollars (#3029/#3030, founder: cents only in the documents)
+  h.expect(/(^|\n)\$1,500\s*\n\s*Выручка/.test(a), `revenue of Roof 159 = $1,500 (${a})`);
+  h.expect(a.includes(whole(150001)), `average ticket $1,500 (${a})`);
   const old = await card("cat159old").innerText();
   h.expect(old.includes("в архиве"), "archived direction keeps its card, marked");
-  h.expect(/Смет отправлено\s+1\b/.test(old) && /Смет подписано\s+1 · \$1,234\.00\b/.test(old), `archived: estimate sent and signed $1,234.00 (${old})`);
+  h.expect(/Смет отправлено\s+1\b/.test(old) && /Смет подписано\s+1 · \$1,234\b/.test(old), `archived: estimate sent and signed $1,234 (#3029 whole dollars) (${old})`);
 
   // the total = Σ before tax of every invoice sent today (the demo's own too)
   const db = await h.db();
   const revenue = db.invoices.filter((i) => i.sentAt && dayKey(i.sentAt) === today).reduce((s, i) => s + (i.subtotalCents ?? i.totalCents), 0);
   const tot = await p.getByTestId("rpt-cat-total").locator("visible=true").first().innerText();
-  h.expect(tot.includes(money(revenue)), `total revenue ${money(revenue)} (${tot})`);
+  h.expect(tot.includes(whole(revenue)), `total revenue ${whole(revenue)} (${tot})`);
   // «Без направления» is its own card when today has a record without one
   const noneToday =
     db.leads.some((l) => !l.serviceCategoryId && dayKey(l.receivedAt) === today) ||
