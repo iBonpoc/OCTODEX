@@ -277,14 +277,27 @@ export function GroupRowBody({ title, titleNote, extra, subtitle, lead, value, c
             </View>
           </View>
         ) : null}
-        {extra ? (
-          <T v="caption" tone="mut" numberOfLines={1}>
-            {extra}
-          </T>
+        {/* #3017: with the phone in the name's line the right side keeps only the call — the status and the sum go to line 3
+            («⊗ Просрочен 9 дн  $1,840.00 · Сегодня 1:30 PM · …»): the name, the phone and the address keep the whole width */}
+        {extra || (titleNote && (status || value)) ? (
+          // the deeds keep at least 40 % of the line; less left after the status and the sum — they take their own line (never «С…»)
+          <RowView gap={space[2]} style={{ flexWrap: "wrap", rowGap: 0 }}>
+            {titleNote && status ? <StatusPill status={status.status} label={status.label} draft={status.draft} /> : null}
+            {titleNote && value ? (
+              <T v="caption" w="semibold" tabular numberOfLines={1} style={{ flexShrink: 0 }}>
+                {value}
+              </T>
+            ) : null}
+            {extra ? (
+              <T v="caption" tone="mut" numberOfLines={1} style={{ flexShrink: 1, flexGrow: 1, flexBasis: 0, minWidth: "40%" }}>
+                {extra}
+              </T>
+            ) : null}
+          </RowView>
         ) : null}
         {below}
       </View>
-      {cols?.length
+      {titleNote ? null : cols?.length
         ? cols.map((x, i, all) => (
             <View key={x.label} style={{ alignItems: "flex-end", flexShrink: 0, minWidth: i < all.length - 1 ? component.figureRow.colW : undefined }}>
               <T v="micro" tone="mut" numberOfLines={1}>
@@ -322,7 +335,7 @@ export function GroupRowBody({ title, titleNote, extra, subtitle, lead, value, c
               )}
             </View>
           ) : null}
-      {status && !(value && !cols?.length) ? <StatusPill status={status.status} label={status.label} draft={status.draft} /> : null}
+      {status && !(value && !cols?.length) && !titleNote ? <StatusPill status={status.status} label={status.label} draft={status.draft} /> : null}
       {chevron ? <Icon name="chevronRight" s={size.iconSm} color={c.mut} /> : null}
     </RowView>
   );
