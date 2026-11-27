@@ -5744,4 +5744,5 @@ export const en: Dict = {
   "c3072.past": "Past",
   "c3072.pickJob": "Which job is the visit for?",
   "c3072.noPrice": "No price",
+  "c3072.newJob": "New job",
 };
