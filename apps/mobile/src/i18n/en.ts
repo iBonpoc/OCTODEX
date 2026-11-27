@@ -5759,7 +5759,7 @@ export const en: Dict = {
   "c3076.files": "Files",
   "c3076.visit": "Visit",
   "c3076.empty": "No photos or files yet",
-  "c3076.emptyHint": "Photos are added in the visit card",
+  "c3076.emptyHint": "Add a photo with «＋» at the top or in the visit card",
   "c3076.emptyFilter": "Nothing here",
   "c3076.k.photo": "Photo",
   "c3076.k.receipt": "Receipt",
@@ -5767,5 +5767,9 @@ export const en: Dict = {
   "c3076.k.drawing": "Drawing",
   "c3076.ds.grid": "Photo grid",
   "c3076.ds.gridHint": "The same thumbnails in rows, as in iOS Photos: the client's «Photos and files». A tap opens the photo.",
+  "c3076.before": "Before",
+  "c3076.after": "After",
+  "c3076.loose": "Client photos",
+  "c3076.add": "Add photo",
   "c3076.k.document": "Document",
 };

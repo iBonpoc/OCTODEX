@@ -64,6 +64,14 @@ export function ClientFiles({ c }: { c: Customer }) {
         </ListGroup>
       ) : null}
       {!shown.total ? <Empty icon="image" title={t("c3076.emptyFilter")} testID="client-files-none" /> : null}
+      {shown.loose.length ? (
+        // #3085: the client's photos without a visit (sent by the client, added here with «＋»)
+        <ListGroup title={t("c3076.loose")} testID="client-files-loose">
+          <View style={{ padding: space[3] }}>
+            <PhotoStrip grid title={t("c3076.k.photo")} photos={shown.loose.map((fi) => ({ id: fi.id, kind: "before" as const, uri: fi.uri, ...(fi.upload ? { upload: fi.upload } : {}) }))} />
+          </View>
+        </ListGroup>
+      ) : null}
       {shown.groups.map((g) => (
         <ListGroup key={g.visit.id} testID={`client-files-visit-${g.visit.id}`} title={day(g.visit.start)}>
           <GroupRow

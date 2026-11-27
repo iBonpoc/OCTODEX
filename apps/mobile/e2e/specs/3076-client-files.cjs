@@ -73,6 +73,24 @@ exports.run = async (h) => {
   await h.expectText(/Фото до · 1 из 3/, "paged to the first photo");
   await pressEscUntilClosed(p);
 
+  // #3085: the grid says «До» / «После» under a visit's photo
+  h.expect(/После/.test(await p.getByTestId("client-files-visit-v1").locator("visible=true").first().innerText()), "an after photo says «После»");
+
+  // #3085: «＋» — a photo of the client, no visit: at once in its own group «Фото клиента», the count grows; «Вернуть» takes it back
+  const [ch] = await Promise.all([p.waitForEvent("filechooser"), p.getByTestId("client-files-add").locator("visible=true").first().click()]);
+  const png = Buffer.from(px("c08a8a").split(",")[1], "base64");
+  await ch.setFiles({ name: "from-client.png", mimeType: "image/png", buffer: png });
+  const loose = p.getByTestId("client-files-loose").locator("visible=true").first();
+  await loose.waitFor();
+  h.expect((await loose.locator('[data-testid^="photo-thumb-"]').count()) === 1, "one photo of the client");
+  // the phone's copy is written a moment later: wait for it, not a fixed time
+  const looseIn = (n) => p.waitForFunction((n) => (JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.files ?? []).filter((f) => f.customerId === "c1" && f.kind === "photo" && !f.visitId).length === n, n, { timeout: 5000 }).then(() => true, () => false);
+  h.expect(await looseIn(1), "the client's photo is in db.files with the client, no visit");
+  await h.shot(4);
+  await h.click("Вернуть");
+  await loose.waitFor({ state: "detached" });
+  h.expect(await looseIn(0), "«Вернуть» took it back");
+
   // the visit's row «›» opens the visit
   await p.getByTestId("client-files-open-v3076").locator("visible=true").first().click();
   await p.waitForURL(/\/visit\/v3076/);

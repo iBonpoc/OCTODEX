@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Image, ScrollView, View, type ScrollViewInstance } from "react-native";
-import * as ImagePicker from "expo-image-picker";
-import { liveUri, madeHere } from "./photoUri";
+import { liveUri } from "./photoUri";
 import { gridTile } from "./photoGrid";
 import { needsPut, offsetOf, pageOf, stepPage } from "./photoPager";
-import { prepPicked, type PickedPhoto } from "@/data/photoShrink";
+import type { PickedPhoto } from "@/data/photoShrink";
+import { usePhotoPick } from "./usePhotoPick";
 import { canRetry, isPrepFail } from "@/data/photoUpload";
 import { useStore } from "@/data/store";
 import { StatusNote } from "@/ui/statusNote";
@@ -14,7 +14,7 @@ import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Button } from "@/ui/controls";
-import { Sheet, useToast } from "@/ui/overlays";
+import { Sheet } from "@/ui/overlays";
 import { ListRow } from "@/ui/surfaces";
 
 const THUMB = component.photoThumb;
@@ -23,7 +23,6 @@ const THUMB = component.photoThumb;
 export function PhotoStrip({ grid, caption, photos, onAdd, onAddPreparing, onRemove, onRetry, onPrepare, title }: { /** #3082: a line under the viewer's title — where the photos are from («выезд · дата · мастер») */ caption?: string; /** #3076: the thumbnails wrap into rows (a grid, as iOS «Фото») instead of one strip that scrolls sideways — the client's «Фото и файлы» */ grid?: boolean; photos: Photo[]; /** none: the photos are only shown (no «Добавить фото» tile). Only a file made anew here (#1558) — never the original */ onAdd?: (uri: string, small?: true) => void; /** #1558: a photo that could not be made anew yet — kept on this phone as «preparing»; none: it is not added (a toast says to add it again) */ onAddPreparing?: (p: Extract<PickedPhoto, { preparing: unknown }>) => void; /** #1558 «Подготовить снова» on an «unreadable» photo (none: the store finds the visit by the photo) */ onPrepare?: (id: string) => void; onRemove?: (id: string) => void; /** #1431 «Повторить» on a photo the cloud did not take (its file is on this phone) */ onRetry?: (id: string) => void; /** the viewer's title when the photos are not a visit's before / after (a module's measurement) */ title?: string }) {
   const { c } = useTheme();
   const { t } = useI18n();
-  const toast = useToast();
   const store = useStore();
   const prepareAgain = onPrepare ?? ((id: string) => store.preparePhotoAgain({ photoId: id }));
   const [opened, setOpen] = useState<Photo | null>(null);
@@ -51,35 +50,7 @@ export function PhotoStrip({ grid, caption, photos, onAdd, onAddPreparing, onRem
   // the refused ones only (director 14.11, #1431 вариант А)
   const failedAt = open ? failedList.findIndex((p) => p.id === open.id) : -1;
   const nextFailed = failedAt >= 0 && failed > 1 ? failedList[(failedAt + 1) % failed] : undefined;
-  // a second tap while the photo is being made smaller does nothing (no second picker, no photo twice)
-  const busy = useRef(false);
-  const pick = async () => {
-    if (busy.current) return;
-    busy.current = true;
-    try {
-      await pickOne();
-    } finally {
-      busy.current = false;
-    }
-  };
-  const pickOne = async () => {
-    const perm = await ImagePicker.requestCameraPermissionsAsync().catch(() => null);
-    const res =
-      perm?.granted
-        ? await ImagePicker.launchCameraAsync({ quality: 1 }).catch(() => null)
-        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 1 }).catch(() => null);
-    if (!res || res.canceled) return;
-    // made anew once here, before the photo is kept and queued (#642); the original is never sent (#1558)
-    const got = await prepPicked(res);
-    if (!got) return;
-    if ("uri" in got) {
-      madeHere(got.uri);
-      onAdd?.(got.uri, got.small);
-    } else if (onAddPreparing) {
-      madeHere(got.preparing.uri);
-      onAddPreparing(got);
-    } else toast.show(t("photoUp.prep.notAdded"));
-  };
+  const pick = usePhotoPick(onAdd, onAddPreparing);
   return (
     <>
     <Strip grid={grid} onWidth={setGridW}>
@@ -124,7 +95,19 @@ export function PhotoStrip({ grid, caption, photos, onAdd, onAddPreparing, onRem
         >
           {p.uri ? <Image source={{ uri: p.uri }} style={{ width: tile, height: tile }} /> : <Icon name="image" s={size.iconLg} color={c.mut} />}
         </Press>
-      ))}
+      )).map((thumb, i) =>
+        // #3085: in the grid a visit's photo says «До» / «После» under it (a word, no colour); the owner's own title — none
+        grid && !title ? (
+          <View key={shown[i]!.id} style={{ width: tile, gap: space[1] }}>
+            {thumb}
+            <T v="caption" tone="mut" numberOfLines={1}>
+              {shown[i]!.kind === "after" ? t("c3076.after") : t("c3076.before")}
+            </T>
+          </View>
+        ) : (
+          thumb
+        ),
+      )}
       <Sheet visible={!!open} onClose={() => setOpen(null)} height="large" title={open ? viewTitle(open, true) : undefined}>
         {caption ? (
           <View testID="photo-view-caption">

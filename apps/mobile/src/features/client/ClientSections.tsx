@@ -830,11 +830,10 @@ export function ClientLog({ c, f }: { c: Customer; f: ClientFacts }) {
       </View>
       <GroupedList testID="client-feed">
         {/* #3076 (crm-reviewer): over the feed — a long history never hides it */}
-        {files ? (
-          <ListGroup separate>
-            <GroupRow lead={{ icon: "image" }} title={t("c3076.title")} value={String(files)} chevron onPress={() => router.push(`/client/files/${c.id}`)} testID="client-files-row" />
-          </ListGroup>
-        ) : null}
+        {/* #3085: always there — the way to «＋» even before the first photo; the number only when there is one */}
+        <ListGroup separate>
+          <GroupRow lead={{ icon: "image" }} title={t("c3076.title")} value={files ? String(files) : undefined} chevron onPress={() => router.push(`/client/files/${c.id}`)} testID="client-files-row" />
+        </ListGroup>
         <ListGroup
           separate
           title={t("client.row.tasks")}
