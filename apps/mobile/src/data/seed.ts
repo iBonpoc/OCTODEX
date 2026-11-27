@@ -10,6 +10,7 @@ import { DEMO_ZONE, demoToday, wallToInstant } from "@/features/zone";
 import { translate, type Lang } from "@/i18n/translate";
 import type { DictKey } from "@/i18n/ru";
 import { testClient } from "./seedTestClient";
+import { withModuleDemos } from "@/modules/registry";
 
 /** Test catalog for several trades. All prices are PLACEHOLDERS (badge "test price"). */
 const S = (id: string, name: string, unit: string, priceCents: number, kind: "service" | "labor" = "service"): CatalogItem => ({
@@ -171,10 +172,17 @@ export const DEMO_COMPANY: Company = {
 
 /** `lang` — the app's language when the demo starts: the demo checklist template comes in it (#1223) */
 export function makeSeed(lang: Lang = "en"): DB {
+  const { db, demo } = baseSeed(lang);
+  // #3024: each module adds its own part to the test client (ModuleDef.demo)
+  return withModuleDemos(db, demo);
+}
+/** the core's demo without the modules' parts (ModuleDef.demo) — for tests of a module that start from an empty slice */
+export const makeCoreSeed = (lang: Lang = "en"): DB => baseSeed(lang).db;
+function baseSeed(lang: Lang): { db: DB; demo: import("@/modules/registry").DemoClient } {
   const tpl = demoTemplate(lang);
   // #3024: one client with everything filled in (seedTestClient.ts)
   const tc = testClient({ at, daysAgo, minutesAgo, hoursFromNow }, (prefix) => jobChecklist(tpl, prefix));
-  return {
+  return { demo: tc.demo, db: {
     me: "m-alex",
     sources: SEED_SOURCES,
     tags: SEED_TAGS,
@@ -326,7 +334,6 @@ export function makeSeed(lang: Lang = "en"): DB {
     costHistory: [],
     notices: [],
     company: DEMO_COMPANY,
-    moduleData: { gutters: tc.gutters },
     notes: [
       { id: "n1", subjectType: "customer", subjectId: "c1", body: "Gate code 4512. Small dog in the backyard — call before entering.", visibility: "team", pinned: true, authorId: "m-alex", at: daysAgo(10) },
       { id: "n2", subjectType: "customer", subjectId: "c1", body: "Pays fast, asks for a discount every time.", visibility: "private", pinned: false, authorId: "m-alex", at: daysAgo(5) },
@@ -353,5 +360,5 @@ export function makeSeed(lang: Lang = "en"): DB {
       { id: "pay5", invoiceId: "i5", customerId: "c1", amountCents: 34200, method: "card", at: daysAgo(8), receiptNumber: "RCT-0102", receivedBy: "m-alex" },
       ...tc.payments,
     ],
-  };
+  } };
 }

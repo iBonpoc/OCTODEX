@@ -849,12 +849,20 @@ export function ClientDetails({ c, f, onCall, onSms, onRoute }: { c: Customer; f
           />
         ))}
       </ListGroup>
-      <ListGroup title={t("proto.client.facts")} testID="client-facts">
-        {c.number ? <GroupRow compact title={t("proto.client.number")} subtitle={c.number} /> : null}
-        {office && c.sourceId ? <GroupRow compact title={t("proto.client.tile.source")} subtitle={sourceName(db, c.sourceId)} /> : null}
-        {office ? <GroupRow compact title={t("proto.client.tax")} subtitle={c.taxExempt ? [t("client.f.taxExempt"), c.taxExemptNote].filter(Boolean).join(" · ") : t("proto.client.taxed")} /> : null}
-        {office ? <GroupRow compact title={t("client.row.billing")} subtitle={c.billing ? billingLine(c.billing) : t("client.row.billingSame")} /> : null}
-      </ListGroup>
+      {/* #3023 (founder: «сведения пересобрать… адрес для счетов, налог»; design review 27.11): what the invoices need — only when it is
+          not the default (a billing address of its own, no sales tax); the value large, its name small under it, as iOS Contacts */}
+      {office && (c.billing || c.taxExempt) ? (
+        <ListGroup title={t("oc.client.forInvoices")} testID="client-billing">
+          {c.billing ? <GroupRow compact title={billingLine(c.billing)} subtitle={t("client.row.billing")} /> : null}
+          {c.taxExempt ? <GroupRow compact title={[t("client.f.taxExempt"), c.taxExemptNote].filter(Boolean).join(" · ")} subtitle={t("proto.client.tax")} /> : null}
+        </ListGroup>
+      ) : null}
+      {c.number || (office && c.sourceId) ? (
+        <ListGroup title={t("proto.client.facts")} testID="client-facts">
+          {c.number ? <GroupRow compact title={c.number} subtitle={t("proto.client.number")} /> : null}
+          {office && c.sourceId ? <GroupRow compact title={sourceName(db, c.sourceId)} subtitle={t("proto.client.tile.source")} /> : null}
+        </ListGroup>
+      ) : null}
       {statusOf(c) === "do_not_service" ? <StatusChip status="bad" label={t("client.noServiceHint")} /> : null}
     </View>
   );

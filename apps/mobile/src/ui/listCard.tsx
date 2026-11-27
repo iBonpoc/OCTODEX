@@ -622,6 +622,8 @@ export interface StatusPickerOption {
   enabled: boolean;
   /** "form": choosing it opens the existing form (reason / date) */
   form?: boolean;
+  /** what the status means, one quiet line under the row (#3023: «Активный — работаем», «В архиве — скрыт из списка…») */
+  hint?: string;
 }
 
 export function StatusPicker({ visible, onExited, onClose, title, options, onPick }: {
@@ -642,7 +644,8 @@ export function StatusPicker({ visible, onExited, onClose, title, options, onPic
           const row = (
             <View style={{ flexDirection: "row", alignItems: "center", gap: space[3], minHeight: component.rowOption, paddingHorizontal: space[3], borderRadius: radius.field, backgroundColor: o.current ? c.surf2 : undefined }}>
               <Chip tone={o.tone} label={o.label} />
-              <View style={{ flex: 1 }}>
+              <View style={{ flex: 1, paddingVertical: o.hint ? space[2] : 0 }}>
+                {o.hint ? <Txt v="caption" color={c.mut}>{o.hint}</Txt> : null}
                 {!o.enabled && !o.current ? <Txt v="caption" color={c.mut}>{t("card.auto")}</Txt> : o.form ? <Txt v="caption" color={c.mut}>{t("card.byForm")}</Txt> : null}
               </View>
               {o.current ? <Icon name="check" s={size.iconMd} color={c.ink} /> : !o.enabled ? <Icon name="lock" s={size.iconSm} color={c.mut} /> : null}
