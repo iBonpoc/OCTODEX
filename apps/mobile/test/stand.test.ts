@@ -170,6 +170,7 @@ describe("stand.manifest and the pinned task", () => {
     const b = S.renderIssue(m, "https://octodex--stand.expo.app");
     expect(b).toContain("**Стенд:** https://octodex--stand.expo.app");
     expect(b).toContain("main `1111111` · стенд `2222222`");
+    expect(b).toContain("На стенде входить только в демо или в тестовый проект"); // review of #3125 п.9
     expect(b).toContain("### Вошли (2)");
     expect(b).toContain("- #3117 `aaaaaaa` Стенд\n  - где смотреть — что увидеть: Сметы → открыть любую — шапка серая");
     expect(b).toContain("(в описании PR нет такой строки)");
