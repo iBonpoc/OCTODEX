@@ -223,10 +223,12 @@ export function ClientOverview({ c, f, onSection, withNow }: {
   return (
     <View style={{ gap: space[4] }} testID="client-overview">
       {plate}
-      {/* #2363 F12/F20/F21: the pinned note, the access words and the visits ahead — rows of ONE group (rule 12), quiet:
+      {/* #3060 (founder 27.11: «всё в одном блоке слито… или все вместе, или все раздельно»): every record of every section of the client
+          is its own frame (#3017, #3022) — the overview's note, gate code and visits ahead too.
+          #2363 F12/F20/F21: the pinned note, the access words and the visits ahead — quiet:
           a gate code is not a status, so no warm fill; the note takes 2 lines, never cut in the middle of a word */}
       <GroupedList testID="client-top">
-        <ListGroup testID="client-top-group">
+        <ListGroup separate testID="client-top-group">
           {pinned.map((n) => (
             <GroupRow
               key={n.id}
@@ -261,7 +263,7 @@ export function ClientOverview({ c, f, onSection, withNow }: {
       {/* a new client: the «Сейчас» card says «Работ пока нет» with its «Новая смета»; the panel of the 1280 list says it here */}
       {withNow && f.state === "new" && !r.estimates.length ? <Empty icon="wrench" title={t("proto.client.noJobs")} hint={t("proto.client.noJobsHint")} testID="client-new-empty" /> : null}
       <GroupedList testID="client-overview-groups">
-        <ListGroup title={t("proto.client.inWork")} testID="client-in-work">
+        <ListGroup separate title={t("proto.client.inWork")} testID="client-in-work">
           {nowJobs.map((j) => (
             <GroupRow
               key={j.id}
@@ -278,7 +280,7 @@ export function ClientOverview({ c, f, onSection, withNow }: {
             <GroupRow key={x.id} testID={`client-task-${x.id}`} lead={{ icon: "check" }} title={x.title} subtitle={[t("proto.client.task"), x.dueAt ? when(x.dueAt) : null].filter(Boolean).join(" · ")} onPress={() => onSection("log")} />
           ))}
         </ListGroup>
-        <ListGroup title={t("proto.client.lastTalk")} all={{ label: t("proto.client.allLog"), onPress: () => onSection("log"), testID: "client-log-all" }} testID="client-last-talk">
+        <ListGroup separate title={t("proto.client.lastTalk")} all={{ label: t("proto.client.allLog"), onPress: () => onSection("log"), testID: "client-log-all" }} testID="client-last-talk">
           {f.talks.slice(0, 2).map((h) => (
             <GroupRow key={h.id} lead={{ icon: h.icon }} title={t(h.title)} subtitle={[ago(h.at), h.detail].filter(Boolean).join(" · ")} />
           ))}
@@ -754,6 +756,7 @@ export function ClientLog({ c, f }: { c: Customer; f: ClientFacts }) {
       </View>
       <GroupedList testID="client-feed">
         <ListGroup
+          separate
           title={t("client.row.tasks")}
           all={office ? { label: t("task.new"), onPress: newTask, testID: "client-task-new" } : undefined}
           testID="client-tasks-open"
@@ -772,7 +775,7 @@ export function ClientLog({ c, f }: { c: Customer; f: ClientFacts }) {
           {doneN ? <GroupRow compact key="done" testID="client-tasks-done" lead={{ icon: "history" }} title={t("client.doneTasks", { n: doneN })} onPress={() => router.push("/tasks")} /> : null}
         </ListGroup>
         {days.map(([k, hs]) => (
-          <ListGroup key={k} title={k}>
+          <ListGroup separate key={k} title={k}>
             {hs.map((h) => (
               <GroupRow
                 key={h.id}
@@ -787,7 +790,7 @@ export function ClientLog({ c, f }: { c: Customer; f: ClientFacts }) {
           </ListGroup>
         ))}
         {files ? (
-          <ListGroup>
+          <ListGroup separate>
             <GroupRow lead={{ icon: "image" }} title={t("w2b.client.files", { n: files })} subtitle={t("client.photosHint")} />
           </ListGroup>
         ) : null}
