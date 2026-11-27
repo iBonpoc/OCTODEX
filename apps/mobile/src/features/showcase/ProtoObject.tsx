@@ -64,6 +64,7 @@ export function ProtoObject() {
     act("w-more", "more", t("ds.proto.more")),
   ];
   const [step, setStep] = useState(1);
+  const [sumOn, setSumOn] = useState<"" | "w" | "o">("o");
   const steps = [
     { key: "way", label: t("ds.proto.stWay") },
     { key: "here", label: t("ds.proto.stHere") },
@@ -123,6 +124,14 @@ export function ProtoObject() {
           { label: t("ds.proto.jobs"), value: "3", onPress: said(t("ds.proto.jobs")), testID: "showcase-sum-jobs" },
           { label: t("ds.proto.debt"), value: "$1,840.00", status: "bad", testID: "showcase-sum-debt" },
           { label: t("ds.proto.lastVisit"), value: "Nov 12", testID: "showcase-sum-visit" },
+        ]}
+      />
+      {/* Д-факты-2 (#2993): the money total over «Счета» — a part that narrows the list, chosen = the «Заливка» surf2; press — on/off */}
+      <SummaryLine
+        testID="showcase-summary-filter"
+        items={[
+          { label: t("proto.money.tile.waiting"), value: "$960.00", onPress: () => setSumOn((x) => (x === "w" ? "" : "w")), selected: sumOn === "w", testID: "showcase-sum-waiting" },
+          { label: t("proto.money.tile.overdue"), value: "$1,840.00", status: "bad", onPress: () => setSumOn((x) => (x === "o" ? "" : "o")), selected: sumOn === "o", testID: "showcase-sum-overdue" },
         ]}
       />
       <Collapsible testID="showcase-collapsible" title={t("ds.proto.details")}>

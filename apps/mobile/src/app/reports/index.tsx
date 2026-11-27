@@ -48,7 +48,7 @@ export default function Reports() {
       key={id}
       testID={`rpt-row-${id}`}
       title={t(TITLE[id])}
-      subtitle={[id === "owed" ? undefined : head[id].label, head[id].note].filter(Boolean).join(" · ")}
+      subtitle={head[id].note}
       lead={{ icon: ICON[id] }}
       value={head[id].value}
       // a sum in the line («просрочено $1,840.00») and a long name are never cut (Д-строка-2, rule 31)
@@ -57,7 +57,8 @@ export default function Reports() {
     />
   );
   return (
-    <Screen title={t("rpt.title")} back={back} help={t("rpt.help")} hintKey="reports">
+    // «за этот месяц» once, under the title — not «Месяц ·» in four rows of five (layout review 27.11, Д-строка-5)
+    <Screen title={t("rpt.title")} subtitle={t("rpt.monthLine")} back={back} help={t("rpt.help")} hintKey="reports">
       <GroupedList testID="rpt-list">
         <ListGroup>{REPORTS.map(row)}</ListGroup>
       </GroupedList>
