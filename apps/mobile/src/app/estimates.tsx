@@ -45,6 +45,8 @@ export default function Estimates() {
     <ListScreen
       testID="est-list"
       title={t("nav.money")}
+      // #3018 (founder #3017): each estimate its own card
+      separate
       search={{ placeholder: t("card.filter.searchEstimates"), value: q, onChange: setQ }}
       chips={chips}
       chipsAs="segment"

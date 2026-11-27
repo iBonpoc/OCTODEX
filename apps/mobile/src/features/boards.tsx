@@ -10,6 +10,7 @@ import { estimateSigns } from "@/features/listSigns";
 import { estimateListAmount } from "@/features/estimateDoc";
 import { initialsOf } from "@/features/invoice/moneySummary";
 import { router } from "expo-router";
+import { shortAddress } from "@/features/shortAddress";
 import type { GroupRowProps } from "@/ui/groupedList";
 
 /** status chip of an estimate — the one place for it (lists, client and property documents) */
@@ -62,6 +63,7 @@ export function useEstimateList(q: string, allDone: boolean, onAllDone: () => vo
   });
   const row = (e: Estimate): GroupRowProps & { key: string } => {
     const c = db.customers.find((x) => x.id === e.customerId);
+    const prop = db.properties.find((x) => x.id === e.propertyId);
     const sign = estimateSigns(e, now)[0];
     const amount = estimateListAmount(e);
     // what is with it now, once: the sign («Без ответа 6 дн»), else the last event, else its status word
@@ -81,7 +83,12 @@ export function useEstimateList(q: string, allDone: boolean, onAllDone: () => vo
       key: e.id,
       testID: `est-row-${e.id}`,
       title: c?.name ?? "—",
-      subtitle: [what, e.title].filter(Boolean).join(" · "),
+      // #3018 (founder #3017: «знаю его по адресу»): 1 — the client · the number; 2 — the address of the work; 3 — what is with it · the
+      // work; the sum on the right, big (a money list, design/crm review)
+      titleNote: e.number || undefined,
+      subtitle: prop ? shortAddress(prop.address, prop.city) : undefined,
+      extra: [what, e.title].filter(Boolean).join(" · ") || undefined,
+      figureRight: true,
       lead: { initials: initialsOf(c?.name) },
       value: amount.from ? t("card.fromAmount", { amount: money(amount.cents) }) : money(amount.cents),
       onPress: () => router.push(`/estimate/${e.id}`),

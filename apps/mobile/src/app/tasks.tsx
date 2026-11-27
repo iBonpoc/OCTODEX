@@ -64,7 +64,9 @@ export default function Tasks() {
       testID: `task-${x.id}`,
       title: x.title,
       // lists B (#2992): today's and tomorrow's hour on the right (the group says the day); a far one keeps «день время» in the line
-      subtitle: [hourRight ? undefined : at, subject, who].filter(Boolean).join(" · ") || undefined,
+      // #3018 (founder #3017): 2 — what it is tied to; 3 — when (if not on the right) · who
+      subtitle: subject,
+      extra: [hourRight ? undefined : at, who].filter(Boolean).join(" · ") || undefined,
       value: hourRight ? at : undefined,
       valueMark: hourRight,
       // the DoneCircle on the left (the row's neighbour, not inside its press): a tap marks it done or brings it back, with «Отменить»
@@ -77,6 +79,8 @@ export default function Tasks() {
   return (
     <>
       <ListScreen<Task>
+        // #3018 (founder #3017): each task its own card
+        separate
         testID="tasks"
         title={t("task.title")}
         count={openN}

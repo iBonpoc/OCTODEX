@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
+import { shortAddress } from "@/features/shortAddress";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import type { DB, Invoice } from "@/data/types";
@@ -95,13 +96,21 @@ export default function Invoices() {
     // a paid one says «Оплачен <день>» — one word, kept by #1427 (e2e 78), though the group says «Оплачено» too
     const when = owes <= 0 ? (i.paidAt ? `${t("w2m.col.paid")} ${day(i.paidAt)}` : undefined) : sign ? undefined : left > 0 ? `${t("w2m.col.due")} ${t("w2m.due.in", { d: left })}` : undefined;
     // the number and when; the invoice's kind word («Остаток по договору») repeated in every row and cut it mid-word (layout review 27.11)
-    const sub = [when, i.number, late ? t("proto.money.reminders", { n: remindersOf(db, i.id).length }) : undefined].filter(Boolean).join(" · ");
+    // #3018: line 3 — the sign, «из $2,000.00» when part is paid, when; the number is in the name's line, the address under it
+    const job = db.jobs.find((j) => j.id === i.jobId);
+    const prop = db.properties.find((x) => x.id === job?.propertyId) ?? db.properties.find((x) => x.customerId === i.customerId);
+    const partOf = owes > 0 && i.paidCents > 0 ? t("lst.ofTotal", { amount: money(i.totalCents) }) : undefined;
+    const sub = [partOf, when, late ? t("proto.money.reminders", { n: remindersOf(db, i.id).length }) : undefined].filter(Boolean).join(" · ");
     return {
       key: i.id,
       testID: `invoice-row-${i.id}`,
       title: c?.name ?? "—",
-      subtitle: sub,
+      titleNote: i.number || undefined,
+      subtitle: prop ? shortAddress(prop.address, prop.city) : undefined,
+      extra: sub || undefined,
+      figureRight: true,
       lead: { initials: initialsOf(c?.name) },
+      // the rest to pay, big on the right (Jobber, HCP: the office calls by the balance)
       value: money(owes > 0 ? owes : i.paidCents),
       status: owes > 0 && sign ? { status: sign.tone, label: t(sign.key, sign.params) } : undefined,
       onPress: () => panel.open(i.id),
@@ -124,6 +133,8 @@ export default function Invoices() {
   return (
     <ListScreen
       testID="invoice-list"
+      // #3018 (founder #3017): each invoice its own card
+      separate
       title={client ? client.name : t("nav.money")}
       back={client ? () => (router.canGoBack() ? router.back() : router.setParams({ customer: "" })) : undefined}
       search={{ placeholder: t("card.filter.searchInvoices"), value: q, onChange: setQ }}

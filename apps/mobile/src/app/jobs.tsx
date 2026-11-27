@@ -16,6 +16,7 @@ import { telHref } from "@/features/contactLinks";
 import { initialsOf } from "@/features/invoice/moneySummary";
 import { memberLabel } from "@/features/team";
 import { canSeeJob } from "@/features/access";
+import { shortAddress } from "@/features/shortAddress";
 import { dayKeyIn } from "@/features/zone";
 
 type Filter = JobStatus | "all" | "cancelled";
@@ -82,12 +83,16 @@ export default function Jobs() {
         key={j.id}
         testID={`job-row-${j.id}`}
         title={c?.name ?? "—"}
-        subtitle={[when, office ? j.title : p?.address ?? j.title, office ? who : undefined].filter(Boolean).join(" · ")}
-        lead={{ initials: initialsOf(c?.name) }}
+        // #3018 (founder #3017): 1 — the client · the phone; 2 — the address; 3 — when · what · who (not «me» to the tech) · the sum (office)
+        titleNote={c?.phone || undefined}
+        subtitle={p ? shortAddress(p.address, p.city) : undefined}
+        extra={[when, j.title, office ? who : undefined].filter(Boolean).join(" · ") || undefined}
+        // the sum first in line 3 and never cut (#2672, design-review); the tech never sees it
         value={office ? money(j.amountCents) : undefined}
+        lead={{ initials: initialsOf(c?.name) }}
         // read only: a job has no hand moves (statusMoves) — the date comes from scheduling, «done» from the visit's payment
         status={showStatus ? { status: st.status, label: t(st.label) } : undefined}
-        actions={!office && tel ? [{ icon: "phone", a11y: `${t("client.call")} ${c?.name ?? ""}`, onPress: () => openContact({ kind: "call", icon: "phone", url: tel, value: c?.phone ?? "" }), testID: `job-row-call-${j.id}` }] : undefined}
+        actions={tel ? [{ icon: "phone", a11y: `${t("client.call")} ${c?.name ?? ""}`, onPress: () => openContact({ kind: "call", icon: "phone", url: tel, value: c?.phone ?? "" }), testID: `job-row-call-${j.id}` }] : undefined}
         onPress={() => router.push(`/job/${j.id}`)}
       />
     );
@@ -132,7 +137,7 @@ export default function Jobs() {
             const k = v && j.status !== "unscheduled" ? dayKeyIn(v.start) : "";
             return m.set(k, [...(m.get(k) ?? []), j]);
           }, new Map<string, Job[]>())].map(([k, js]) => (
-            <ListGroup key={k || "none"} title={k ? cap(day(nextVisitOf(db, js[0]!.id)!.start)) : t("task.noDate")} testID={`jobs-day-${k || "none"}`}>
+            <ListGroup key={k || "none"} separate title={k ? cap(day(nextVisitOf(db, js[0]!.id)!.start)) : t("task.noDate")} testID={`jobs-day-${k || "none"}`}>
               {js.map(row)}
             </ListGroup>
           ))}

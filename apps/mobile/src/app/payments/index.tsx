@@ -2,6 +2,8 @@ import { useState } from "react";
 import { router } from "expo-router";
 import { sumCents } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
+import { shortAddress } from "@/features/shortAddress";
+import { memberName } from "@/features/team";
 import type { Advance, DB, Payment } from "@/data/types";
 import { ADVANCES_COLLECTED } from "@/features/payments/collected";
 import { useI18n, type DictKey } from "@/i18n";
@@ -35,7 +37,7 @@ const WHEN_TITLE: Record<When, DictKey> = { today: "proto.money.g.today", week: 
 export default function Payments() {
   const { db, role } = useStore();
   const [q, setQ] = useState("");
-  const { t, money, day } = useI18n();
+  const { t, money, day, time } = useI18n();
   const chips = useMoneyChips("payments");
   const { create, onCreate } = useMoneyCreate();
   if (!canSeePayments(role))
@@ -65,12 +67,18 @@ export default function Payments() {
     const way = ref && (ref.toLowerCase().includes(x.method) || ref.toLowerCase().includes(how.toLowerCase())) ? ref : [how, ref].filter(Boolean).join(" ");
     // #2992 (lists B): the sum alone on the right; the way («Чек #1042», «Zelle») leads the line, then the day and the invoice
     // the group «Сегодня» already says the day (layout review 27.11, Д-строка-5)
-    const sub = [review, way, whenOf(x as Payment) === "today" ? undefined : day(x.at), inv?.number, x.refundedCents ? t("mny.refunded", { amount: money(x.refundedCents) }) : undefined];
+    // #3018 (founder #3017): 1 — the client · the way («Check #1042»); 2 — the address; 3 — the invoice · when · who took it
+    const prop = db.properties.find((p) => p.customerId === x.customerId);
+    const who = "receivedBy" in x && x.receivedBy ? memberName(db, x.receivedBy, t) : undefined;
+    const sub = [review, inv?.number, whenOf(x as Payment) === "today" ? time(x.at) : day(x.at), who, x.refundedCents ? t("mny.refunded", { amount: money(x.refundedCents) }) : undefined];
     return {
       key: x.id,
       testID: `payment-row-${x.id}`,
       title: c?.name ?? "—",
-      subtitle: sub.filter(Boolean).join(" · "),
+      titleNote: way || undefined,
+      subtitle: prop ? shortAddress(prop.address, prop.city) : undefined,
+      extra: sub.filter(Boolean).join(" · ") || undefined,
+      figureRight: true,
       lead: { initials: initialsOf(c?.name) },
       value: money(x.amountCents),
       onPress: () => router.push(`/receipt/${x.id}`),
@@ -79,6 +87,8 @@ export default function Payments() {
   return (
     <ListScreen
       testID="payments-list"
+      // #3018 (founder #3017): each payment its own card
+      separate
       title={t("nav.money")}
       search={{ placeholder: t("card.filter.searchPayments"), value: q, onChange: setQ }}
       chips={chips}

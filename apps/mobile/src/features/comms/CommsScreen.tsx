@@ -10,6 +10,9 @@ import { usePersistentState } from "@/data/persist";
 import { GroupedList, GroupRow, ListGroup } from "@/ui/groupedList";
 import { Empty, Screen } from "@/ui/surfaces";
 import { dayKeyIn } from "@/features/zone";
+import { shortAddress } from "@/features/shortAddress";
+import { telHref } from "@/features/contactLinks";
+import { openContact } from "@/ui/listCard";
 import type { IconKey } from "@/ui/primitives";
 import { CALL_OUTCOME, CALL_OUTCOMES, commsLog, matchComms, type CommsKind } from "./comms";
 import { CallSheet, type CallPreset } from "./CallSheet";
@@ -66,20 +69,32 @@ export function CommsScreen({ kind }: { kind: CommsKind }) {
         // the time, under it the outcome (icon + word); the day is the group's title, said once
         <GroupedList testID="calllog-list">
           {[...items.reduce((m, it) => m.set(dayKeyIn(it.at), [...(m.get(dayKeyIn(it.at)) ?? []), it]), new Map<string, typeof items>())].map(([k, xs]) => (
-            <ListGroup key={k} title={cap(day(xs[0]!.at))} testID={`calllog-day-${k}`}>
+            <ListGroup key={k} separate title={cap(day(xs[0]!.at))} testID={`calllog-day-${k}`}>
               {xs.map((it) => {
                 const o = it.outcome ? CALL_OUTCOME[it.outcome] : undefined;
+                // #3018 (founder #3017): 1 — who · the phone; 2 — the town or the address; 3 — the time, the outcome, the kind, minutes, who
+                // called, the note; on the right «Перезвонить» for one not answered
+                const lead = it.subjectType === "lead" ? db.leads.find((x) => x.id === it.subjectId) : undefined;
+                const cust = it.subjectType === "customer" ? db.customers.find((x) => x.id === it.subjectId) : undefined;
+                const prop = cust ? db.properties.find((x) => x.customerId === cust.id) : undefined;
+                const phone = lead?.phone ?? cust?.phone ?? undefined;
+                const where = lead ? shortAddress(lead.address, lead.city) : prop ? shortAddress(prop.address, prop.city) : undefined;
+                const tel = telHref(phone);
+                const back = calls && tel && it.outcome && it.outcome !== "answered";
                 return (
                   <GroupRow
                     key={it.id}
                     testID={`comms-${it.id}`}
                     title={it.person && it.person !== it.who ? `${it.person} · ${it.who}` : it.who || it.person || t("nav.comms.unknown")}
-                    subtitle={[
+                    titleNote={phone || undefined}
+                    subtitle={where}
+                    actions={back ? [{ icon: "phone", a11y: `${t("client.call")} ${it.who ?? ""}`, onPress: () => openContact({ kind: "call", icon: "phone", url: tel!, value: phone ?? "" }), testID: `calllog-back-${it.id}` }] : undefined}
+                    extra={[
                       t(it.kind === "call" ? "nav.comms.call" : it.kind === "sms" ? "nav.comms.sms" : "nav.comms.email"),
                       it.durationMin ? duration(it.durationMin) : undefined, // #2363 F42: the one rule of a length («1 ч 30 мин»)
                       it.by,
                       it.note,
-                    ].filter(Boolean).join(" · ")}
+                    ].filter(Boolean).join(" · ") || undefined}
                     lead={{ icon: icon[it.kind] ?? "message" }}
                     value={time(it.at)}
                     valueMark={!o}
