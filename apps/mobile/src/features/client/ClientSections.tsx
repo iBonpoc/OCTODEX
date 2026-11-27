@@ -442,15 +442,46 @@ export function projectStep(e: Estimate | undefined, j: Job, invoices: Invoice[]
 }
 
 /** «Выезды» — the client's visits, newest first (the tech's «Работы», the office's own section — #2363 q76) */
+/**
+ * One row of a client's visit for the whole app (#3072, leader 27.11: «раскладка строки выезда одна на всё приложение»): the job is
+ * the title, «вс, 29 нояб. · 1:00–3:00 PM · Alex, Dmitry» (+ the place with 2+ properties) the line, the status (icon + word) on the
+ * right; two lines when they must on 390. `testID` — the row's own (`client-visit-<id>` by default).
+ */
+export function useClientVisitRow(f: ClientFacts) {
+  const { t, day, time } = useI18n();
+  const { db, r } = f;
+  return (v: Visit, testID = `client-visit-${v.id}`) => {
+    const job = findJob(db, v.jobId);
+    const st = visitStatus(v, db.members, Date.now(), lateAfterOf(db));
+    const people = (v.assigneeIds?.length ? v.assigneeIds : [v.techId]).map((id) => memberName(db, id, t)?.split(" ")[0]).filter(Boolean).join(", ");
+    const end = new Date(new Date(v.start).getTime() + (v.durationMin || 0) * 60_000).toISOString();
+    // «1:00–3:00 PM», but «10:00 AM–1:00 PM» across noon (rule 7; design review #3072: «10:00–1:00 PM» read as the night);
+    // the range is glued (no-break space, no-break hyphen) so 390 never splits it
+    const [from, to] = plateHalves(time(v.start), time(end));
+    const range = `${from}\u2011${to}`.replace(/ /g, "\u00a0");
+    return (
+      <GroupRow
+        key={v.id}
+        testID={testID}
+        title={job?.title ?? t("visit.title")}
+        subtitle={[v.allDay ? day(v.start) : `${day(v.start)} · ${range}`, people, r.properties.length > 1 && job ? placeName(db, job) : null].filter(Boolean).join(" · ")}
+        status={{ status: st.status, label: t(st.label) }}
+        wrap
+        onPress={() => router.push(`/visit/${v.id}`)}
+      />
+    );
+  };
+}
+
 export function ClientVisits({ f, customerId }: { f: ClientFacts; customerId?: string }) {
-  const { t, day, time, duration } = useI18n();
+  const { t } = useI18n();
   const { db, r } = f;
   const [picking, setPicking] = useState(false);
   // #3072 (design + crm review of #3060): «Впереди» and «Прошли» apart, each visit with its status (icon + word), all its people;
   // the row (design review): the job is the title, «вс, 29 нояб. · 1:00–3:00 PM · Alex, Dmitry» the line, the status on the right
-  const now = Date.now();
-  const endOf = (v: Visit) => new Date(v.start).getTime() + (v.durationMin || 0) * 60_000;
-  const ahead = f.visits.filter((v) => !v.closed && endOf(v) >= now).sort((a, b) => a.start.localeCompare(b.start));
+  // crm review #3072: an open visit (missed, late, signed and waiting for payment) never sinks into «Прошли» — the past is the closed
+  // ones only; «Впереди» is every open visit, the earliest first (a missed one on top: it wants a step)
+  const ahead = f.visits.filter(isOpenVisit).sort((a, b) => a.start.localeCompare(b.start));
   const past = f.visits.filter((v) => !ahead.includes(v)).sort((a, b) => b.start.localeCompare(a.start));
   const planner = f.role === "director" || f.role === "dispatcher";
   const live = r.jobs.filter((j) => !j.cancelledAt && j.status !== "done");
@@ -460,38 +491,20 @@ export function ClientVisits({ f, customerId }: { f: ClientFacts; customerId?: s
     if (!live.length) return router.push((customerId ? `/job/new?customerId=${customerId}` : "/job/new") as Href);
     setPicking(true);
   };
-  const row = (v: Visit) => {
-    const job = findJob(db, v.jobId);
-    const st = visitStatus(v, db.members, now, lateAfterOf(db));
-    const people = (v.assigneeIds?.length ? v.assigneeIds : [v.techId]).map((id) => memberName(db, id, t)?.split(" ")[0]).filter(Boolean).join(", ");
-    const end = new Date(endOf(v)).toISOString();
-    return (
-      <GroupRow
-        key={v.id}
-        testID={`client-visit-${v.id}`}
-        lead={{ icon: "calendar" }}
-        title={job?.title ?? t("visit.title")}
-        subtitle={[v.allDay ? day(v.start) : `${day(v.start)} · ${bareTime(time(v.start))}–${time(end)}`, people, r.properties.length > 1 && job ? placeName(db, job) : null].filter(Boolean).join(" · ")}
-        status={{ status: st.status, label: t(st.label) }}
-        // the day and the time are never cut beside the status word on 390 (#3072): two lines when they must
-        wrap
-        onPress={() => router.push(`/visit/${v.id}`)}
-      />
-    );
-  };
+  const row = useClientVisitRow(f);
   const add = planner ? <ActionRow testID="client-visit-plan" label={t("c3072.plan")} icon="plusCircle" onPress={plan} /> : null;
   return (
     <View style={{ gap: space[4] }} testID="client-visits">
       {f.visits.length === 0 ? <Empty icon="calendar" title={t("prop.noVisits")} action={add ?? undefined} /> : null}
+      {f.visits.length ? add : null}
       {f.visits.length ? (
         <GroupedList>
           {/* #3022 / #3060: each record its own frame (DS §5.5) */}
           <ListGroup separate title={t("ov3061.ahead")} count={ahead.length || undefined} testID="client-visits-ahead">
-            {ahead.map(row)}
+            {ahead.map((v) => row(v))}
           </ListGroup>
-          {add}
           <ListGroup separate title={t("c3072.past")} count={past.length || undefined} testID="client-visits-past">
-            {past.map(row)}
+            {past.map((v) => row(v))}
           </ListGroup>
         </GroupedList>
       ) : null}
@@ -502,6 +515,7 @@ export function ClientVisits({ f, customerId }: { f: ClientFacts; customerId?: s
               <ListRow title={j.title || j.number || t("cc.kind.job")} subtitle={[j.number, placeName(db, j)].filter(Boolean).join(" · ")} left={<Icon name="wrench" />} onPress={() => { setPicking(false); router.push(`/job/schedule?jobId=${j.id}` as Href); }} />
             </View>
           ))}
+          <ActionRow testID="client-visit-pick-new" label={t("c3072.newJob")} icon="plusCircle" onPress={() => { setPicking(false); router.push((customerId ? `/job/new?customerId=${customerId}` : "/job/new") as Href); }} />
         </View>
       </Sheet>
     </View>

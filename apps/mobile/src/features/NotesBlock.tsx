@@ -1,12 +1,11 @@
 import { useRef, useState } from "react";
 import { View } from "react-native";
-import { size, space } from "@octo/design-tokens";
+import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { NoteSubject } from "@/data/types";
 import { useI18n } from "@/i18n";
-import { IconButton, StatusChip, TextField } from "@/ui/controls";
-import { Icon, T } from "@/ui/primitives";
-import { useTheme } from "@/theme/ThemeProvider";
+import { IconButton, TextField } from "@/ui/controls";
+import { T } from "@/ui/primitives";
 import { Menu, useToast } from "@/ui/overlays";
 import { Card, RowView, SectionTitle } from "@/ui/surfaces";
 import { memberName } from "@/features/team";
@@ -17,7 +16,6 @@ export function NotesBlock({ subjectType, subjectId, extraSubjects = [] }: { sub
   const { db } = store;
   const { t, day, time } = useI18n();
   const toast = useToast();
-  const { c } = useTheme();
   const [body, setBody] = useState("");
   const [vis, setVis] = useState<"team" | "private">("team");
   // «Кто видит» opens its menu at the composer (the icon lives inside the field)
@@ -75,12 +73,10 @@ export function NotesBlock({ subjectType, subjectId, extraSubjects = [] }: { sub
             <T v="body">{n.body}</T>
             <RowView style={{ justifyContent: "space-between", alignItems: "center" }}>
               <RowView style={{ flex: 1, flexWrap: "wrap" }}>
-                {/* «закреплена» is not a status (rule 2): a quiet pin and the word in the note's own line, not a blue chip */}
-                {n.pinned ? <Icon name="pushpin" s={size.iconSm} color={c.mut} /> : null}
+                {/* «закреплена» and «только мне» are not statuses (rule 2; design review #3072): quiet words in the note's own line, not chips */}
                 <T v="caption" tone="mut">
-                  {[n.pinned ? t("notes.pinned") : null, author, `${day(n.at)} ${time(n.at)}`].filter(Boolean).join(" · ")}
+                  {[n.pinned ? t("notes.pinned") : null, n.visibility === "private" ? t("notes.private").toLowerCase() : null, author, `${day(n.at)} · ${time(n.at).replace(/ /g, "\u00a0")}`].filter(Boolean).join(" · ")}
                 </T>
-                {n.visibility === "private" ? <StatusChip status="neutral" label={t("notes.private")} /> : null}
               </RowView>
               <View ref={(r) => { moreRefs.current[n.id] = r; }} collapsable={false} testID={`note-more-${n.id}`}>
                 <IconButton

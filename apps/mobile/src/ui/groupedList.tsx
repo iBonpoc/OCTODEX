@@ -322,7 +322,8 @@ export function GroupRowBody({ title, titleNote, extra, figureRight, valueTop, r
                   <Icon name={statusIcon[status.status]} s={size.iconSm} color={c.status[status.status].text} />
                 </View>
               ) : null}
-              <T v="body" w="semibold" tabular tone={quiet ? "mut" : "ink"} numberOfLines={1}>
+              {/* #3072 (design review): a quiet mark («Без цены», «EN») stays quiet in the name's line too — 13 `mut`, not a figure */}
+              <T v={valueMark ? "caption" : "body"} w={valueMark ? undefined : "semibold"} tabular tone={quiet || valueMark ? "mut" : "ink"} numberOfLines={1}>
                 {value}
               </T>
             </View>
