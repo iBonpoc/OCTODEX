@@ -20,8 +20,8 @@ export const PROFILES: readonly GutterProfile[] = ["k", "half_round", "fascia", 
 export const PROFILE_ICON = { k: "xsK", half_round: "xsHalf", fascia: "xsFascia", box: "xsBox", euro: "xsEuro" } as const satisfies Record<GutterProfile, string>;
 /** nominal sizes, inches, by profile (until M7) */
 export const SIZES_BY_PROFILE: Record<GutterProfile, readonly string[]> = {
-  k: ["5", "6", "7"],
-  half_round: ["5", "6"],
+  k: ["5", "6", "7", "8"],
+  half_round: ["5", "6", "7"],
   fascia: ["6", "7"],
   box: ["6", "7", "8"],
   euro: ["5", "6"],
@@ -50,7 +50,7 @@ export const hangerKitsFor = (profile: string, ch?: Choices): string[] => {
 };
 
 export const DS_SHAPES = ["rect", "round"] as const;
-export const DS_SIZES: Record<(typeof DS_SHAPES)[number], readonly string[]> = { rect: ["2x3", "3x4", "4x5"], round: ["3", "4"] };
+export const DS_SIZES: Record<(typeof DS_SHAPES)[number], readonly string[]> = { rect: ["2x3", "3x4", "4x5"], round: ["3", "4", "5", "6"] };
 export const DS_STYLES = ["plain", "corrugated"] as const;
 /**
  * The kind of a downspout as the contractor says it (#929): the shape and the style in one choice — four kinds, each with
