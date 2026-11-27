@@ -240,7 +240,7 @@ export function ChecklistEditor({ v, title }: { v: Visit; title?: string }) {
             {t("chk3.empty")}
           </T>
         ) : null}
-        {/* DS §7.5 (#3065): an item is a row — a tap opens «Изменить», the order is two small arrows on the right (≤ 2 actions);
+        {/* DS §7.5 (#3065): an item is a row — a tap opens «Изменить» (no «›»: the arrows hold the right end), the order is two small arrows on the right (≤ 2 actions);
             not a row of three buttons «Выше · Ниже · Изменить» */}
         {v.checklist.map((item, i) => (
           <View key={item.id} testID={`chk-edit-${i}`}>
@@ -250,7 +250,6 @@ export function ChecklistEditor({ v, title }: { v: Visit; title?: string }) {
               subtitle={[itemRequired(item) ? t("chk3.requiredShort") : t("chk3.optional"), item.templateName ? t("chk3.from", { name: item.templateName }) : null].filter(Boolean).join(" · ")}
               lead={{ icon: itemKind(item) === "photo" ? "camera" : "checklist" }}
               wrap
-              chevron
               onPress={() => setEditing(item)}
               actions={[
                 ...(i > 0 ? [{ icon: "chevronUp" as const, a11y: `${t("chk3.up")} · ${item.label}`, testID: `chk-edit-${i}-up`, onPress: () => say(t("chk3.moved"), store.moveVisitItem(v.id, item.id, -1)) }] : []),
