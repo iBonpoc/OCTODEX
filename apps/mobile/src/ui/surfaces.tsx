@@ -1036,7 +1036,9 @@ export function Screen({
   // only when the chip changes: `tabs` is a new element on every render — on it, every re-render of a list (↓/↑ of the 1280 panel)
   // scrolled the page back up to the strip and cut the open row's scrollIntoView short (#2737)
   useEffect(() => {
-    if (tabs && offset.current > tabsY.current - stickOff) scrollRef.current?.scrollTo({ y: Math.max(0, tabsY.current - stickOff), animated: true });
+    // #3060 (founder: «Объекты нажимаются со второго раза»): a jump, not a glide — a finger on the new section during an animated scroll
+    // only stops the scroll on iPhone (the tap is eaten); the strip is at the top at once
+    if (tabs && offset.current > tabsY.current - stickOff) scrollRef.current?.scrollTo({ y: Math.max(0, tabsY.current - stickOff), animated: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabKey, !!tabs]);
   const column = { width: "100%" as const, maxWidth: layout.contentMax, alignSelf: "center" as const };
