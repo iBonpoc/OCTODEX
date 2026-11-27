@@ -300,9 +300,14 @@ export default function SignIn() {
           </View>
         ) : null}
         <FormMain>
-          {step === "email" ? <Button label={t("auth.sendCode")} icon="send" full onPress={sendCode} testID="auth-send-code" /> : null}
-          {step === "code" ? <Button label={t("auth.signIn")} icon="check" full onPress={() => void verify()} testID="auth-verify" /> : null}
-          {step === "password" ? <Button label={t("auth.signIn")} icon="check" full onPress={signInPassword} testID="auth-password-sign-in" /> : null}
+          {/* one main button for the step (DS §7.5): send the code, check it, or sign in with the password */}
+          {step === "email" ? (
+            <Button label={t("auth.sendCode")} icon="send" full onPress={sendCode} testID="auth-send-code" />
+          ) : step === "code" ? (
+            <Button label={t("auth.signIn")} icon="check" full onPress={() => void verify()} testID="auth-verify" />
+          ) : (
+            <Button label={t("auth.signIn")} icon="check" full onPress={signInPassword} testID="auth-password-sign-in" />
+          )}
         </FormMain>
         {doing ? (
           <View testID="auth-busy" accessibilityLiveRegion="polite">
@@ -328,13 +333,15 @@ export default function SignIn() {
       </FieldGroup>
       <View style={{ gap: space[2] }}>
         {/* one place for «Отправить ещё раз»: the countdown, then the button — nothing under the finger jumps (§14.4) */}
+        {/* the quiet ways of the step (DS §7.5: at most two): the code — «Отправить ещё раз» and «Не пришло письмо»; the password — «Войти по коду» */}
         {step === "code" ? (
-          <View style={{ minHeight: component.button.hit, justifyContent: "center" }}>
-            {ticking ? countdown : <Button label={t("auth.resend")} variant="ghost" icon="send" onPress={sendCode} testID="auth-resend" />}
-          </View>
-        ) : null}
-        {step === "code" ? <Button label={t("auth.noMail")} variant="ghost" onPress={() => setNoMail(true)} testID="auth-no-mail" /> : null}
-        {step === "password" ? (
+          <>
+            <View style={{ minHeight: component.button.hit, justifyContent: "center" }}>
+              {ticking ? countdown : <Button label={t("auth.resend")} variant="ghost" icon="send" onPress={sendCode} testID="auth-resend" />}
+            </View>
+            <Button label={t("auth.noMail")} variant="ghost" onPress={() => setNoMail(true)} testID="auth-no-mail" />
+          </>
+        ) : step === "password" ? (
           <Button
             label={t("auth.useCode")}
             variant="ghost"

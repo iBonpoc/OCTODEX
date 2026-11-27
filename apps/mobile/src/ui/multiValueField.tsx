@@ -188,7 +188,15 @@ export function MultiValueField<L extends string>({
  * the words in `ink` (green is a status colour, never an action, rule 2); «Удалить контакт» — `tone="bad"`, the words in
  * `status.bad.text`, no icon (iOS Contacts' red row). The zone is 44; it is a `button`.
  */
-export function ActionRow({ label, onPress, icon, tone, testID }: { label: string; onPress: () => void; icon?: IconKey; tone?: "bad"; testID?: string }) {
+export function ActionRow({ label, onPress, icon, tone, inGroup, testID }: {
+  label: string;
+  onPress: () => void;
+  icon?: IconKey;
+  tone?: "bad";
+  /** #3065 (DS §7.5): a row of a ListGroup — the group's own side inset `space[4]` («Отключить», «Новая ссылка» — the last red row) */
+  inGroup?: boolean;
+  testID?: string;
+}) {
   const { c } = useTheme();
   const ro = useReadOnly();
   const color = tone === "bad" ? c.status.bad.text : c.ink;
@@ -200,13 +208,10 @@ export function ActionRow({ label, onPress, icon, tone, testID }: { label: strin
       visibleHeight={size.hitMin}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={{ minHeight: size.hitMin, flexDirection: "row", alignItems: "center", gap: space[2] }}
+      style={{ minHeight: size.hitMin, flexDirection: "row", alignItems: "center", gap: space[2], ...(inGroup ? { paddingHorizontal: space[4] } : null) }}
     >
-      {icon ? (
-        <View style={{ width: component.dockBtn, alignItems: "center" }}>
-          <Icon name={icon} s={component.valueIcon} color={color} />
-        </View>
-      ) : null}
+      {/* #3065 (leader 27.11, design review): the icon stands on the left edge of the fields above, not centred in a 40 column */}
+      {icon ? <Icon name={icon} s={component.valueIcon} color={color} /> : null}
       <T v="body" style={{ color }}>
         {label}
       </T>
