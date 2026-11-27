@@ -17,7 +17,7 @@ const LISTS = [
   // PR 5: «Каталог» (kinds, no sheet)
   { path: "/catalog", id: "catalog", search: "Поиск в каталоге", card: '[data-testid^="catalog-row-"]' },
   // PR 4: «Работы» — «Мастер» (people of the nearest open visit, «Не назначен») and «Направление» in the sheet
-  { path: "/jobs", id: "jobs", search: "Клиент, адрес, работа, JOB", group: "Мастер", card: '[data-testid^="job-row-"]:not([data-testid^="job-row-call-"])' },
+  { path: "/jobs", id: "jobs", search: "Клиент, адрес, работа, JOB", group: "Мастер", card: '[data-testid^="job-row-"]:not([data-testid^="job-row-call-"]):not([data-testid^="job-row-route-"])' }, // #3018: «Маршрут» on the row is not a row
   // «Звонки» (one rule, director 07.11): the outcomes are the lane, no sheet; three calls of our own (the demo has one, no outcome)
   {
     path: "/calls",
