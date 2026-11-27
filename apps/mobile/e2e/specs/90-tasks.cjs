@@ -19,6 +19,8 @@ exports.run = async (h) => {
   const wide = h.layout.width > 390;
   const m = menuApi(h);
   const plus = () => listCreate(p, "tasks", "tasks-create-new");
+  // the demo's open tasks: t1 and the test client Daniel Whitaker's t2, t3 (#3024)
+  const OPEN = 3;
   const count = async (n, what) => h.expectText(new RegExp(`Задачи · ${n}( |\\||$)`), what);
 
   // «Ещё» → «Задачи»
@@ -27,7 +29,7 @@ exports.run = async (h) => {
   await m.menu().getByRole("button", { name: "Задачи", exact: true }).locator("visible=true").click();
   await p.waitForTimeout(800);
   h.expect(path(h) === "/tasks", `«Задачи» → /tasks (${p.url()})`);
-  await count(1, "the demo's one open task");
+  await count(OPEN, "the demo's open tasks");
   await h.expectText(/Send the painting estimate/, "the demo task is a row");
   h.expect((await p.getByTestId("task-t1").locator("visible=true").count()) === 1, "the demo task's row");
 
@@ -48,7 +50,7 @@ exports.run = async (h) => {
   const task = db.tasks.find((x) => x.title === TITLE);
   h.expect(task && task.subjectType === "customer" && task.subjectId === "c1", "the task is tied to Sarah Mitchell");
   h.expect(task.startsAt && task.endsAt && Date.parse(task.endsAt) > Date.parse(task.startsAt) && !task.allDay, "with a time: a start and an end");
-  await count(2, "two tasks now");
+  await count(OPEN + 1, "one more task now");
   const rowText = await p.getByTestId(`task-${task.id}`).locator("visible=true").first().innerText();
   h.expect(rowText.includes(TITLE) && /клиент Sarah Mitchell/.test(rowText), `the row says what it is tied to: ${rowText}`);
   await h.shot("list");
@@ -58,7 +60,7 @@ exports.run = async (h) => {
   await h.expectText(/Задача выполнена/, "the toast says done");
   db = await h.db();
   h.expect(!!db.tasks.find((x) => x.id === task.id).doneAt, "done in the store");
-  await count(1, "one open task left");
+  await count(OPEN, "back to the demo's open tasks");
   h.expect((await p.getByTestId(`task-${task.id}`).locator("visible=true").count()) === 0, "a done task hides by default");
   // «⋯ → Показать выполненные»: the group «Выполнено» holds it
   await objMore(p, "tasks", "tasks-more-done", { confirm: false });
@@ -68,7 +70,7 @@ exports.run = async (h) => {
   await pressUndo(p, "Задача выполнена"); await p.waitForTimeout(500);
   db = await h.db();
   h.expect(!db.tasks.find((x) => x.id === task.id).doneAt, "«Отменить» took it back");
-  await count(2, "two open tasks again");
+  await count(OPEN + 1, "the new task open again");
 
   // the search
   await listSearch(p, "водосток");
