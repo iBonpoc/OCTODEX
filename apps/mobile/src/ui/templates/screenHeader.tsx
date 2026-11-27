@@ -254,6 +254,15 @@ function ChevronMark({ open }: { open: boolean }) {
   );
 }
 
+/** a root's title in the row (#3031 «А»): the screen's heading, one line 30/600 that shrinks to fit (FitTitle) */
+function RowTitle({ text, titleRef }: { text: string; titleRef?: Ref<ComponentRef<typeof View>> }) {
+  return (
+    <View ref={titleRef} role="heading" aria-level={1} aria-label={text} tabIndex={-1} style={[{ flexShrink: 1, minWidth: 0 }, noRing]} testID="screen-title">
+      <FitTitle text={text} track={H.titleTrack} />
+    </View>
+  );
+}
+
 /* ---------- the row ---------- */
 /**
  * The pinned row: `bar` 52 (the open row's 48 + the 4 the big block starts under it). Left — `lead`; the middle — an object's
@@ -270,9 +279,13 @@ export function HeaderBar({
   right,
   titleRef,
   help,
+  root,
   testID = "screen-head",
 }: {
   kind: HeaderKind;
+  /** #3031 (founder 26.11, answer #3050 «А»): a tab's root has its title IN the row, right after the avatar — 30/600 on one line
+   *  (FitTitle), the «⌄» of a pressable title (План «Ноябрь ⌄») and the «?» right after it */
+  root?: { title: string; titlePress?: TitlePress };
   lead?: ReactNode;
   /** an object's «Клиенты» next to «←»: what «←» goes back to (a tap goes there too) */
   parent?: { label: string; onPress: () => void };
@@ -327,6 +340,27 @@ export function HeaderBar({
                 </T>
               )
             ) : null}
+          </View>
+        ) : kind === "root" && root ? (
+          // the avatar's ring stands out of its 40 by `avatarRing + ringGap`: the title keeps a clear gap from the ring
+          <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], minWidth: 0, paddingLeft: lead ? space[1] : 0 }}>
+            {root.titlePress ? (
+              <Press
+                testID={root.titlePress.testID}
+                onPress={root.titlePress.onPress}
+                accessibilityRole="button"
+                accessibilityLabel={root.titlePress.label}
+                accessibilityState={{ expanded: root.titlePress.open }}
+                containerStyle={{ flexShrink: 1, minWidth: 0 }}
+                style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}
+              >
+                <RowTitle text={root.title} titleRef={titleRef} />
+                <ChevronMark open={root.titlePress.open} />
+              </Press>
+            ) : (
+              <RowTitle text={root.title} titleRef={titleRef} />
+            )}
+            {help}
           </View>
         ) : (
           <>
@@ -513,42 +547,25 @@ export function HeaderBig({
   ) : null;
   const body =
     kind === "root" ? (
-      <View style={{ minHeight: H.big, justifyContent: "flex-end", paddingTop: spaceHalf.hair, paddingBottom: space[1] }}>
-        {kicker || demo.shown ? (
-          <Animated.View style={[{ flexDirection: "row", alignItems: "center", gap: space[2] }, kickLook]}>
+      // #3031 «А» (answer #3050): the title is in the row; under the row — one line: «Демо» right under the avatar (a small gap),
+      // then the date (Главная, План); the page's ‹ › on the right. Nothing at all when there is none of it
+      kicker || demo.shown || trailing ? (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], minHeight: H.demo.h, paddingBottom: space[1] }}>
+          <Animated.View style={[{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space[2] }, kickLook]}>
+            <DemoPlate />
             {kicker ? (
               <T v="caption" w="semibold" tone="mut" numberOfLines={1} style={{ flexShrink: 1 }}>
                 {kicker}
               </T>
             ) : null}
-            <DemoPlate />
-          </Animated.View>
-        ) : null}
-        <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
-          <Animated.View style={[{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space[2], transformOrigin: "left top" }, titleLook]}>
-            {titlePress ? (
-              <Press
-                testID={titlePress.testID}
-                onPress={titlePress.onPress}
-                accessibilityRole="button"
-                accessibilityLabel={titlePress.label}
-                accessibilityState={{ expanded: titlePress.open }}
-                containerStyle={{ flexShrink: 1, minWidth: 0 }}
-                style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}
-              >
-                {titleText}
-                <ChevronMark open={titlePress.open} />
-              </Press>
-            ) : (
-              titleText
-            )}
-            {help}
           </Animated.View>
           {trailing ? <Animated.View style={[{ flexDirection: "row", alignItems: "center", gap: space[2] }, trailLook]}>{trailing}</Animated.View> : null}
         </View>
-      </View>
+      ) : null
     ) : (
-      <View style={{ minHeight: H.big, flexDirection: "row", alignItems: "center", gap: space[3], paddingTop: spaceHalf.hair, paddingBottom: space[1] }}>
+      // #3031: the 64 is the room of the two lines right of the rule; a list or a form without them (Расходы, Настройки) has the
+      // title right under the row — no empty band over it
+      <View style={{ minHeight: (sub && (sub.line1 || sub.line2)) || expand ? H.big : undefined, flexDirection: "row", alignItems: "center", gap: space[3], paddingTop: spaceHalf.hair, paddingBottom: space[1] }}>
         {/* the name keeps its room first (up to two thirds of the line); the two lines take what is left and cut with «…»;
             with no two lines the name has the whole line (e2e 457: «Настройки приложения» was cut at 66 % on 390) */}
         <Animated.View style={[{ flexDirection: "row", alignItems: "center", gap: space[2], flexShrink: 0, maxWidth: sub && (sub.line1 || sub.line2) ? "66%" : "100%", transformOrigin: "left center" }, titleLook]}>

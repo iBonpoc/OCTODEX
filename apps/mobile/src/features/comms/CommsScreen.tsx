@@ -4,7 +4,8 @@ import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import type { CallOutcome } from "@/data/types";
 import { Button } from "@/ui/controls";
-import { FilterBar } from "@/ui/filterBar";
+import { FilterBar, useFilterHeader } from "@/ui/filterBar";
+import { useDevice } from "@/theme/ThemeProvider";
 import { filterStoreKey } from "@/ui/filterBarRules";
 import { usePersistentState } from "@/data/persist";
 import { ListCard } from "@/ui/listCard";
@@ -33,8 +34,13 @@ export function CommsScreen({ kind }: { kind: CommsKind }) {
   const items = (calls && filter !== "all" ? all.filter((x) => x.outcome === filter) : all).filter((x) => matchComms(x, q));
   const count = (f: CallFilter) => (f === "all" ? all.length : all.filter((x) => x.outcome === f).length);
   const record = () => setLogging({});
+  const { device } = useDevice();
+  // #3031: the search is the header's first circle on a phone / tablet (one place on every list); 1280 keeps the field in the row
+  const fh = useFilterHeader({ search: { value: q }, testID: "calls" });
+  const filterHead = device === "desktop" ? undefined : fh;
   return (
     <Screen
+      headerIcons={filterHead?.icons}
       fab={calls ? "calls" : undefined}
       fabOn={calls ? { call: record } : undefined}
       title={t(calls ? "nav.calls" : "nav.messages")}
@@ -42,7 +48,7 @@ export function CommsScreen({ kind }: { kind: CommsKind }) {
       help={t(calls ? "help.calls" : "help.messages")}
     >
       {calls && all.length ? (
-        <FilterBar<CallFilter>
+        <FilterBar<CallFilter> header={filterHead?.state}
           value={filter}
           onChange={setFilter}
           search={{ value: q, onChange: setQ, placeholder: t("card.filter.searchCalls") }}
