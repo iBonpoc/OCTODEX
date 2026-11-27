@@ -13,11 +13,11 @@ exports.run = async (h) => {
   await h.go("/invoice?f=owed");
   const db = await h.db();
   const today = todayKey(); // overdue = due before the company's today (П4b)
-  const cardOf = (text) => p.locator('[data-testid="list-card"]').filter({ hasText: text }).first();
+  const cardOf = (text) => p.locator('[data-testid^="expense-row-"]').locator("visible=true").filter({ hasText: text }).first();
   const rowOf = (id) => p.getByTestId(`invoice-row-${id}`).locator("visible=true").first();
   const owes = (i) => Math.max(0, i.totalCents - i.paidCents);
-  // #2888: the app shows money always with cents (founder #2672)
-  const usd = (c) => `$${(c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  // #3029/#3030 (founder 27.11): a list row is an overview — whole dollars; the documents keep cents
+  const usd = (c) => (Math.abs(c) < 100 ? `$${(Math.abs(c) / 100).toFixed(2)}` : `$${Math.floor((Math.abs(Math.round(c)) + 50) / 100).toLocaleString("en-US")}`);
 
   // overdue invoice: words, number, amount, group
   const overdue = db.invoices.find((i) => i.paidCents < i.totalCents && dueKey(i.dueDate) < today);
@@ -41,11 +41,13 @@ exports.run = async (h) => {
     if (overdue.number) h.expect(!body.includes(overdue.number), "no invoices on «Расходы»");
     // the company's month (П4b), its name in the app's language as the other dates (#1427 041: «Ноябрь 2026 г.», not «November 2026»)
     const m = new Intl.DateTimeFormat("ru-RU", { timeZone: ZONE, month: "long", year: "numeric" }).format(new Date(x.at));
-    const month = m.charAt(0).toUpperCase() + m.slice(1);
+    // lists B (#2992, layout review): the month without «г.» — «Ноябрь 2026 · $…» over the days' groups
+    const month = (m.charAt(0).toUpperCase() + m.slice(1)).replace(/\s*г\.$/, "");
     h.expect(body.includes(month), `expenses grouped by month «${month}»`);
     const et = await cardOf(x.vendor).innerText();
     h.expect(et.includes(x.vendor), "expense card shows the vendor");
-    if (!x.receiptUri) h.expect(et.includes("Без чека"), "«Без чека» tag when there is no receipt");
+    const says = async (loc) => `${await loc.innerText()} ${(await loc.locator('[data-testid="row-status-icon"]').first().getAttribute("aria-label", { timeout: 1000 }).catch(() => null)) ?? ""}`; // #3033: the status icon has no word — its words are its label
+    if (!x.receiptUri) h.expect((await says(cardOf(x.vendor))).includes("Без чека"), "«Без чека» (the icon's words) when there is no receipt");
   }
 
   // «Принять оплату» (the long press / the swipe of the row) opens the invoice with the payment sheet (the row itself writes nothing)

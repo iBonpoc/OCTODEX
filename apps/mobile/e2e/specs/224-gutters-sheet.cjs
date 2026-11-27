@@ -6,7 +6,7 @@
  * - the sheet is the same in the client's PDF.
  * Finds things by testID; waits on what it checks.
  */
-const { skipLength, closeDsMenu, openView, pressWhenStill } = require("../gutters.cjs");
+const { skipLength, closeDsMenu, openView, pressWhenStill, showSection } = require("../gutters.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -71,6 +71,7 @@ exports.run = async (h) => {
       return r;
     };
   });
+  await showSection(p, "view-pdf-client"); // #3028: on «Сметы»
   await pressWhenStill(tid("view-pdf-client").getByRole("button"));
   await p.waitForFunction(() => [...document.querySelectorAll("iframe:not([data-seen])")].some((x) => x.contentDocument?.body?.innerHTML.includes("<svg")), null, { timeout: 8000 });
   const pdf = await p.evaluate(() => [...document.querySelectorAll("iframe:not([data-seen])")].find((x) => x.contentDocument?.body?.innerHTML.includes("<svg")).contentDocument.documentElement.outerHTML);

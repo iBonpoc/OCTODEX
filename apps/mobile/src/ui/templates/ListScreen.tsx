@@ -21,9 +21,10 @@ import { shownGroups, templateLayout } from "./templateRules";
 import type { CreateAction, IconAction, MoreAction } from "./types";
 
 export interface ListScreenProps<T> {
+  /** the menu word of the list, exactly — no number (DS §12.13 «Шапка», #2841: the number is in the chip «Все N» and the group titles) */
   title: string;
-  /** «Клиенты · 24» */
-  count?: number;
+  /** a list with no chips says its count here — a line under the title («Открытых: 5», ревью design/crm #2841) */
+  subtitle?: string;
   headerIcons?: IconAction[];
   create?: CreateAction;
   onCreate?: (key: string) => void;
@@ -47,6 +48,8 @@ export interface ListScreenProps<T> {
   back?: () => void;
   preview?: boolean;
   testID: string;
+  /** founder 27.11 (#3017, the stand: «Клиенты», «Лиды»): each row its own card, not the rows of one card */
+  separate?: boolean;
 }
 
 export function ListScreen<T>(p: ListScreenProps<T>) {
@@ -58,7 +61,7 @@ export function ListScreen<T>(p: ListScreenProps<T>) {
   const searchOpen = always || opened || p.search.value !== "";
   const groups = shownGroups(p.groups);
   const layout = templateLayout("list", { back: !!p.back, icons: !!p.headerIcons?.length, create: !!p.create, more: !!p.more?.length, chips: !!p.chips, filters: !!p.filters, searchOpen, empty: groups.length === 0 });
-  const title = p.count === undefined ? p.title : `${p.title} · ${p.count}`;
+  const title = p.title;
   const searchIcon: IconAction = { icon: "search", a11y: t("tpl.searchIn", { x: p.title }), onPress: () => setOpened((o) => !o || p.search.value !== ""), testID: `${p.testID}-search` };
   const icons = always ? (p.headerIcons ?? []) : [searchIcon, ...(p.headerIcons ?? [])];
   const chips =
@@ -89,7 +92,7 @@ export function ListScreen<T>(p: ListScreenProps<T>) {
   ) : (
     <GroupedList testID={`${p.testID}-groups`}>
       {groups.map((g) => (
-        <ListGroup key={g.key} title={g.title} all={g.all} testID={`${p.testID}-group-${g.key}`}>
+        <ListGroup key={g.key} title={g.title} all={g.all} separate={p.separate} testID={`${p.testID}-group-${g.key}`}>
           {g.rows.map((r) => {
             const { key, ...row } = p.row(r);
             return <GroupRow key={key} {...row} />;
@@ -139,6 +142,7 @@ export function ListScreen<T>(p: ListScreenProps<T>) {
     <Screen
       testID={p.testID}
       title={title}
+      subtitle={p.subtitle}
       back={p.back}
       headerIcons={icons}
       right={tail}

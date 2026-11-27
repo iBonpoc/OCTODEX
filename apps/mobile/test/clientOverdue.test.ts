@@ -48,6 +48,7 @@ describe("clientOverdueOf", () => {
     const src = readFileSync(join(__dirname, "../src/app/(tabs)/clients.tsx"), "utf8");
     expect(src).toMatch(/clientOverdueOf\(/);
     // prototype v2 (BUILD-SPEC §2.3): the debt is the row's sum, the sign says only the days («! 9 дн») — the sum is not said twice (П7)
-    expect(src).toMatch(/proto\.client\.lateDays", \{ d: overdue\.days \}/);
+    // the word with the figure — «Просрочен 9 дн» (rule 2, design-review 27.11); #3033: drawn as the icon, said to VoiceOver
+    expect(src).toMatch(/w2m\.due\.late", \{ d: overdue\.days \}/);
   });
 });

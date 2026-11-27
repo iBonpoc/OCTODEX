@@ -505,6 +505,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       totalCents: sel?.total !== undefined ? n(sel.total) : legacy ? legacy.totalCents : n(totals.total),
       status: estimateStatus[s(e.status)] ?? "draft",
       sentAt: (ver?.sent_at as string | null) ?? undefined,
+      // #3058: the version the client got (estimates.sent_version_id stays after an edit; the new current version has no sent_at)
+      lastSentAt: (versionOf.get(s(e.sent_version_id))?.sent_at as string | null) ?? undefined,
       savedAt: estimateSavedAt(ver?.calc_inputs, (ver?.sent_at as string | null) ?? undefined, s(e.updated_at) || undefined),
       // approved = both signed: the moment the company signed (a legacy contract signed before E2a: the client's moment)
       approvedAt: e.status === "approved" ? ((csig?.signed_at ?? appr?.signed_at) as string | null) ?? undefined : undefined,

@@ -10,13 +10,13 @@ const { listSearch, listSearchClear } = require("../listSearch.cjs");
 exports.run = async (h) => {
   const p = h.page;
   const vis = (loc) => loc.locator("visible=true");
-  const card = '[data-testid="list-card"]';
+  const card = '[data-testid^="expense-row-"]'; // lists B (#2992): an expense is a row
   const db = await (async () => { await h.go("/today"); return h.db(); })();
 
   // «Расходы»
   await h.go("/money");
-  const bar = vis(p.getByTestId("filter-bar")).first();
-  await bar.waitFor();
+  // #3031: on 390/820 the magnifier is the header's first circle (the bar draws nothing until it opens), 1280 keeps the bar
+  await vis(p.locator(card)).first().waitFor();
   const all = await vis(p.locator(card)).count();
   h.expect(all === db.expenses.length && all > 1, `every expense is a card (${all})`);
   const vendor = db.expenses[0].vendor;

@@ -85,10 +85,10 @@ exports.run = async (h) => {
 
   // the status at the header — the one StatusPicker (DS §9 А10): archive at once; "do not service" asks for a reason
   await vis("client-header-status").click();
-  await h.sheet().getByRole("radio", { name: "В архиве" }).click();
+  await h.sheet().getByRole("radio", { name: "Неактивный", exact: true }).click();
   await sheetGone(p);
   await p.waitForFunction(() => JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db.customers.find((c) => c.id === "c1")?.status === "archived", null, { timeout: 5000 });
-  h.expect(/В архиве/.test(await inner("client-header-status")), "archived from the picker");
+  h.expect(/Неактивный/.test(await inner("client-header-status")), "archived («Неактивный», #3040) from the picker");
   await vis("client-header-status").click();
   await h.sheet().getByRole("radio", { name: "Не обслуживаем" }).click();
   await h.sheet().getByPlaceholder("Почему не обслуживаем").waitFor({ timeout: 5000 });

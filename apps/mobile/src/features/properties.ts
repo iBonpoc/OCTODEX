@@ -15,6 +15,13 @@ export function cityLine(place: { city: string; state?: string; zip?: string }):
 /** "1420 Oak Grove Ave, #2B" */
 export const propertyTitle = (p: Property) => [p.address || p.city, p.unit ? `#${p.unit.replace(/^#/, "")}` : ""].filter(Boolean).join(", ");
 
+/** DS §12.13 «Шапка» (#2841, ревью design/crm): the property's header — the street as the title, «City, ST zip» a whole line under it;
+ *  no street — the city is the title and nothing under it */
+export const propertyHead = (p: Property): { title: string; subtitle?: string } => ({
+  title: propertyTitle(p),
+  subtitle: p.address && p.city ? p.city : undefined,
+});
+
 /** what a map app gets */
 export const propertyMapQuery = (p: Property) => [p.address, p.unit ? `#${p.unit.replace(/^#/, "")}` : "", p.city].filter(Boolean).join(", ");
 

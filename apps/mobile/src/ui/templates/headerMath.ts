@@ -38,10 +38,10 @@ const lerp = (from: number, to: number, p: number) => {
  * The one-line title's scale (v2: «сжимается до 22,5 по fitMinScale, потом «…»»): its natural width `nat` in the `room` it has —
  * 1 when it fits, down to `font.fitMinScale` (30 → 22,5); past that the caller cuts it with «…» at that scale. Not measured — 1.
  */
-export function fitScale(nat: number, room: number): number {
+export function fitScale(nat: number, room: number, min: number = font.fitMinScale): number {
   "worklet";
   if (!(nat > 0) || !(room > 0) || room >= nat - 0.5) return 1;
-  return Math.max(font.fitMinScale, room / nat);
+  return Math.max(min, room / nat);
 }
 
 /** where the header is folded (pt of scroll); an editor never folds */

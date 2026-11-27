@@ -351,7 +351,7 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
         out.push({ id: `exp-${e.id}`, kind: "estimateExpired", refId: e.id, name: who, label: "att.expired", params: { name: who }, chip: "att.expiredChip", status: "neutral", amountCents: e.totalCents, score: 500 });
       continue;
     }
-    if (e.status !== "sent" || !e.sentAt) continue;
+    if (!office3 || e.status !== "sent" || !e.sentAt) continue;
     const d = daysSince(e.sentAt);
     if (d < timing.estimateWarnDays) continue;
     const c = db.customers.find((x) => x.id === e.customerId);

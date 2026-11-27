@@ -46,7 +46,7 @@ exports.run = async (h) => {
   // «Расходы»: one name with the menu (invoices are «Счета», spec 31 §7а), the expense button lives here
   await h.go("/money");
   await h.expectText(/Расходы/, "same name as in the menu");
-  await p.getByRole("button", { name: "Расход", exact: true }).last().click();
+  await p.getByTestId("expense-new").last().click();
   await p.waitForTimeout(500);
   h.expect(p.url().includes("/expense/new"), "expense from Money");
   await back("Расходы").click();

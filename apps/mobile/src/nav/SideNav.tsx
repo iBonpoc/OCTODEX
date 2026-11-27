@@ -1,4 +1,5 @@
-import { View, ScrollView } from "react-native";
+import { useEffect, useState } from "react";
+import { Platform, View, ScrollView, type ViewStyle } from "react-native";
 import { usePathname } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { component, radius, size, space } from "@octo/design-tokens";
@@ -11,11 +12,13 @@ import { Avatar } from "@/ui/controls";
 import { BrandMark } from "@/ui/brand";
 import { router } from "expo-router";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
+import { useFontScale } from "@/ui/fontScale";
 import { meIsSub, menuGroups, sectionHref, type SectionId } from "./sections";
 import { moduleTabs } from "@/modules/registry";
 import { GROUP_TITLE, useMenuCurrent, useNavMenu } from "./NavMenu";
 import { openSection } from "./go";
 import { isAppPath, sideNavWidth } from "./shell";
+import { longestWord, RAIL_LABEL_LINES, railLabelRoom, railLabelScale } from "./railLabel";
 import { useTabBarHidden } from "./tabBarHide";
 
 export { isAppPath };
@@ -188,10 +191,47 @@ function Item({
         <Icon name={icon} s={size.iconMd} color={c.ink} />
       </View>
       {showLabel ? (
-        <T v={open ? "body" : "micro"} w={selected || accent ? "semibold" : "medium"} numberOfLines={1} style={open ? { flex: 1 } : { maxWidth: component.navRail - space[2] }}>
-          {label}
-        </T>
+        open ? (
+          <T v="body" w={selected || accent ? "semibold" : "medium"} numberOfLines={1} style={{ flex: 1 }}>
+            {label}
+          </T>
+        ) : (
+          <RailLabel label={label} w={selected || accent ? "semibold" : "medium"} />
+        )
       ) : null}
     </Press>
+  );
+}
+
+/** the web: an unseen copy stays out of the page's text (innerText, copy-paste) — `visibility: hidden` keeps its size */
+const HIDDEN_COPY = (Platform.OS === "web" ? { visibility: "hidden" } : null) as ViewStyle | null;
+
+/**
+ * The rail's caption (#3011): two lines between words, centred; the longest word measured once, and when it is wider than the cell the
+ * caption is drawn smaller from its top centre (`railLabelScale`, down to `font.fitMinScale`) — a word is never broken, never «…»
+ */
+function RailLabel({ label, w }: { label: string; w: "semibold" | "medium" }) {
+  const [word, setWord] = useState(0);
+  const [h, setH] = useState(0);
+  const fontScale = useFontScale();
+  const longest = longestWord(label);
+  useEffect(() => setWord(0), [longest, fontScale]);
+  const s = railLabelScale(word);
+  return (
+    <View style={{ width: railLabelRoom, height: h ? h * s : undefined, overflow: "hidden", alignItems: "center" }}>
+      {/* the longest word in one line, unseen: its width decides the scale */}
+      <View aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none" style={[{ position: "absolute", top: 0, left: 0, width: railLabelRoom * 20, opacity: 0, alignItems: "flex-start" }, HIDDEN_COPY]}>
+        <View onLayout={(e) => setWord(Math.ceil(e.nativeEvent.layout.width) + 1)}>
+          <T v="micro" w={w} numberOfLines={1}>
+            {longest}
+          </T>
+        </View>
+      </View>
+      <View onLayout={(e) => setH(e.nativeEvent.layout.height)} style={{ width: railLabelRoom / s, transform: [{ scale: s }], transformOrigin: "top center" }}>
+        <T v="micro" w={w} numberOfLines={RAIL_LABEL_LINES} center>
+          {label}
+        </T>
+      </View>
+    </View>
   );
 }

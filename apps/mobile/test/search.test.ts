@@ -33,7 +33,8 @@ describe("unit:search — numbers", () => {
   });
   it("JOB-0001 → the job (failed before: jobs were searched by text only)", () => {
     const r = searchAll(db, "JOB-0001", "director");
-    expect(r.jobs.map((h) => h.id)).toEqual(["j1"]);
+    // the exact number first; #3024: the test client's JOB-0010 / JOB-0011 start with the same digits
+    expect(r.jobs[0]?.id).toBe("j1");
     expect(r.jobs[0]).toMatchObject({ number: "JOB-0001", why: { kind: "number" }, href: "/job/j1" });
     expect(ids("job-2").jobs).toEqual(["j2"]);
     expect(searchAll(db, "0003", "director").jobs.some((h) => h.number === "JOB-0003")).toBe(true);

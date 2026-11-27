@@ -38,6 +38,27 @@ const VIEW: Record<EstimateStatus, { s: StatusName; l: DictKey; d?: true }> = {
   declined: { s: "bad", l: "st.declined" },
 };
 
+/** the later of two ISO moments (either may be missing) */
+export const laterIso = (a?: string, b?: string): string | undefined => (a && b ? (a > b ? a : b) : a ?? b);
+
+/** #3058: when it last went to the client — the sent version's moment, or this version's own (an estimate never sent: none) */
+export const sentOnceAt = (e: { sentAt?: string; lastSentAt?: string }): string | undefined => laterIso(e.lastSentAt, e.sentAt);
+
+/**
+ * #3058 (founder: «изменена после отправки»; map S6): the client has an older version than this one — a draft that went out before and
+ * was saved since, or a sent one saved after it went (the editor, before «Готово»)
+ */
+export function changedAfterSend(e: { status: EstimateStatus; sentAt?: string; lastSentAt?: string; savedAt?: string; doc?: { savedAt?: string } }): boolean {
+  const sent = e.status === "draft" ? sentOnceAt(e) : e.status === "sent" ? e.sentAt : undefined;
+  const saved = e.doc?.savedAt ?? e.savedAt;
+  return !!sent && !!saved && saved > sent;
+}
+
+/** the status chip of THIS estimate: a draft that went out before reads «Изменена после отправки» (warn), else the status's own */
+export function estimateView(e: { status: EstimateStatus; sentAt?: string; lastSentAt?: string; savedAt?: string; doc?: { savedAt?: string } }): { s: StatusName; l: DictKey; d?: true } {
+  return e.status === "draft" && changedAfterSend(e) ? { s: "warn", l: "oc.est.changedAfterSend" } : VIEW[e.status];
+}
+
 /** Status chip for an estimate: colour only from the status, always with a word. */
 export function estimateStatusView(s: EstimateStatus): { s: StatusName; l: DictKey; d?: true } {
   return VIEW[s];

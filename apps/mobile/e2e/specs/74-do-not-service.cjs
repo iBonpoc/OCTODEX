@@ -72,7 +72,7 @@ exports.run = async (h) => {
   // the mark is lifted: «Создать смету» is back
   await h.go("/client/c3");
   await status().click();
-  await h.sheet().getByRole("radio", { name: "Клиент" }).click();
+  await h.sheet().getByRole("radio", { name: "Активный", exact: true }).click();
   await sheetGone(p);
   await p.waitForFunction(() => JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db.customers.find((c) => c.id === "c3")?.status === "active", null, { timeout: 5000 });
   h.expect((await makes()).estimate === 1, "«＋ → Смета» is back");
@@ -81,7 +81,7 @@ exports.run = async (h) => {
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("sales")));
   await h.go("/client/c3");
   await status().click();
-  await h.sheet().getByRole("radio", { name: "В архиве" }).waitFor({ timeout: 5000 });
+  await h.sheet().getByRole("radio", { name: "Неактивный", exact: true }).waitFor({ timeout: 5000 });
   h.expect((await h.sheet().getByRole("radio", { name: "Не обслуживаем" }).count()) === 0, "sales: no «Не обслуживаем» in the menu");
   await pressEscUntilClosed(p);
   // a client marked by the director: sales see the mark but cannot lift it

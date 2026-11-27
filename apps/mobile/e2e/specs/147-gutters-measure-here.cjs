@@ -7,7 +7,7 @@
  * Finds things by testID; waits on what it checks.
  */
 const { pressEscUntilClosed, waited } = require("../sheet.cjs");
-const { skipLength, pressWhenStill } = require("../gutters.cjs");
+const { skipLength, pressWhenStill, editDrawing } = require("../gutters.cjs");
 const DB_KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -79,7 +79,7 @@ exports.run = async (h) => {
   // spec 33 П25.3 В: the measurement's card, then «Править чертёж» — its canvas
   await waitFor(() => /\/module\/gutters\/view/.test(p.url()) && new URL(p.url()).searchParams.get("m") === mid, "it opens the draft's card");
   await tid("view-screen").waitFor({ timeout: 8000 });
-  await pressWhenStill(tid("view-edit").getByRole("button"));
+  await editDrawing(p); // #2995: in «⋯» on the card's own screen
   await tid("draw-lead").waitFor({ timeout: 8000 });
   h.expect((await tid("draw-lead").innerText()).includes(name), "the canvas shows the lead");
 };

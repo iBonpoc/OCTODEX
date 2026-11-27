@@ -9,7 +9,7 @@
  */
 const { estMore, estAct, estHas } = require("../estimateMenu.cjs");
 const { pressEscUntilClosed } = require("../sheet.cjs");
-const { skipLength, openView, savedOnce } = require("../gutters.cjs");
+const { freeLead, autoEstimateOf, skipLength, openView, savedOnce } = require("../gutters.cjs");
 const DB_KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -40,7 +40,7 @@ exports.run = async (h) => {
   };
 
   await h.go("/today");
-  const lead = (await db()).leads.find((l) => l.propertyId) || (await db()).leads[0];
+  const lead = freeLead(await db()); // #3027: no open estimate of its own — «Готово» makes a new one
   h.expect(!!lead, "the demo has a lead");
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
@@ -56,9 +56,8 @@ exports.run = async (h) => {
   const mid = new URL(p.url()).searchParams.get("m");
   // «Готово» → «Просмотр замера» → «Сделать смету» (#698 #699)
   await openView(p);
-  await tid("view-action-make").getByRole("button").click();
-  await p.waitForURL(/\/estimate\/new\?id=/, { timeout: 8000 });
-  const eid = new URL(p.url()).searchParams.get("id");
+  // #3027: «Готово» made the estimate by itself
+  const eid = await autoEstimateOf(p, mid);
   await waitFor(async () => (await gutters()).measurements.some((m) => m.id === mid && m.status === "ready"), "the measurement is ready");
 
   // hand prices on every line (the demo price list has no gutter items: «нет цены» would stop the send — C5, e2e 164)
@@ -80,7 +79,9 @@ exports.run = async (h) => {
   await h.go(`/module/gutters/draw?m=${encodeURIComponent(mid)}`);
   await tid("draw-surface").waitFor({ timeout: 8000 });
   await drawRun(0.6);
-  await openView(p);
+  // left WITHOUT «Готово» (a draft follows the drawing by itself only on «Готово», #3027): the estimate is behind the drawing
+  await waitFor(async () => (await gutters()).measurements.some((m) => m.id === mid && m.status === "draft"), "the measurement changed");
+  await h.go(`/module/gutters/view?m=${encodeURIComponent(mid)}`);
   await tid("view-action-update").waitFor({ timeout: 8000 });
   h.expect((await tid("view-stale").count()) === 1, "the review says the drawing changed after the estimate");
   await waitFor(async () => (await gutters()).measurements.some((m) => m.id === mid && m.status === "draft"), "the measurement changed");

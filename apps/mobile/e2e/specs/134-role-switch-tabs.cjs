@@ -28,7 +28,7 @@ exports.run = async (h) => {
     await p.locator('[data-testid="more-screen"]:visible').waitFor({ timeout: 5000 });
   };
   const walk = async (home, label, money = true) => {
-    const steps = [["План", "/plan"], ["Лиды", "/leads"], ["Клиенты", "/clients"], ...(money ? [["Деньги", "/finance"]] : []), ["Главная", home], ["Ещё", "/more"], ["План", "/plan"]];
+    const steps = [["План", "/plan"], ["Лиды", "/leads"], ["Клиенты", "/clients"], ...(money ? [["Деньги", "/invoice"]] : []), ["Главная", home], ["Ещё", "/more"], ["План", "/plan"]];
     for (const [name, want] of steps) {
       if (name === "Ещё") await openMore();
       else await p.getByRole("tab", { name, exact: true }).click();

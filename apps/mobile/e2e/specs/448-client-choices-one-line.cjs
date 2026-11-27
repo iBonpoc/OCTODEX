@@ -26,7 +26,7 @@ exports.run = async (h) => {
   await h.go("/client/c1");
   await vis("client-header-status").waitFor({ timeout: 8000 });
   const one = await lines();
-  h.expect(one.n === 2 && /^Клиент · VIP$/.test(one.texts[0]) && /Активный/.test(one.texts[1]), `«Клиент · VIP» over «Активный» (${JSON.stringify(one)})`);
+  h.expect(one.n === 2 && /^VIP$/.test(one.texts[0]) && /Активный/.test(one.texts[1]), `«VIP» over «Активный» (#3023: no «Клиент» — «‹ Клиенты» says it) (${JSON.stringify(one)})`);
   h.expect(one.hs.every((x) => x <= 26), `each line is one line (${one.hs})`);
   // more tags than fit: the line still says the first one only, on one line
   const raw = await p.evaluate(() => JSON.parse(localStorage.getItem("octo.db.v5")));
@@ -37,7 +37,7 @@ exports.run = async (h) => {
   await h.go("/client/c1");
   await vis("client-header-status").waitFor({ timeout: 8000 });
   const many = await lines();
-  h.expect(/^Клиент · VIP$/.test(many.texts[0]) && many.hs.every((x) => x <= 26), `eight tags: still one line with the first tag (${JSON.stringify(many)})`);
+  h.expect(/^VIP$/.test(many.texts[0]) && many.hs.every((x) => x <= 26), `eight tags: still one line with the first tag (${JSON.stringify(many)})`);
 
   // «⋯ → Контакты» opens the sheet; the panel says «Контакты · 2» with Tom
   h.expect(/Контакты · 2[\s\S]*Tom Mitchell/.test(await p.getByTestId("client-people").first().innerText()), "the panel's «Контакты · 2»");

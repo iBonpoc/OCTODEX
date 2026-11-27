@@ -17,7 +17,7 @@ import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { attentionHref, buildAttention } from "@/features/attention";
 import { waitParams } from "@/features/shortTime";
-import { startsIn, useAttentionNow, useEnRoute, useGreeting, useHomeHeader } from "@/features/AttentionCards";
+import { startsIn, useAttentionNow, useEnRoute, useHomeHeader } from "@/features/AttentionCards";
 import { todayVisits, visitStatus } from "@/features/visits";
 import { crewNow } from "@/features/crewList";
 import { roadShort, visitWho, waitShort } from "@/features/shortTime";
@@ -107,7 +107,6 @@ export default function Today() {
   useTick();
   const { t, time, day: dayOf, moneyWhole, tn, duration } = useI18n();
   const { db, role, rejectedOps, mode } = useStore();
-  const greeting = useGreeting();
   const header = useHomeHeader();
   const [period, setPeriod] = usePersistentState<Period>("octo.todayPeriod.v1", "today");
   const [details, setDetails] = usePersistentState<boolean>("octo.todayDetails.v1", false);
@@ -241,7 +240,7 @@ export default function Today() {
   return (
     <OverviewScreen
       testID="today"
-      title={greeting}
+      title={t("nav.home")}
       greeting={header.greeting}
       headerIcons={header.icons}
       create={header.create}
