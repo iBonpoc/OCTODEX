@@ -7,7 +7,7 @@
  * The web prints from a hidden frame: the spec catches the frame's HTML instead of the print dialog. Finds things by
  * testID; waits on what it checks (no pauses).
  */
-const { skipLength, openView, docsFor } = require("../gutters.cjs");
+const { skipLength, openView, docsFor, showSection } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -87,6 +87,7 @@ exports.run = async (h) => {
   await tid("draw-done").waitFor({ timeout: 8000 });
   await openView(p);
   // #2989 (founder 27.11): the card's «Документы» — only «Чертёж» and «Заказ материалов»; the shop drawings are in «⋯ → Документы бригады»
+  await showSection(p, "view-docs"); // #3028: on «Сметы»
   await tid("view-docs").waitFor({ timeout: 8000 });
   const cardDocs = await p.getByTestId("view-docs").locator('[data-testid^="view-doc-"]').evaluateAll((es) => es.map((e) => e.dataset.testid));
   h.expect(JSON.stringify(cardDocs) === JSON.stringify(["view-doc-client", "view-doc-shop-order"]), `the card: «Чертёж» and «Заказ материалов» only (${cardDocs})`);

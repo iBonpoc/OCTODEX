@@ -41,6 +41,12 @@ exports.run = async (h) => {
   await tid("module-gutters-enable").getByRole("button").click();
   await tid("module-gutters-status").filter({ hasText: /^Без срока/ }).waitFor({ timeout: 5000 });
 
+  // the demo's test client has a measurement since #3024: this spec starts from none (its own drafts only)
+  await h.go("/today");
+  const raw = await p.evaluate(() => JSON.parse(localStorage.getItem("octo.db.v5")));
+  raw.db.moduleData = { ...raw.db.moduleData, gutters: { ...(raw.db.moduleData?.gutters || {}), measurements: [], elements: [] } };
+  await h.seed("octo.db.v5", raw);
+
   // nothing yet: the list says so
   await fab("list");
   await p.waitForURL(/\/module\/gutters\/list/, { timeout: 5000 });
@@ -56,7 +62,9 @@ exports.run = async (h) => {
   await fab("list");
   await waitFor(async () => (await cards().count()) === 1, "one card in «Замеры»");
   const text = await cards().first().innerText();
-  h.expect(/Без клиента/.test(text) && /Gutter: 2/.test(text) && /Черновик/.test(text), `the draft's card (${text.replace(/\n/g, " | ")})`);
+  // #3028: a draft for nobody — «Черновик», «Без адреса», what is measured in feet and downspouts (no «Gutter: N»)
+  h.expect(/Черновик/.test(text) && /Без адреса/.test(text) && /\d+ ft · \d+ downspout/.test(text), `the draft's card (${text.replace(/\n/g, " | ")})`);
+  h.expect((await tid("measurements-drafts").count()) === 1, "it stands in «Черновики»");
   await h.shot("list");
   await cards().first().click();
   await tid("view-screen").waitFor({ timeout: 8000 });
@@ -74,5 +82,7 @@ exports.run = async (h) => {
   await waitFor(async () => (await lines()) === 1, "one gutter in the new one");
   await fab("list");
   await waitFor(async () => (await cards().count()) === 2, "two cards");
-  h.expect(/Gutter: 1/.test(await cards().first().innerText()), "the newest first");
+  // the newest first: the one with a single gutter has fewer feet than the one with two
+  const ft = async (i) => Number(((await cards().nth(i).innerText()).match(/(\d+) ft/) || [])[1]);
+  h.expect((await ft(0)) < (await ft(1)), `the newest first (${await ft(0)} ft before ${await ft(1)} ft)`);
 };
