@@ -145,6 +145,18 @@ exports.run = async (h) => {
   await tid("corner-sheet").waitFor({ timeout: 5000 });
   h.expect((await svg().locator('[id^="halo-"]').count()) === 0, "the corner's sheet: still no gutter picked");
   await closeSheet();
+  // the chip of the picked corner opens its window too (crm-review #3066 №1: one tap + the chip, no 300 ms to catch)
+  await tid("draw-summary").click();
+  await tid("corner-sheet").waitFor({ timeout: 5000 });
+  await closeSheet();
+  // 🗑 with the corner picked takes the joint apart: the gutters stay, the corner is gone, «Вернуть» on the toast (crm-review #3066 №2)
+  h.expect(!(await tid("draw-delete").getAttribute("aria-disabled")), "a picked corner: 🗑 is on");
+  await tid("draw-delete").getByRole("button").click();
+  await p.waitForFunction(() => !document.querySelector('[data-testid="draw-svg"] [id^="c:"]'), null, { timeout: 5000 });
+  h.expect((await svg().locator("line:not([id^=halo])").count()) >= 2, "🗑 on a corner: both gutters stay");
+  await h.expectText(/Угол разъединён/, "the toast says so");
+  await tid("draw-undo").getByRole("button").click(); // «Назад» puts the corner back
+  await svg().locator('[id^="c:"]').first().waitFor({ timeout: 5000 });
 
   // — the empty place: two taps show the whole drawing
   const width = async () => (await svg().locator('[id^="halo-"], [id^="face-"]').first().boundingBox()).width;
