@@ -29,6 +29,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Defs, Ellipse, LinearGradient, RadialGradient, Rect, Stop } from "react-native-svg";
 import { component, layout, motion, radius, rhythm, size, space, spaceHalf, z, type StatusName } from "@octo/design-tokens";
 import Animated, { Easing, FadeIn, FadeOut, cancelAnimation, runOnJS, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from "react-native-reanimated";
+import { DemoPlate } from "./templates/demoMark";
 import { HeaderAvatar, HeaderBack, HeaderBar, HeaderBig, HeaderClose, HeaderParent, HeaderPlate, HeaderScroll, type HeadSpec } from "./templates/screenHeader";
 import { foldEnd, panelCloses, pauseTarget, settleTarget, stickShift, type HeaderKind } from "./templates/headerMath";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
@@ -707,7 +708,11 @@ export function Screen({
             ) : null}
             {/* prototype v2 (HIG, BUILD-SPEC «Назад»): on a phone one «‹ <parent>» top left; the trail «⌂ › … › Parent» only from 820 */}
             {trail.length && wide ? (
-              <Breadcrumbs trail={trail} current={nav.kind ? t(nav.kind) : undefined} go={go} />
+              // #3031: the pinned trail of a card on 820/1280 is its header row — «Демо» stands at its end, as next to «← Клиенты» on a phone
+              <RowView gap={space[2]} style={{ flexShrink: 1, minWidth: 0 }}>
+                <Breadcrumbs trail={trail} current={nav.kind ? t(nav.kind) : undefined} go={go} />
+                <DemoPlate />
+              </RowView>
             ) : (
               <Press
                 onPress={goUp}

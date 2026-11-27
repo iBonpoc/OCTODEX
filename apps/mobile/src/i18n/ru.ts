@@ -448,7 +448,7 @@ export const ru = {
   "more.title": "Ещё",
   "more.role": "Роль",
   "more.theme": "Тема",
-  "more.themeSystem": "Как в системе",
+  "more.themeSystem": "Системная",
   "more.dark": "Тёмная",
   "more.light": "Светлая",
   "more.accent": "Акцент",
