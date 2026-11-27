@@ -315,7 +315,9 @@ export function GroupRowBody({ title, titleNote, extra, figureRight, valueTop, r
           ) : null}
           {top ? (
             <View testID={ids?.value} style={{ flexDirection: "row", alignItems: "center", gap: space[1], flexShrink: 0, marginLeft: "auto" }}>
-              {status?.iconOnly ? (
+              {/* with the sum in the name's line the status is its icon, the word said to VoiceOver (#3033) — a status without iconOnly
+                  was dropped here (the jobs on «Все» lost their status) */}
+              {status ? (
                 <View accessible accessibilityLabel={status.label} testID="row-status-icon">
                   <Icon name={statusIcon[status.status]} s={size.iconSm} color={c.status[status.status].text} />
                 </View>

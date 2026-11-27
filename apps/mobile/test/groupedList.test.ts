@@ -92,6 +92,8 @@ describe("StatusPill (visual v2 «Плашка статуса», 21.11)", () => 
     const s = src("groupedList.tsx");
     expect(s).toMatch(/accessible accessibilityLabel=\{status\.label\} testID="row-status-icon"/);
     expect(s).toMatch(/const top = !!value && !titleNote && \(!!status\?\.iconOnly \|\| !!valueTop\)/);
+    // with the sum in the name's line ANY status is its icon there — a status without iconOnly was dropped (jobs on «Все», 27.11)
+    expect(s).toMatch(/\{status \? \(\s*<View accessible accessibilityLabel=\{status\.label\} testID="row-status-icon">/);
   });
   it("#2993: a part of «Деньги» has ONE line of its sums, not the tiles (the tiles stay on the overview)", () => {
     const read = (f: string) => readFileSync(join(__dirname, "..", "src", f), "utf8");
