@@ -1,18 +1,16 @@
 /**
  * #3024 (founder 26.11: «сделать какого-то клиента одного… в котором будет заполнена вся информация… тестовый клиент»):
  * ONE demo client with everything filled in, to check every screen on it — several people and phones, emails, a home and
- * a rental, an address for invoices; estimates in every status with a different number of lines (one from a Gutters
- * measurement together with ordinary lines — an outlet repair); jobs, visits, a journal, notes, a task; invoices unpaid,
- * partly paid, paid in full and overdue; tax on estimates and invoices.
+ * a rental, an address for invoices; estimates in every status with a different number of lines; jobs, visits, a journal,
+ * notes, tasks; invoices unpaid, partly paid, paid in full and overdue; tax on estimates and invoices.
+ * A module adds its own part to this client (ModuleDef.demo, `TEST_CLIENT`): the core's seed knows nothing of it.
  *
  * Demo only (the cloud is not touched). Prices are PLACEHOLDERS (rule 9): demo values a company changes.
- * The Gutters measurement is plain data under moduleData.gutters (the core never reads it); it shows once the module is on
- * («Настройки → Модули → Gutters»). Its estimate lines carry the module's own mark (`source`), as «Смета» of the measurement
- * writes them: the quantities are the module's for this drawing (two runs 40′ + 30′, two downspouts).
  */
-import { GUTTER_PARTS_VERSION, sumCents } from "@octo/estimating-engine";
+import { sumCents } from "@octo/estimating-engine";
 import type { Activity, ChecklistItem, Customer, EstimateDoc, Estimate, Invoice, Job, JobLineItem, Lead, Note, Payment, Property, Task, Visit } from "./types";
 import { DEFAULT_SETTINGS, summarize } from "@/features/estimateDoc";
+import type { DemoClient } from "@/modules/registry";
 
 /** the demo clock of seed.ts (company time, Los Angeles) */
 export interface SeedClock {
@@ -23,7 +21,6 @@ export interface SeedClock {
 }
 
 export const TEST_CLIENT_ID = "c8";
-export const TEST_MEASUREMENT_ID = "gm-tc-1";
 /** a test signature (an SVG path) */
 const SIGN = "M10 40 C 30 10, 50 10, 60 35 S 90 60, 110 30";
 const TAX = { enabled: true, rateBps: 950, groups: { service: false, labor: false, material: true } };
@@ -33,42 +30,21 @@ const L = (id: string, group: Ln["group"], name: string, quantity: string, unit:
   id, group, name, quantity, unit, unitPriceCents, ...extra,
 });
 
-/** a line the Gutters measurement wrote (its key and section are the module's for this part) */
-const G = (n: number, group: "material" | "labor", name: string, quantity: string, unit: string, priceCents: number, key: string, section: string, at: string): Ln => ({
-  id: `l-e7-g${n}`, group, name, quantity, unit, unitPriceCents: priceCents, sectionId: "s-e7-gutters",
-  source: { module: "gutters", key, section, qty: quantity, priceCents, name, unit, testPrice: true, measurementId: TEST_MEASUREMENT_ID, at, engineVersion: GUTTER_PARTS_VERSION } as never,
-});
-
-/** EST-0007 «Gutters + outlet repair»: the measurement's lines and ordinary ones in one estimate (founder 26.11: «в ней gutters и отдельно… ремонт розетки») */
-function gutterDoc(at: string): EstimateDoc {
-  const W = "color=white|gauge=.027|material=aluminum";
+/** EST-0007 «Outlet repair» — sent; a module adds its own lines to it (the test client's open estimate) */
+function outletDoc(): EstimateDoc {
   return {
     settings: { ...DEFAULT_SETTINGS, tax: TAX },
-    note: "Seamless gutters on the front and the right side, two downspouts. Outlet repair in the garage the same day.",
+    note: "Outlet repair in the garage the same day.",
     options: [
       {
         id: "o-e7-1",
         name: "Standard",
         recommended: true,
-        sections: [
-          { id: "s-e7-gutters", title: "Gutters" },
-          { id: "s-e7-electric", title: "Electrical" },
-        ],
+        sections: [{ id: "s-e7-electric", title: "Electrical" }],
         lines: [
-          G(1, "material", "5″ K-style gutter, aluminum .027, white", "70", "ft", 950, `ft|${W}|part=gutter|profile=k|size=5`, "gutter", at),
-          G(2, "material", "End cap, 5″ K-style, white", "2", "ea", 800, `ea|${W}|part=end_cap|profile=k|size=5`, "corners_caps", at),
-          G(3, "material", "Downspout strap 2×3", "4", "ea", 300, "ea|metal=aluminum|part=ds_strap|shape=rect|size=2x3", "fasteners", at),
-          G(4, "material", "Hidden hanger, 5″ K-style", "37", "ea", 250, "ea|hanger=hidden|metal=aluminum|part=hanger|profile=k|size=5", "fasteners", at),
-          G(5, "material", "Downspout 2×3, aluminum, white", "20", "ft", 700, "ft|color=white|material=aluminum|part=downspout|shape=rect|size=2x3", "downspouts", at),
-          G(6, "material", "Outlet 2×3 for 5″ gutter, white", "2", "ea", 1200, `ea|${W}|gutterSize=5|part=outlet|profile=k|shape=rect|size=2x3`, "adapters", at),
-          G(7, "material", "Gutter sealant", "1", "ea", 900, "ea|part=sealant", "consumables", at),
-          G(8, "labor", "Corner cut (miter)", "1", "ea", 2500, "ea|work=corner_cut", "labor", at),
-          G(9, "labor", "Downspout install, 1st story", "2", "ea", 4500, "ea|story=1|work=downspout", "labor", at),
-          G(10, "labor", "Gutter install, 1st story", "70", "ft", 600, "ft|story=1|work=install", "labor", at),
           L("l-e7-1", "labor", "Replace outlet / switch", "2", "ea", 8500, { catalogItemId: "cat-outlet", sectionId: "s-e7-electric", description: "Garage: two outlets, one to GFCI." }),
           L("l-e7-2", "material", "GFCI outlet 20A", "1", "ea", 2789, { catalogItemId: "cat-gfci", unitCostCents: 2426, sectionId: "s-e7-electric" }),
           L("l-e7-3", "service", "Service call / trip fee", "1", "flat", 8900, { catalogItemId: "cat-service-call" }),
-          L("l-e7-4", "service", "Gutter guards (add-on)", "70", "ft", 450, { optional: true }),
         ],
       },
     ],
@@ -111,8 +87,8 @@ const oneLine = (id: string, line: Ln, note?: string): EstimateDoc => ({
 });
 
 export function testClient(c: SeedClock, jobChecklist: (prefix: string) => ChecklistItem[]) {
-  const gutterAt = c.daysAgo(2);
-  const e7doc = gutterDoc(gutterAt);
+  const sentAt7 = c.daysAgo(2);
+  const e7doc = outletDoc();
   const e8doc = oneLine("o-e8-1", L("l-e8-1", "labor", "Replace kitchen faucet", "1", "ea", 18000, { catalogItemId: "cat-faucet" }), "Customer buys the faucet.");
   const e9doc = paintingDoc();
   const e9pick = { optionId: "o-e9-2", addonIds: [] };
@@ -152,8 +128,8 @@ export function testClient(c: SeedClock, jobChecklist: (prefix: string) => Check
   ];
 
   const estimates: Estimate[] = [
-    { id: "e7", number: "EST-0007", customerId: TEST_CLIENT_ID, propertyId: "p8", leadId: "l6", title: "Gutters + outlet repair", status: "sent",
-      sentAt: gutterAt, viewedAt: c.daysAgo(1), savedAt: gutterAt, token: "demo0testclient0gutters000000007", doc: e7doc, ...summarize(e7doc) },
+    { id: "e7", number: "EST-0007", customerId: TEST_CLIENT_ID, propertyId: "p8", leadId: "l6", title: "Outlet repair", status: "sent",
+      sentAt: sentAt7, viewedAt: c.daysAgo(1), savedAt: sentAt7, token: "demo0testclient0outlets000000007", doc: e7doc, ...summarize(e7doc) },
     { id: "e8", number: "EST-0008", customerId: TEST_CLIENT_ID, propertyId: "p8", title: "Kitchen faucet", status: "draft", savedAt: c.minutesAgo(90), doc: e8doc, ...summarize(e8doc) },
     { id: "e9", number: "EST-0009", customerId: TEST_CLIENT_ID, propertyId: "p8", title: "Interior painting, 3 rooms", status: "approved",
       sentAt: c.daysAgo(24), viewedAt: c.daysAgo(23), approvedAt: c.daysAgo(21), token: "demo0testclient0painting00000009", doc: e9doc, ...e9sum, depositPaidAt: c.daysAgo(20),
@@ -176,24 +152,24 @@ export function testClient(c: SeedClock, jobChecklist: (prefix: string) => Check
     { id: "j9", number: "JOB-0009", customerId: TEST_CLIENT_ID, propertyId: "p8", jobTypeId: "jt-install", title: "Interior painting, 3 rooms", status: "done", amountCents: e9sum.totalCents, estimateId: "e9", serviceCategoryId: "cat-painting" },
     { id: "j10", number: "JOB-0010", customerId: TEST_CLIENT_ID, propertyId: "p8b", jobTypeId: "jt-repair", title: "Drywall + outlets in the rental", status: "in_progress", amountCents: j10total,
       description: "Tenant reported two holes in the hallway and dead outlets in the kitchen.", taxEnabled: true, taxRateBps: 950, serviceCategoryId: "cat-handyman" },
-    { id: "j11", number: "JOB-0011", customerId: TEST_CLIENT_ID, propertyId: "p8", jobTypeId: "jt-service", title: "Gutter cleaning", status: "unscheduled", amountCents: 0 },
+    { id: "j11", number: "JOB-0011", customerId: TEST_CLIENT_ID, propertyId: "p8", jobTypeId: "jt-service", title: "Pressure washing", status: "unscheduled", amountCents: 0 },
   ];
   const visits: Visit[] = [
     { id: "v8", jobId: "j9", techId: "m-ivan", assigneeIds: ["m-ivan", "m-dima"], start: c.at(-17, 8, 0), durationMin: 480, step: "paid", closed: true,
       scope: ["Paint living room, bedroom and office", "Ceilings in all three rooms"], checklist: jobChecklist("v8").map((x) => ({ ...x, done: true })), photos: [{ id: "ph-v8-1", kind: "before" }, { id: "ph-v8-2", kind: "after" }], amountDueCents: 0 },
     { id: "v9", jobId: "j10", techId: "m-dima", start: c.at(-3, 10, 0), durationMin: 180, step: "paid", closed: true, note: "Tenant Luis will open the door.",
-      scope: ["Patch 2 drywall holes in the hallway"], checklist: jobChecklist("v9"), photos: [{ id: "ph-v9-1", kind: "before" }], amountDueCents: 0 },
+      scope: ["Patch 2 drywall holes in the hallway"], checklist: jobChecklist("v9").map((x) => ({ ...x, done: true })), photos: [{ id: "ph-v9-1", kind: "before" }, { id: "ph-v9-2", kind: "after" }], amountDueCents: 0 },
     { id: "v10", jobId: "j10", techId: "m-dima", start: c.at(2, 13, 0), durationMin: 120, step: "scheduled", note: "Bring 2 GFCI outlets.",
       scope: ["Replace 3 kitchen outlets, 2 of them GFCI", "Prime and paint the patches"], checklist: jobChecklist("v10"), photos: [], amountDueCents: 0 },
-    // the gutter measurement visit (an inspection, no job)
+    // the measurement visit (an inspection, no job)
     { id: "v11", propertyId: "p8", leadId: "l6", kind: "inspection", techId: "m-alex", start: c.at(-5, 15, 0), durationMin: 45, step: "done", closed: true,
-      scope: ["Measure gutters: front and right side"], checklist: [], photos: [], amountDueCents: 0 },
+      scope: ["Measure the front and the right side"], checklist: [], photos: [], amountDueCents: 0 },
   ];
   const lead: Lead = {
     id: "l6", number: "LEA-0006", assigneeId: "m-alex", name: "Daniel Whitaker", phone: "(626) 555-0177", email: "dan.whitaker@example.com", city: "Arcadia, CA 91007", address: "742 Fairview Ave",
     sourceId: "src-referral", receivedAt: c.daysAgo(8), firstResponseAt: c.daysAgo(8), lastActivityAt: c.daysAgo(2), status: "estimate_sent", customerId: TEST_CLIENT_ID, propertyId: "p8",
-    service: "Seamless gutters", timeframe: "this_month", budgetCents: 250000, preferredContact: "call",
-    message: "Need new gutters on the front and the right side. Also an outlet in the garage stopped working.",
+    service: "Exterior repairs", timeframe: "this_month", budgetCents: 250000, preferredContact: "call",
+    message: "Need work on the front and the right side of the house. Also an outlet in the garage stopped working.",
   } as Lead;
 
   // invoices: paid in full (deposit), partly paid (final), unpaid (progress), overdue (progress)
@@ -216,37 +192,25 @@ export function testClient(c: SeedClock, jobChecklist: (prefix: string) => Check
   const notes: Note[] = [
     { id: "n3", subjectType: "customer", subjectId: TEST_CLIENT_ID, body: "TEST CLIENT — everything filled in to check the screens. Prefers calls before 6 pm; Karen decides on colors.", visibility: "team", pinned: true, authorId: "m-alex", at: c.daysAgo(8) },
     { id: "n4", subjectType: "customer", subjectId: TEST_CLIENT_ID, body: "Owns 2 rentals, more work likely. Pays by Zelle or check.", visibility: "private", pinned: false, authorId: "m-alex", at: c.daysAgo(6) },
-    { id: "n5", subjectType: "property", subjectId: "p8", body: "Front fascia board soft near the right corner — check before hanging the gutter.", visibility: "team", pinned: false, authorId: "m-alex", at: c.daysAgo(5) },
+    { id: "n5", subjectType: "property", subjectId: "p8", body: "Front fascia board soft near the right corner — check before hanging anything on it.", visibility: "team", pinned: false, authorId: "m-alex", at: c.daysAgo(5) },
     { id: "n6", subjectType: "job", subjectId: "j10", body: "Hallway holes ~6″ each. Kitchen outlets: breaker fine, outlets burnt.", visibility: "team", pinned: true, authorId: "m-dima", at: c.daysAgo(3) },
-    { id: "n7", subjectType: "estimate", subjectId: "e7", body: "Gutter guards offered as an add-on; Daniel will think about it.", visibility: "team", pinned: false, authorId: "m-alex", at: c.daysAgo(2) },
+    { id: "n7", subjectType: "estimate", subjectId: "e7", body: "An add-on offered; Daniel will think about it.", visibility: "team", pinned: false, authorId: "m-alex", at: c.daysAgo(2) },
   ];
   const activities: Activity[] = [
-    { id: "a3", subjectType: "customer", subjectId: TEST_CLIENT_ID, kind: "call", direction: "in", contactId: "pp-c8-1", body: "Asked about gutters on the front and the right side.", at: c.daysAgo(8), actorId: "m-alex" },
-    { id: "a4", subjectType: "customer", subjectId: TEST_CLIENT_ID, kind: "sms", direction: "out", contactId: "pp-c8-1", body: "Confirming the gutter measurement tomorrow at 3 pm.", at: c.daysAgo(6), actorId: "m-alex" },
+    { id: "a3", subjectType: "customer", subjectId: TEST_CLIENT_ID, kind: "call", direction: "in", contactId: "pp-c8-1", body: "Asked about work on the front and the right side of the house.", at: c.daysAgo(8), actorId: "m-alex" },
+    { id: "a4", subjectType: "customer", subjectId: TEST_CLIENT_ID, kind: "sms", direction: "out", contactId: "pp-c8-1", body: "Confirming the measurement tomorrow at 3 pm.", at: c.daysAgo(6), actorId: "m-alex" },
     { id: "a5", subjectType: "customer", subjectId: TEST_CLIENT_ID, kind: "call", direction: "in", contactId: "pp-c8-2", body: "Karen asked to add the garage outlet to the estimate.", at: c.daysAgo(4), actorId: "m-alex" },
-    { id: "a6", subjectType: "customer", subjectId: TEST_CLIENT_ID, kind: "email", direction: "out", contactId: "pp-c8-1", body: "Sent the gutters + outlet estimate.", at: gutterAt, actorId: "m-alex" },
+    { id: "a6", subjectType: "customer", subjectId: TEST_CLIENT_ID, kind: "email", direction: "out", contactId: "pp-c8-1", body: "Sent the estimate EST-0007.", at: sentAt7, actorId: "m-alex" },
     { id: "a7", subjectType: "customer", subjectId: TEST_CLIENT_ID, kind: "sms", direction: "out", contactId: "pp-c8-3", body: "Hola Luis, mañana a la 1 pm vamos a cambiar los enchufes.", at: c.minutesAgo(240), actorId: "m-dima" },
-    { id: "a8", subjectType: "estimate", subjectId: "e7", kind: "status", meta: { from: "draft", to: "sent" }, at: gutterAt, actorId: "m-alex" },
+    { id: "a8", subjectType: "estimate", subjectId: "e7", kind: "status", meta: { from: "draft", to: "sent" }, at: sentAt7, actorId: "m-alex" },
     { id: "a9", subjectType: "job", subjectId: "j10", kind: "status", meta: { from: "scheduled", to: "in_progress" }, at: c.daysAgo(3), actorId: "m-dima" },
-    { id: "a10", subjectType: "lead", subjectId: "l6", kind: "status", meta: { from: "booked", to: "estimate_sent" }, at: gutterAt, actorId: "m-alex" },
+    { id: "a10", subjectType: "lead", subjectId: "l6", kind: "status", meta: { from: "booked", to: "estimate_sent" }, at: sentAt7, actorId: "m-alex" },
   ];
   const tasks: Task[] = [
-    { id: "t2", subjectType: "customer", subjectId: TEST_CLIENT_ID, title: "Call Daniel about the gutters estimate", dueAt: c.hoursFromNow(26), assigneeId: "m-alex" },
+    { id: "t2", subjectType: "customer", subjectId: TEST_CLIENT_ID, title: "Call Daniel about the estimate EST-0007", dueAt: c.hoursFromNow(26), assigneeId: "m-alex" },
     { id: "t3", subjectType: "job", subjectId: "j10", title: "Pick up 2 GFCI outlets", dueAt: c.hoursFromNow(40), assigneeId: "m-dima" },
   ];
 
-  // the Gutters measurement (moduleData.gutters): two runs, 40′ and 30′ by tape, one corner, two downspouts
-  const W = { profile: "k", size: "5", material: "aluminum", gauge: ".027", color: "white", story: 1, mount: "fascia", hanger: "hidden" };
-  const DS = { shape: "rect", size: "2x3", material: "aluminum", color: "white", bottom: { kind: "none" } };
-  const gutters = {
-    measurements: [{ id: TEST_MEASUREMENT_ID, label: "Front + right side", status: "ready", propertyId: "p8", leadId: "l6", accuracy: "tape", updatedAt: gutterAt }],
-    elements: [
-      { id: "ge-tc-r1", measurementId: TEST_MEASUREMENT_ID, kind: "run", geom: { a: [0, 0], b: [480, 0], lengthIn: 480 }, attrs: { ...W }, confidence: "taped" },
-      { id: "ge-tc-r2", measurementId: TEST_MEASUREMENT_ID, kind: "run", geom: { a: [480, 0], b: [480, 360], lengthIn: 360 }, attrs: { ...W }, confidence: "taped" },
-      { id: "ge-tc-d1", measurementId: TEST_MEASUREMENT_ID, kind: "downspout", geom: { runId: "ge-tc-r1", atIn: 24 }, attrs: { ...DS }, confidence: "drawn" },
-      { id: "ge-tc-d2", measurementId: TEST_MEASUREMENT_ID, kind: "downspout", geom: { runId: "ge-tc-r2", atIn: 336 }, attrs: { ...DS }, confidence: "drawn" },
-    ],
-  };
-
-  return { customer, properties, estimates, jobs, jobLines, visits, lead, invoices, payments, notes, activities, tasks, gutters };
+  const demo: DemoClient = { customerId: TEST_CLIENT_ID, propertyId: "p8", leadId: "l6", estimateId: "e7", at: sentAt7 };
+  return { customer, properties, estimates, jobs, jobLines, visits, lead, invoices, payments, notes, activities, tasks, demo };
 }

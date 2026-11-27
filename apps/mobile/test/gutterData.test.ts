@@ -31,7 +31,7 @@ import { applyOp, type Op } from "../src/cloud/ops";
 import { registerModule, keepModuleData, loadModuleData } from "../src/modules/registry";
 import gutters from "../src/modules/gutters/module";
 import { dropElement, dropMeasurement, elementFromRow, gutterData, guttersOps, K, loadGutters, measurementOf, putElement, putMeasurement, withGutterData } from "../src/modules/gutters/data";
-import { makeSeed } from "../src/data/seed";
+import { makeCoreSeed as makeSeed } from "../src/data/seed";
 import type { ElementRow, MeasurementRow } from "../src/modules/gutters/canvas/model";
 import { markUndo } from "../src/data/undo";
 
