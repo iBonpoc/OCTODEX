@@ -57,14 +57,14 @@ export default function Money() {
         testID={`expense-row-${x.id}`}
         title={x.vendor}
         // #3018 (founder #3017): 1 — the vendor · the kind; 2 — the work · the client; 3 — «Без чека» · who · the day; the sum on the right
-        titleNote={t(`exp.cat.${x.category}`)}
-        subtitle={job ? [job.title, client?.name].filter(Boolean).join(" · ") : undefined}
+        // #3038: 1 — the vendor + the sum; 2 — the kind · the work · the client; 3 — who; «Без чека» — the icon by the sum
+        subtitle={[t(`exp.cat.${x.category}`), job ? [job.title, client?.name].filter(Boolean).join(" · ") : undefined].filter(Boolean).join(" · ")}
         // the day is the group's title: line 3 says who
         extra={memberName(db, x.memberId, t) || undefined}
-        figureRight
+        valueTop
         lead={{ icon: receipt ? "camera" : "dollar" }}
         value={`−${moneyWhole(x.amountCents)}`}
-        status={mark ? { status: "neutral", label: mark } : undefined}
+        status={mark ? { status: "neutral", label: mark, iconOnly: true } : undefined}
       />
     );
   };

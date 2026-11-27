@@ -51,6 +51,8 @@ export default function Reports() {
       subtitle={head[id].note}
       lead={{ icon: ICON[id] }}
       value={head[id].value}
+      valueTop
+      chevron
       // a sum in the line («просрочено $1,840.00») and a long name are never cut (Д-строка-2, rule 31)
       wrap
       onPress={() => router.push(`/reports/${id}`)}

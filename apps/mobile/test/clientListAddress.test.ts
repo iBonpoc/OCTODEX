@@ -11,8 +11,8 @@ describe("clientListAddress (#3033): billing first, else the one property, never
   it("no billing, one property — its address", () => {
     expect(clientListAddress(undefined, [p("1420 Oak Grove Ave", "Pasadena, CA 91103")], more)).toBe("1420 Oak Grove Ave, Pasadena");
   });
-  it("no billing, several properties — the first and «ещё N»", () => {
-    expect(clientListAddress(undefined, [p("1 A St", "Burbank"), p("2 B St", "Glendale"), p("3 C St", "Encino")], more)).toBe("1 A St, Burbank · ещё 2");
+  it("no billing, several properties — ONE address: the first by creation (#3038)", () => {
+    expect(clientListAddress(undefined, [p("1 A St", "Burbank"), p("2 B St", "Glendale"), p("3 C St", "Encino")], more)).toBe("1 A St, Burbank");
   });
   it("nothing — no line", () => {
     expect(clientListAddress(undefined, [], more)).toBeUndefined();
