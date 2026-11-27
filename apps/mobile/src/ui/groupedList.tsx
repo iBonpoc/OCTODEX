@@ -274,6 +274,16 @@ export function GroupRowBody({ title, subtitle, lead, value, cols, status, compa
               </RowView>
             </View>
           ))
+        : value && status ? (
+            // #2992 (lists B, design/crm review 27.11): a sum and its status stand as ONE column on the right — the sum, under it the
+            // status word with its icon (Jobber, Housecall Pro) — not side by side: the name keeps its room on 390
+            <View testID={ids?.value} style={{ alignItems: "flex-end", flexShrink: 0, gap: spaceHalf.hair }}>
+              <T v="body" w="semibold" tabular tone={quiet ? "mut" : "ink"} numberOfLines={1}>
+                {value}
+              </T>
+              <StatusPill status={status.status} label={status.label} draft={status.draft} />
+            </View>
+          )
         : value ? (
             <View testID={ids?.value}>
               {valueMark ? (
@@ -287,7 +297,7 @@ export function GroupRowBody({ title, subtitle, lead, value, cols, status, compa
               )}
             </View>
           ) : null}
-      {status ? <StatusPill status={status.status} label={status.label} draft={status.draft} /> : null}
+      {status && !(value && !cols?.length) ? <StatusPill status={status.status} label={status.label} draft={status.draft} /> : null}
       {chevron ? <Icon name="chevronRight" s={size.iconSm} color={c.mut} /> : null}
     </RowView>
   );
