@@ -460,7 +460,7 @@ describe("design system: tokens only", () => {
       "features/ServiceCategoryPicker.tsx", "features/client/ClientDuplicates.tsx", "features/client/PropertySections.tsx",
       "features/comms/MessagesScreen.tsx", "features/invoice/VoidInvoice.tsx",
       "features/lead/LeadParts.tsx", "features/listCards.tsx", "features/notices.tsx", "features/payments/AdvancesBlock.tsx",
-      "modules/gutters/list/MeasurementsScreen.tsx", "modules/gutters/list/StartScreen.tsx",
+      "modules/gutters/list/StartScreen.tsx",
       "modules/gutters/prices/PricesScreen.tsx",
     ]);
     const using = outsideUi
