@@ -1,37 +1,33 @@
 /**
- * Catalog on the new list cards (step 10а, PR6), every view (3 widths × 2 themes).
- * - card: name, «$X / unit», kind as a grey tag, supplier, description; no «…»; edges aligned; a sample price carries no
- *   mark of its own (#1873, the founder 16.11: «Нигде нет её. Надписи этой»);
- * - the office sees «Себестоимость» and «Маржа» tiles (always both); the technician sees the price but never cost or margin
- *   (spec 06 §7.6 exception for the catalog: the price is needed for an estimate on site);
+ * Catalog — rows of the kinds' groups (lists B #2992; was the list cards of step 10а), every view (3 widths × 2 themes).
+ * - row: name, «$X / unit» on the right, supplier in the line; a sample price carries no mark of its own (#1873, the founder
+ *   16.11: «Нигде нет её. Надписи этой»);
+ * - the office sees «Себестоимость $…» and «Маржа …%» in the line — only when known, never «—»; the technician sees the price
+ *   but never cost or margin (spec 06 §7.6 exception for the catalog: the price is needed for an estimate on site);
  * - groups by kind under «All»;
- * - «В убытке» (catalogItemEconomics, #98): a service priced below its cost → the office sees the sign, a red edge and a
- *   negative margin; other cards have a real cost and margin, not «—»; the technician sees no sign;
+ * - «В убытке» (catalogItemEconomics, #98): a service priced below its cost → the office sees the status under the price and a
+ *   negative margin; the technician sees no sign;
  * - #1837: sales without our costs (db.costsVisible false) sees neither the tiles nor the sign (one rule, not the role).
  */
-const { checkCardAlignment } = require("../cardsAlignment.cjs");
+const rowOf = (p, name) => p.locator('[data-testid^="catalog-row-"]').locator("visible=true").filter({ hasText: name }).first();
 
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/catalog");
   const db = await h.db();
   const it = db.catalog.find((x) => x.vendor && x.kind !== "kit") ?? db.catalog[0];
-  const card = p.locator('[data-testid="list-card"]').filter({ hasText: it.name }).first();
+  const card = rowOf(p, it.name);
   await card.scrollIntoViewIfNeeded();
   const txt = await card.innerText();
   h.expect(txt.includes(it.name) && new RegExp(`\\$[\\d,.]+ / ${it.unit}`).test(txt), `name and «$X / ${it.unit}»: ${txt.slice(0, 200)}`);
-  if (it.vendor) h.expect(txt.includes(it.vendor), "supplier on the card");
+  if (it.vendor) h.expect(txt.includes(it.vendor), "supplier in the row");
   h.expect(!/тестовая цена/.test(txt), "no «test price» tag on a card (#1873)"); // i18n-old: ok — the old tag must be gone
-  h.expect(txt.includes("Себестоимость") && txt.includes("Маржа"), "office: cost and margin tiles");
-  h.expect(!/…|\.\.\./.test(await p.locator("body").innerText()), "no «…»");
-  await h.expectText(/Материал · \d+|Услуга · \d+/, "groups by kind under «All»");
-  await p.evaluate(() => window.scrollTo(0, 0));
-  // the line of the cards: the whole filter bar (spec 31)
-  await checkCardAlignment(h, { reference: (pg) => pg.getByTestId("filter-bar").locator("visible=true").first() });
+  h.expect(!/—/.test(await p.getByTestId("catalog-list").locator("visible=true").first().innerText()), "no «—» for an unknown cost or margin");
+  h.expect((await p.locator('[data-testid^="catalog-group-"]').locator("visible=true").count()) > 1, "groups by kind under «All»");
   await h.shot("list");
 
   // real economics, not the old stub: a material with a supplier has a cost and a margin
-  h.expect(/Себестоимость[\s\S]*\$[\d,.]+/.test(txt) && /Маржа[\s\S]*\d+\.\d%/.test(txt), `cost and margin are computed: ${txt.slice(0, 240)}`);
+  h.expect(/Себестоимость \$[\d,.]+/.test(txt) && /Маржа -?\d+\.\d%/.test(txt), `cost and margin are computed: ${txt.slice(0, 240)}`);
 
   // «В убытке»: a service priced below its cost (test prices)
   const LOSS = "Loss test service";
@@ -41,21 +37,11 @@ exports.run = async (h) => {
     localStorage.setItem("octo.db.v5", JSON.stringify(raw));
   }, LOSS);
   await h.go("/catalog");
-  const lossCard = p.locator('[data-testid="list-card"]').filter({ hasText: LOSS }).first();
+  const lossCard = rowOf(p, LOSS);
   await lossCard.scrollIntoViewIfNeeded();
   const lt = await lossCard.innerText();
   h.expect(lt.includes("В убытке") && lt.includes("-11.1%") && /\$100(\.00)?\b/.test(lt), `loss sign, cost $100.00 and margin -11.1%: ${lt.slice(0, 240)}`);
-  // the status edge: an absolute strip on the card's left side, a few px wide, full height
-  const hasEdge = (loc) => loc.evaluate((e) => {
-    const r = e.getBoundingClientRect();
-    return [...e.querySelectorAll("div")].some((d) => {
-      const b = d.getBoundingClientRect(), st = getComputedStyle(d);
-      return st.position === "absolute" && Math.abs(b.left - r.left) <= 1 && b.width > 0 && b.width <= 6 && b.height >= r.height - 2;
-    });
-  });
-  const edge = await hasEdge(lossCard);
-  h.expect(edge, "red edge on the loss card");
-  h.expect(!(await card.innerText()).includes("В убытке") && !(await hasEdge(card)), "a card with a margin has no loss sign or edge");
+  h.expect(!(await card.innerText()).includes("В убытке"), "a row with a margin has no loss sign");
   await h.shot("loss");
 
   // technician: price yes, cost and margin no, no loss sign
@@ -73,11 +59,10 @@ exports.run = async (h) => {
   await h.seed("octo.db.v5", raw);
   await h.seed("octo.role.v1", "sales");
   await h.go("/catalog");
-  const salesCard = p.locator('[data-testid="list-card"]').filter({ hasText: LOSS }).first();
+  const salesCard = rowOf(p, LOSS);
   await salesCard.waitFor({ timeout: 8000 });
   const sb = await p.locator("body").innerText();
   h.expect(/\$[\d,.]+ \//.test(sb), "sales sees the selling price");
   h.expect(!sb.includes("Себестоимость") && !sb.includes("Маржа") && !sb.includes("В убытке"), "sales without costs: no cost, margin or loss sign");
-  h.expect(!(await hasEdge(salesCard)), "no red edge either");
   await h.shot("sales-no-costs");
 };

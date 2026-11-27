@@ -108,15 +108,14 @@ export default function ReceiptScreen() {
   const barMain = !wide ? mainBtn(true) : null;
   return (
     <Screen
-      // the number alone is the name («Квитанция RCT-0105» was cut to «Квитанция RCT…» at 390); the parent line says «INV-…»
-      title={p.receiptNumber ?? t("rcpt.title")}
+      // DS §12.13 «Шапка» (#2841, #2843 (а)): a document — its kind and number, like the estimate and the invoice (FitTitle shrinks to 0,75)
+      title={p.receiptNumber ? `${t("rcpt.title")} ${p.receiptNumber}` : t("rcpt.title")}
       back={back}
       right={more}
       footer={barMain ? <ActionBar testID="rcpt-actionbar" main={barMain} second={secondBtn(true) ?? undefined} /> : undefined}
     >
-      {/* LAYOUT-RULES §3 «Объект», compact (#2350): the invoice, the job and the client — chips in one row (DS §12.3 п.6; the client
+      {/* LAYOUT-RULES §3 «Объект», compact (#2350): the invoice, the job and the client — «Связано» rows under the sum (#3065; the client
           is not repeated under the title, the invoice not repeated in the card); the sum large with its status, how and when in one line */}
-      <RelatedBlock of={{ type: "receipt", id: p.id }} />
       <Card status="ok">
         <RowView style={{ justifyContent: "space-between", alignItems: "center" }}>
           <T v="display" tabular>
@@ -168,6 +167,8 @@ export default function ReceiptScreen() {
           </T>
         ) : null}
       </Card>
+      {/* #3065 (design + crm review): the sum and its status first, then «Связано» — as Wallet and Jobber put a payment */}
+      <RelatedBlock of={{ type: "receipt", id: p.id }} />
       {/* from 820 the same buttons right after the receipt (the same place on every width, #1474) */}
       {wide && (mainBtn(false) || secondBtn(false)) ? (
         <RowView style={{ flexWrap: "wrap" }}>

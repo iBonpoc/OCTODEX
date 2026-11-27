@@ -3,9 +3,9 @@ import { View } from "react-native";
 import { space } from "@octo/design-tokens";
 import type { Company } from "@/data/types";
 import { DOC_LANG_LABEL, DOC_LANGS, useI18n, type DocLang } from "@/i18n";
-import { Button, TextField, useReadOnly } from "@/ui/controls";
+import { TextField, useReadOnly } from "@/ui/controls";
+import { ActionRow } from "@/ui/multiValueField";
 import { T } from "@/ui/primitives";
-import { RowView } from "@/ui/surfaces";
 import { ArbitrationWarn } from "@/features/estimate/NotesTermsView";
 import { companyTermsWrite, termsLangsShown } from "@/features/estimate/notesTerms";
 
@@ -39,13 +39,14 @@ export function CompanyTerms({ est, onChange }: { est: Company["estimate"]; onCh
         </View>
       ))}
       {ro ? null : (
-        <RowView style={{ flexWrap: "wrap", gap: space[3] }}>
+        // DS §7.5 / А14а (#3065): «⊕ Добавить …» rows, one per language not shown yet — not a row of buttons
+        <View>
           {DOC_LANGS.filter((l) => !shown.includes(l)).map((l) => (
             <View key={l} testID={`co-terms-add-${l}`}>
-              <Button label={t("co.tl.add", { lang: DOC_LANG_LABEL[l] })} icon="plus" variant="ghost" size="sm" onPress={() => setAdded((a) => [...a, l])} />
+              <ActionRow icon="plusCircle" label={t("co.tl.add", { lang: DOC_LANG_LABEL[l] })} onPress={() => setAdded((a) => [...a, l])} />
             </View>
           ))}
-        </RowView>
+        </View>
       )}
     </View>
   );

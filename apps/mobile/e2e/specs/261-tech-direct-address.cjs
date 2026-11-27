@@ -22,8 +22,10 @@ async function shows(h, path, open, what) {
 }
 
 /** the list has drawn its cards and holds `mine` (its title) — then what is not in it is checked */
+// #3018: the jobs are GroupRow rows `job-row-<id>` (rule 12), not cards; «Позвонить» and «Маршрут» on the row have their own ids
+const JOB_ROW = '[data-testid^="job-row-"]:not([data-testid^="job-row-call-"]):not([data-testid^="job-row-route-"])';
 async function listHolds(h, mine) {
-  await h.page.getByTestId("list-card").filter({ hasText: mine }).first().waitFor({ state: "visible", timeout: 15000 });
+  await h.page.locator(JOB_ROW).filter({ hasText: mine }).first().waitFor({ state: "visible", timeout: 15000 });
 }
 
 exports.run = async (h) => {
@@ -63,7 +65,7 @@ exports.run = async (h) => {
   // the lists: only his own — counted once the list has drawn his own card
   await h.go("/jobs");
   await listHolds(h, /Bathroom remodel/);
-  h.expect((await p.getByTestId("list-card").filter({ hasText: /Deep clean after move-out/ }).count()) === 0, "the tech: /jobs has no job of another tech (j5)");
+  h.expect((await p.locator(JOB_ROW).filter({ hasText: /Deep clean after move-out/ }).count()) === 0, "the tech: /jobs has no job of another tech (j5)");
   // v2 (#2350): the estimates are GroupRow rows `est-row-<id>` (rule 12), not cards
   await h.go("/estimates");
   await p.getByTestId("est-row-e2").first().waitFor({ state: "visible", timeout: 15000 });

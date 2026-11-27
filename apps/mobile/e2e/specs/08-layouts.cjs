@@ -9,7 +9,7 @@ const SCREENS = [
 ];
 /** screens that redirect by design: screen → the path it ends on (empty: nothing yet — filled from the first run, #800) */
 // by design: the «Графит» sheet is behind the pilot switch (off by default) — its address goes back to the list; the sheet itself is e2e 520 on all 6 views
-const REDIRECTS = { "/settings/design-system/graphite": true };
+const REDIRECTS = { "/settings/design-system/graphite": true, "/finance": true }; // #3025: /finance → /invoice (one «Деньги»)
 /** a screen's words for a record or page that is missing (the app shows them instead of a crash) */
 const NOT_THERE = /не найден[аоы]?|не существует|Такого документа нет|not found|doesn't exist|404/i;
 /** screens where such words are by design (an empty search, an empty list) */
@@ -27,7 +27,8 @@ const NO_HEADER = [
  * rows (e2e/cardsAlignment.cjs). Every PR that moves a list to ListCard adds its screen here.
  */
 // v2 (rule 12): /clients, /leads, /estimates, /invoice are grouped rows (ListGroup / GroupRow) now — no list cards to align
-const CARD_SCREENS = [{ path: "/money", reference: (p) => p.locator('[data-testid="list-card"]').first(), min: 1 }, { path: "/catalog", reference: (p) => p.getByTestId("filter-bar").locator("visible=true").first() }, { path: "/jobs", reference: (p) => p.getByTestId("filter-bar").locator("visible=true").first(), min: 1 }, { path: "/figures/leads?period=month", reference: (p) => p.locator('[data-testid="list-card"]').first(), min: 1 }];
+// lists B (#2992): /money (expenses), /catalog, /jobs are grouped rows now too
+const CARD_SCREENS = [{ path: "/figures/leads?period=month", reference: (p) => p.locator('[data-testid="list-card"]').first(), min: 1 }];
 const { checkCardAlignment } = require("../cardsAlignment.cjs");
 /** loops over all requested layouts itself (one browser context per layout) */
 exports.ownLayouts = true;

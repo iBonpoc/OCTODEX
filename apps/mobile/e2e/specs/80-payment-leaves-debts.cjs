@@ -4,9 +4,10 @@ const { todayKey, dayKey } = require("../companyTime.cjs");
  * the invoice leaves the debts and the debts go down by exactly that amount. Prototype v2 (#2350): by testID — the invoice's main
  * step `invoice-take-payment`, the rows `invoice-row-<id>` / `payment-row-<id>`, the tiles «Ждёт оплаты» + «Просрочено».
  */
-// #2888: the app shows money always with cents (founder #2672)
+// #3029/#3030 (founder 27.11): a list row is an overview — whole dollars (`whole`); `money` with cents — for the documents
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
 const money = (c) => usd.format(c / 100);
+const whole = (c) => (Math.abs(c) < 100 ? `$${(Math.abs(c) / 100).toFixed(2)}` : `$${Math.floor((Math.abs(Math.round(c)) + 50) / 100).toLocaleString("en-US")}`);
 const cents = (s) => Math.round(Number(s.replace(/[$,]/g, "")) * 100);
 
 exports.run = async (h) => {
@@ -52,7 +53,7 @@ exports.run = async (h) => {
   await row.first().waitFor({ timeout: 8000 });
   const name = after.customers.find((c) => c.id === inv.customerId).name;
   const rt = await row.first().innerText();
-  h.expect(rt.includes(name) && rt.includes(money(owes(inv))), `the payment row in «Оплаты» · Сегодня: the client and ${money(owes(inv))} (${rt.replace(/\n/g, " | ")})`);
+  h.expect(rt.includes(name) && rt.includes(whole(owes(inv))), `the payment row in «Оплаты» · Сегодня: the client and ${whole(owes(inv))} (${rt.replace(/\n/g, " | ")})`);
   // who took it (wave 8, PR-2): the person who recorded it in the app — on the client's receipts
   const me = after.members.find((m) => m.id === after.me);
   h.expect(pay.receivedBy === after.me, "the payment knows who took it");

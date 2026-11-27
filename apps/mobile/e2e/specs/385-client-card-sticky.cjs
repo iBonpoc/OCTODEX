@@ -29,8 +29,8 @@ exports.run = async (h) => {
   h.expect(selBg && plates.filter((x) => !x.sel).every((x) => x.bg !== selBg), `the selected pill has its own fill (${JSON.stringify(plates)})`);
 
   // «Обзор»: the visits ahead, each its own row
-  // #2363 F20: the visits ahead are rows of the overview's top group (with the pinned note), not a block of their own
-  await tid("client-top-group").waitFor({ timeout: 3000 });
+  // #3061/#3068: the visits ahead are their own group «Впереди» (the pinned note and the access moved to «Объекты» / «Журнал»)
+  await tid("client-ahead").waitFor({ timeout: 3000 });
   h.expect((await p.locator('[data-testid^="client-ahead-v"]').locator("visible=true").count()) >= 1, "a visit ahead is a row of its own");
 
   // «Журнал» is long: scroll down with the wheel (a finger's scroll) — the strip sticks, the header folds

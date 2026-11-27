@@ -3,7 +3,7 @@ import { getLocales } from "expo-localization";
 import { usePersistentState } from "@/data/persist";
 import { dayKeyLabel, dayLabel, formatDayKey, getZone, timeLabel, zonedFormat, type DayKey } from "@/features/zone";
 import type { DictKey } from "./ru";
-import { durationText, moneyText, plural, setAppLang, translate, type DocLang, type Lang, type Params, type PluralBase } from "./translate";
+import { durationText, moneyText, moneyWholeText, plural, setAppLang, translate, type DocLang, type Lang, type Params, type PluralBase } from "./translate";
 
 export { tFor, DOC_LANGS, DOC_LANG_LABEL, type DocLang, type Lang, type PluralBase } from "./translate";
 export const languages: { id: Lang; label: string }[] = [
@@ -27,7 +27,7 @@ export interface I18nCtx {
   /** minutes in words: «4 ч», «1 ч 30 мин», «45 мин» (DS §4.5) */
   duration: (min: number) => string;
   money: (cents: number) => string;
-  /** KPI tiles: the same as `money`, with cents (#2888; it used to round to whole dollars) */
+  /** an overview — KPI tiles, list rows, totals: whole dollars (#3029/#3030); the documents keep `money` with cents */
   moneyWhole: (cents: number) => string;
   /** the time of a moment on the company's clock (features/zone.ts getZone), not the phone's (П4b) */
   time: (iso: string) => string;
@@ -61,7 +61,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       // a negative amount with «−» (U+2212), not a hyphen (DS §4.5, #1427)
       money: moneyText,
       // #2888: the tiles too — with cents, never rounded to dollars (founder #2672); the name stays for its callers
-      moneyWhole: moneyText,
+      moneyWhole: moneyWholeText,
       time: (iso) => timeLabel(iso),
       day: (iso) => dayLabel(iso, locale),
       dayOf: (k) => dayKeyLabel(k, locale),

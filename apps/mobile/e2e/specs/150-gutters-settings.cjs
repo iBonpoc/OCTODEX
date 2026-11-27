@@ -37,7 +37,7 @@ exports.run = async (h) => {
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
   await waitFor(async () => !!(await mod()).enabled, "on");
-  await tid("module-gutters-settings").getByRole("button").click();
+  await tid("module-gutters-settings").click(); // #3065: the module's places are rows «›» now, the row is the press
   await p.waitForURL(/\/module\/gutters\/settings$/, { timeout: 5000 });
   await tid("gset-screen").waitFor({ timeout: 5000 });
   h.expect((await tid("gset-ro").count()) === 0 && (await tid("gset-locked").count()) === 0, "the director in the trial changes them");
@@ -62,8 +62,10 @@ exports.run = async (h) => {
   h.expect((await off("sizes", "fascia")).join() === "7" && (await checked("gset-sizes-fascia-6")), "fascia keeps 6″");
 
   // the palette: Berger's; the default run colour — its 5th
-  await tid("gset-palette-berger").scrollIntoViewIfNeeded();
-  await tid("gset-palette-berger").getByRole("button").click();
+  // #3065: the supplier's palette is one choice (a field and its menu), not three buttons
+  await tid("gset-palette-from-button").scrollIntoViewIfNeeded();
+  await tid("gset-palette-from-button").click();
+  await tid("gset-palette-from-berger").click();
   await waitFor(async () => ((await settings()).palette || []).length === 8, "Berger's 8 colours saved");
   const pal = (await settings()).palette;
   h.expect((await tid("gset-color-0").innerText()).trim() === pal[0], "the palette is on the page");
@@ -140,7 +142,7 @@ exports.run = async (h) => {
   }, KEY);
   await h.go("/module/gutters/settings");
   await tid("gset-ro").waitFor({ timeout: 5000 });
-  h.expect((await tid("gset-color-add").count()) === 0 && (await tid("gset-palette-berger").count()) === 0 && (await tid("gset-locked-action").count()) === 0, "the office adds no colours");
+  h.expect((await tid("gset-color-add").count()) === 0 && (await tid("gset-palette-from").count()) === 0 && (await tid("gset-locked-action").count()) === 0, "the office adds no colours");
   await tid("gset-profiles-k").click({ force: true });
   await p.waitForTimeout(400);
   h.expect(!(await off("profiles")).includes("k"), "the office cannot uncheck");

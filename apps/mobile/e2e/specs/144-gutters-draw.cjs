@@ -49,7 +49,7 @@ exports.run = async (h) => {
 
   await h.go("/company/modules");
   await tid("module-gutters-draw").scrollIntoViewIfNeeded();
-  await tid("module-gutters-draw").getByRole("button").click();
+  await tid("module-gutters-draw").click(); // #3065: the module's places are rows «›» now, the row is the press
   await p.waitForURL(/\/module\/gutters\/draw$/, { timeout: 5000 });
   await tid("draw-surface").waitFor({ timeout: 8000 });
   await tid("draw-not-saved").waitFor({ timeout: 5000 });
@@ -169,7 +169,7 @@ exports.run = async (h) => {
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
   await waitFor(async () => /^Без срока/.test((await tid("module-gutters-status").innerText()).trim()), "trial on");
-  await tid("module-gutters-draw").getByRole("button").click();
+  await tid("module-gutters-draw").click(); // #3065: the module's places are rows «›» now, the row is the press
   await p.waitForURL(/\/module\/gutters\/draw$/, { timeout: 5000 });
   await tid("draw-surface").waitFor({ timeout: 8000 });
   h.expect((await tid("draw-not-saved").count()) === 0, "on: no warning");

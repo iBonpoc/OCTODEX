@@ -10,7 +10,7 @@ import { registerModule, placeActions } from "../src/modules/registry";
 import gutters from "../src/modules/gutters/module";
 import { clientStart, gutterData, K, latestFor, measureHref, putMeasurement, relink, removeMeasurement, withGutterData } from "../src/modules/gutters/data";
 import { signedOn } from "../src/modules/gutters/estimateLink";
-import { makeSeed } from "../src/data/seed";
+import { makeCoreSeed as makeSeed } from "../src/data/seed";
 import type { MeasurementRow } from "../src/modules/gutters/canvas/model";
 import type { DB } from "../src/data/types";
 

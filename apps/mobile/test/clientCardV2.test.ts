@@ -26,9 +26,14 @@ describe("sections: one strip «Обзор · Работы · Сметы · Сч
     expect(clientSectionKeys("director", true)).toEqual(["overview", "work", "estimates", "money", "visits", "places", "log"]);
     expect(clientSectionKeys("dispatcher", false)).toEqual(["overview", "work", "estimates", "visits", "places", "log"]);
   });
-  it("one place: no «Объекты» — the address is the header's panel and «Маршрут» (nothing twice)", () => {
-    expect(clientSectionKeys("director", true, false)).toEqual(["overview", "work", "estimates", "money", "visits", "log"]);
-    expect(clientSectionKeys("tech", false, false)).toEqual(["overview", "work", "log"]);
+  // #3068 (founder 27.11): the access, the people, the notes and the jobs of a place live in «Объекты» only — so one place shows it
+  it("one place: «Объекты» is there (its gate code, people, notes live only there)", () => {
+    expect(clientSectionKeys("director", true, 1)).toEqual(["overview", "work", "estimates", "money", "visits", "places", "log"]);
+    expect(clientSectionKeys("tech", false, 1)).toEqual(["overview", "work", "places", "log"]);
+  });
+  it("no place: no «Объекты»", () => {
+    expect(clientSectionKeys("director", true, 0)).toEqual(["overview", "work", "estimates", "money", "visits", "log"]);
+    expect(clientSectionKeys("tech", false, 0)).toEqual(["overview", "work", "log"]);
   });
   it("the tech never sees «Счета» nor «Сметы»", () => {
     expect(clientSectionKeys("tech", true)).not.toContain("money");
@@ -42,6 +47,9 @@ describe("sections: one strip «Обзор · Работы · Сметы · Сч
     expect(clientSectionOf("notes")).toBe("log");
     expect(clientSectionOf("people")).toBe("overview");
     expect(clientSectionOf(undefined)).toBe("overview");
+  });
+  it("every section of today opens itself — «Выезды» is not folded into «Работы» (#3060 п.3: the chip «Выезды» opened «Работы»)", () => {
+    for (const k of clientSectionKeys("director", true, 2)) expect(clientSectionOf(k)).toBe(k);
   });
 });
 

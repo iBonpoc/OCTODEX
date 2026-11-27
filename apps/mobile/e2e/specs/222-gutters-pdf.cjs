@@ -6,7 +6,7 @@
  *   never the app's — ru here, #2158 rule 7), no $.
  * The web prints from a hidden frame: the spec catches the frame's HTML instead of the print dialog.
  */
-const { skipLength, openView } = require("../gutters.cjs");
+const { skipLength, openView, docsFor } = require("../gutters.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -55,6 +55,7 @@ exports.run = async (h) => {
   /** the button where it stays: the review slides in, and a press on a button still moving is cancelled (no frame at all,
    *  1 run in ~40 under load: «no frames») — so wait for it to stand, press, and press again only if nothing was printed */
   const printVia = async (id, what) => {
+    await docsFor(p, id); // #2989: the crew's documents are in «⋯ → Документы бригады»
     const btn = tid(id).getByRole("button");
     let box = null;
     for (let i = 0; i < 40; i++) {

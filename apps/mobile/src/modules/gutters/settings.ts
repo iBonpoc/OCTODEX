@@ -99,6 +99,16 @@ export const PALETTE_ALL: readonly string[] = (() => {
   return out;
 })();
 export const MAX_PALETTE = 60;
+/**
+ * The palette a company has before it sets its own (founder 27.11, #2983 / #2986: «очень мало цветов»): the module's words first —
+ * the defaults and the drawings made before keep their colour («white» stays first) — then the founder's full list, a name the
+ * words already say (Linen, Almond, Clay, Bronze, Black) once.
+ */
+export const DEFAULT_PALETTE: readonly string[] = (() => {
+  const out: string[] = [...COLORS];
+  for (const n of PALETTE_ALL) if (!out.some((o) => o.toLowerCase() === n.toLowerCase())) out.push(n);
+  return out.slice(0, MAX_PALETTE);
+})();
 export const MAX_COLOR_LEN = 40;
 /** what module_save_settings takes (bytes of the JSON; Postgres counts its own jsonb a little differently — a margin) */
 export const MAX_SETTINGS_BYTES = 30 * 1024;
@@ -141,14 +151,14 @@ export function colorName(v: unknown): string | null {
 }
 /** the palette: names, no repeats (case ignored), at most 60; none → the module's words */
 export function readPalette(v: unknown): string[] {
-  if (!Array.isArray(v)) return [...COLORS];
+  if (!Array.isArray(v)) return [...DEFAULT_PALETTE];
   const out: string[] = [];
   for (const x of v) {
     const n = colorName(x);
     if (n && !out.some((o) => o.toLowerCase() === n.toLowerCase())) out.push(n);
     if (out.length >= MAX_PALETTE) break;
   }
-  return out.length ? out : [...COLORS];
+  return out.length ? out : [...DEFAULT_PALETTE];
 }
 
 function readOffer(raw: Record<string, unknown>): Offer {

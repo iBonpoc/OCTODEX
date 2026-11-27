@@ -1,3 +1,5 @@
+import { component, font, size, space } from "@octo/design-tokens";
+
 /**
  * The geometry of a long menu (DS А2, #1164). Pure, so it is tested by its numbers: how high the list is, and where it
  * scrolls to so the chosen row is in view.
@@ -31,4 +33,16 @@ export function fitMenuPlace(o: { x: number; w: number; winW: number; minW: numb
  *  knows its words says `list` (a count of letters would flip with the language and the data) */
 export function opensList(items: { label?: string; leading?: unknown; subtitle?: string }[], maxItems: number): boolean {
   return items.length > maxItems || items.some((i) => !!i.leading || !!i.subtitle);
+}
+
+/**
+ * Review 27.11 (#2935 п.5): an action menu («⋯») is `menuW` wide, wider by its longest label up to `select.menuMaxW` — the words of
+ * an item stand on one line where they can (RU «Разложить по типам» wrapped at 240). The label's width is estimated as in `ButtonPair`
+ * (`pair.charEm` of the body size per character); the row's chrome — the sides `space[4]`, the check column and the icon `iconMd`, two gaps `space[2]`.
+ */
+export function actionMenuWidth(labels: readonly string[]): number {
+  const longest = Math.max(0, ...labels.map((l) => l.length));
+  const chrome = space[4] * 2 + size.iconMd * 2 + space[2] * 2;
+  const words = Math.ceil(longest * component.pair.charEm * font.size.body);
+  return Math.min(component.select.menuMaxW, Math.max(component.menuW, words + chrome));
 }

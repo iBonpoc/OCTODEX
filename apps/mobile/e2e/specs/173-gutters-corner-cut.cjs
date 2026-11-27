@@ -93,15 +93,15 @@ exports.run = async (h) => {
   const kind = (await tid("corner-kind").locator('[aria-checked="true"]').innerText()).trim();
   const c0 = await cuts();
   h.expect(c0.length === 2, `two gutters in the cut (${c0.length})`);
-  const sign = kind === "наружный" ? 1 : -1;
+  const sign = kind === "Outside" ? 1 : -1;
   h.expect(c0.every((x) => Math.abs(x.front - x.back - sign * 5) < 0.01), `${kind}: the face ${sign > 0 ? "+" : "−"}5″ (${JSON.stringify(c0)})`);
   h.expect(c0.some((x) => x.back === 120) && c0.some((x) => x.back === 120.125), `along the wall: 10′ and 10′ ⅛″ (${JSON.stringify(c0)})`);
   await h.shot("cut");
 
   // the other kind → the face follows
-  await tid("corner-kind").getByRole("radio", { name: kind === "наружный" ? "внутренний" : "наружный", exact: true }).click();
+  await tid("corner-kind").getByRole("radio", { name: kind === "Outside" ? "Inside" : "Outside", exact: true }).click();
   // the sheet stays open after the choice (founder 09.11, версия 474): the choice shows, then the sheet is closed
-  const kind1 = kind === "наружный" ? "внутренний" : "наружный";
+  const kind1 = kind === "Outside" ? "Inside" : "Outside";
   await waitFor(async () => ((await tid("corner-kind").locator('[aria-checked="true"]').innerText()).trim() === kind1), `${kind1} picked`);
   await p.getByRole("button", { name: /^(Закрыть|Close|Cerrar)$/ }).last().click({ position: { x: 10, y: 10 } });
   await waitFor(async () => (await tid("corner-sheet").count()) === 0, "the sheet closes");

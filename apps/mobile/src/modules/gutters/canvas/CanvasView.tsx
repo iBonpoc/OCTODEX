@@ -6,10 +6,12 @@
 import { useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
 import { View, type LayoutChangeEvent } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from "react-native-reanimated";
-import { GestureDetector, usePanGesture, usePinchGesture, useSimultaneousGestures } from "react-native-gesture-handler";
+import { GestureDetector, usePanGesture, usePinchGesture, useRotationGesture, useSimultaneousGestures } from "react-native-gesture-handler";
 import { scheduleOnRN, scheduleOnUI } from "react-native-worklets";
 import { clampView, type View as PlanView, type ZoomLimits } from "./scene";
 import { commitRef, endGesture, IDENTITY, panFrame, pinchFrame, rebase, stepOf, type LiveState, type SentSettle, type Tf } from "./gestureState";
+import { panIn, pinchIn, turnStep } from "./outerTurn";
+import { endRot, idleRot, rotFrame, type RotState } from "./viewRotate";
 
 /** the live part of the transform: shift, scale about a focal point (screen px of the canvas) */
 export interface Live {
@@ -17,10 +19,12 @@ export interface Live {
   /** the committed view the live transform is against (k, ox, oy; k 0 — none yet), written by the settle on the UI thread in ONE step with
    * the live transform (#1403): the grid layer (#1434) draws the view on the screen from both, and never sees a new view with an old transform */
   vk: SharedValue<number>; vox: SharedValue<number>; voy: SharedValue<number>;
+  /** the turn of the whole canvas layer about its centre (#2988, radians, clockwise on the screen; 0 — north up) and that centre */
+  r: SharedValue<number>; cx: SharedValue<number>; cy: SharedValue<number>;
 }
 
 export function useLive(): Live {
-  return { tx: useSharedValue(0), ty: useSharedValue(0), s: useSharedValue(1), fx: useSharedValue(0), fy: useSharedValue(0), vk: useSharedValue(0), vox: useSharedValue(0), voy: useSharedValue(0) };
+  return { tx: useSharedValue(0), ty: useSharedValue(0), s: useSharedValue(1), fx: useSharedValue(0), fy: useSharedValue(0), vk: useSharedValue(0), vox: useSharedValue(0), voy: useSharedValue(0), r: useSharedValue(0), cx: useSharedValue(0), cy: useSharedValue(0) };
 }
 
 /** the committed view after a live transform: p' = f + s·(p − f) + t */
@@ -36,12 +40,14 @@ export function commitView(v: PlanView, tx: number, ty: number, s: number, fx: n
  */
 /** the limits of the scale and what to do at one (#1281): the viewport is for the clamp at the commit; `onEdge` is the tick when the pinch reaches a limit */
 export interface ZoomGuard { lim: ZoomLimits; viewport: { w: number; h: number }; onEdge?: () => void }
+/** the turn by two fingers (#2988): on where it is wanted (the drawing screen); `onTurn` — the angle when the fingers lift, `onSnap` — the tick at a right angle */
+export interface TurnGuard { onTurn?: (rad: number) => void; onSnap?: () => void }
 
-export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void, live: Live, panPointers = 1, zoom?: ZoomGuard) {
-  const { tx, ty, s, fx, fy, vk, vox, voy } = live;
+export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void, live: Live, panPointers = 1, zoom?: ZoomGuard, turn?: TurnGuard) {
+  const { tx, ty, s, fx, fy, vk, vox, voy, r, cx, cy } = live;
   // the gesture's callbacks may be the ones made at an earlier render: they read the view of now from a ref
-  const now = useRef({ view, onView, zoom });
-  now.current = { view, onView, zoom };
+  const now = useRef({ view, onView, zoom, turn });
+  now.current = { view, onView, zoom, turn };
   // commits made and not rendered yet: the view set (clamped) and the commit's own view (`ref`, before the clamp)
   const pending = useRef<{ view: PlanView; ref: PlanView }[]>([]);
   /** the settles sent to the UI thread, the latest few: a commit taken there before some of them ran gets their steps (commitRef) */
@@ -142,7 +148,8 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
       onUpdate: (e: Parameters<typeof panFrame>[1]) => {
         "worklet";
         const st = state();
-        put(st, panFrame(st, e, panPointers));
+        // the layer may be turned (#2988): the shift goes into its own (unturned) frame
+        put(st, panFrame(st, panIn(r.value, e), panPointers));
       },
       onDeactivate: end,
     }),
@@ -154,22 +161,66 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
       onUpdate: (e: Parameters<typeof pinchFrame>[1]) => {
         "worklet";
         const st = state();
-        put(st, pinchFrame(st, e, kMax.value > 0 && vk.value > 0 ? { lo: kMin.value / vk.value, hi: kMax.value / vk.value } : undefined));
+        put(st, pinchFrame(st, pinchIn(r.value, cx.value, cy.value, e), kMax.value > 0 && vk.value > 0 ? { lo: kMin.value / vk.value, hi: kMax.value / vk.value } : undefined));
       },
       onDeactivate: end,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
+  // the turn by two fingers (#2988; spec 33 П39): past the threshold the layer turns about the canvas's centre and the inner frame shifts
+  // so the point under the fingers stays (outerTurn.ts); a right angle sticks with one tick (rotFrame, stage 0). A turn is part of the
+  // two-finger segment: its shift is committed with the pinch and the pan, once
+  const rs = useSharedValue<RotState>(idleRot());
+  const rBase = useSharedValue(0);
+  const turnOn = !!turn;
+  const snapTick = () => now.current.turn?.onSnap?.();
+  const turnDone = (rad: number) => now.current.turn?.onTurn?.(rad);
+  const rotConfig = useMemo(
+    () => ({
+      enabled: turnOn,
+      onBegin: () => {
+        "worklet";
+        rs.value = idleRot();
+        rBase.value = r.value;
+      },
+      onUpdate: (e: { rotationChange: number; anchorX: number; anchorY: number; numberOfPointers: number }) => {
+        "worklet";
+        if (e.numberOfPointers < 2) return;
+        const q = rs.value;
+        const st0: RotState = { raw: q.raw, on: q.on, dir: q.dir, armed: q.armed, snap: q.snap, shown: q.shown };
+        const f = rotFrame(st0, rBase.value, e.rotationChange);
+        rs.value = st0;
+        if (f.d === 0) return;
+        const st = state();
+        r.value = turnStep(st, r.value, f.d, e.anchorX, e.anchorY, cx.value, cy.value);
+        st.seg = true;
+        put(st, null);
+        if (f.tick) scheduleOnRN(snapTick);
+      },
+      onDeactivate: () => {
+        "worklet";
+        const q = rs.value;
+        const st0: RotState = { raw: q.raw, on: q.on, dir: q.dir, armed: q.armed, snap: q.snap, shown: q.shown };
+        endRot(st0);
+        rs.value = st0;
+        end();
+        scheduleOnRN(turnDone, r.value);
+      },
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [turnOn],
+  );
   const pan = usePanGesture(panConfig);
   const pinch = usePinchGesture(pinchConfig);
-  const both = useSimultaneousGestures(pan, pinch);
+  const rot = useRotationGesture(rotConfig);
+  const both = useSimultaneousGestures(pan, pinch, rot);
   // one object for the screen's whole life (the gestures themselves are kept by the library): a new object every render made the
   // canvas settle again after every render (#1403); `settleView` reads what it needs from refs and shared values
   const settleRef = useRef(settleView);
   settleRef.current = settleView;
   const stableSettle = useMemo(() => (v: PlanView) => settleRef.current(v), []);
-  return useMemo(() => ({ pan, pinch, both, settleView: stableSettle, multiAt }), [pan, pinch, both, stableSettle]);
+  return useMemo(() => ({ pan, pinch, rot, both, settleView: stableSettle, multiAt }), [pan, pinch, rot, both, stableSettle]);
 }
 
 export type CanvasGestures = ReturnType<typeof useCanvasGestures>;
@@ -186,6 +237,8 @@ export function CanvasView(props: {
   gestures?: CanvasGestures;
   /** drawn under the scaled layer and never scaled: the grid (#1434), which follows the live view by itself */
   under?: ReactNode;
+  /** the layer turns by `live.r` about the canvas's centre (#2988): the grid and the drawing together */
+  turnable?: boolean;
   children: ReactNode;
   testID?: string;
 }) {
@@ -197,8 +250,14 @@ function OwnGestures(props: Parameters<typeof CanvasView>[0]) {
   return <Canvas {...props} gestures={g} />;
 }
 
-function Canvas({ view, live, size, onSize, gestures, under, children, testID }: Parameters<typeof CanvasView>[0] & { gestures: CanvasGestures }) {
-  const { tx, ty, s, fx, fy } = live;
+function Canvas({ view, live, size, onSize, gestures, under, children, testID, turnable }: Parameters<typeof CanvasView>[0] & { gestures: CanvasGestures }) {
+  const { tx, ty, s, fx, fy, r, cx, cy } = live;
+  useLayoutEffect(() => {
+    cx.value = size.w / 2;
+    cy.value = size.h / 2;
+  }, [size.w, size.h, cx, cy]);
+  // the whole layer — the grid and the drawing — turns about the canvas's centre (the transform's own origin)
+  const turnSt = useAnimatedStyle(() => ({ transform: [{ rotate: `${r.value}rad` }] }));
   // the painter has redrawn at the committed view: drop the live transform in the same frame — only when the VIEW changed, never on
   // another render of the screen (#1403: a blink or a hint re-rendered mid-pinch and the drawing jumped back under the fingers)
   const settleNow = useRef(gestures.settleView);
@@ -219,8 +278,17 @@ function Canvas({ view, live, size, onSize, gestures, under, children, testID }:
   return (
     <GestureDetector gesture={gestures.both}>
       <View style={{ flex: 1, overflow: "hidden" }} onLayout={layout} testID={testID}>
-        {under}
-        <Animated.View style={[{ width: size.w, height: size.h }, st]}>{children}</Animated.View>
+        {turnable ? (
+          <Animated.View pointerEvents="box-none" style={[{ position: "absolute", left: 0, top: 0, width: size.w, height: size.h }, turnSt]}>
+            {under}
+            <Animated.View style={[{ width: size.w, height: size.h }, st]}>{children}</Animated.View>
+          </Animated.View>
+        ) : (
+          <>
+            {under}
+            <Animated.View style={[{ width: size.w, height: size.h }, st]}>{children}</Animated.View>
+          </>
+        )}
       </View>
     </GestureDetector>
   );
