@@ -3561,6 +3561,7 @@ export const es: Dict = {
   "mod.gutters.draw.cornerNote": "Cambia el lado de toda la línea",
   "mod.gutters.draw.redoShort": "Rehacer",
   "mod.gutters.draw.splash": "Splash guard",
+  "mod.gutters.draw.sketchKey": "Continua — pared, discontinua — frente; los largos, en «Corte» abajo",
   "mod.gutters.draw.cutTitle": "Corte",
   "mod.gutters.draw.cutAngle": "esquina {deg}°",
   "mod.gutters.draw.cutRun": "Gutter {n}",

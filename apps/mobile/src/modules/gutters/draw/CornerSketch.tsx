@@ -31,7 +31,7 @@ export function CornerSketch({ d, f, cut, w, angleDeg, fmt = "ftin" }: { d: Draw
   const { c } = useTheme();
   const { t } = useI18n();
   const FS = font.size.caption;
-  const H = Math.round(Math.min(w * 0.8, space[8] * 9));
+  const H = Math.round(Math.min(w * 0.6, space[8] * 7)); // no chips on it now (#3078): less height, no empty band under it
   const geo = useMemo(() => {
     const sideOf = houseSides(d);
     // unit directions from the corner along each gutter, on the screen (y down)
@@ -55,8 +55,9 @@ export function CornerSketch({ d, f, cut, w, angleDeg, fmt = "ftin" }: { d: Draw
     const pts: [number, number][] = [[0, 0], ...withN.map((l) => l.u)];
     // room for the chips: a «лицевая 99′ 9⅞″» chip wide at the sides, two chips high above and below
     // room for the chips (they run along their line): two chips' height and the letters
-    const padX = (FS + space[2]) * 2 + space[6];
-    const padY = (FS + space[2]) * 2 + space[6];
+    // room for the gutters' numbers at the ends (#3078: the lengths are listed under the drawing, not on it)
+    const padX = FS + space[2] + space[6];
+    const padY = FS + space[2] + space[6];
     const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
     const k = Math.min((w - 2 * padX) / Math.max(0.3, Math.max(...xs) - Math.min(...xs)), (H - 2 * padY) / Math.max(0.3, Math.max(...ys) - Math.min(...ys)));
     const cx = (Math.max(...xs) + Math.min(...xs)) / 2, cy = (Math.max(...ys) + Math.min(...ys)) / 2;
@@ -70,17 +71,6 @@ export function CornerSketch({ d, f, cut, w, angleDeg, fmt = "ftin" }: { d: Draw
   }, [d, f, w, H, t, FS]);
   const byId = new Map(cut.map((x) => [x.id, x]));
   const th = FS + space[2];
-  /**
-   * a chip along a line (founder 09.11: the numbers overlapped): at the line's middle, turned with it (kept upright),
-   * pushed off it along the normal `nu` (±1) by half its height and `gap`
-   */
-  const chipBy = (mx: number, my: number, u: [number, number], nu: [number, number], sign: 1 | -1, text: string, strong: boolean, key: string, gap: number) => {
-    const reach = th / 2 + gap;
-    let deg = (Math.atan2(u[1], u[0]) * 180) / Math.PI;
-    if (deg > 90) deg -= 180;
-    if (deg < -90) deg += 180;
-    return chip(mx + nu[0] * reach * sign, my + nu[1] * reach * sign, text, strong, key, deg);
-  };
   const chip = (x: number, y: number, text: string, strong: boolean, key: string, deg = 0) => {
     const tw = labelWidth(text, FS, space[2]);
     return (
@@ -89,25 +79,6 @@ export function CornerSketch({ d, f, cut, w, angleDeg, fmt = "ftin" }: { d: Draw
         <SvgText x={x} y={y + FS * 0.35} fontSize={FS} fontFamily={strong ? font.families.semibold : font.families.medium} fill={strong ? c.ink : c.mut} textAnchor="middle">{text}</SvgText>
       </G>
     );
-  };
-  const GAP_WALL = space[2], GAP_FACE = space[6] + space[2]; // the face chip stands beyond the strip (the strip is `space[6]` wide)
-  const gapOf = (sign: 1 | -1) => (sign > 0 ? GAP_FACE : GAP_WALL);
-  /** the chip on leg i, side `sign`: in the middle; inside the angle moved out along the leg past the other leg's chips */
-  const chipOn = (i: number, sign: 1 | -1, text: string, strong: boolean, key: string, gap: number) => {
-    const l = geo.lines[i]!, o = geo.lines[1 - i]!;
-    const Lpx = Math.hypot(l.far[0] - geo.corner[0], l.far[1] - geo.corner[1]);
-    const tw = labelWidth(text, FS, space[2]);
-    const inside = (l.nu[0] * o.u[0] + l.nu[1] * o.u[1]) * sign > 0;
-    let along = Lpx / 2;
-    if (inside) {
-      // the other leg's chip on this side of it reaches this far off its line; past the corner by that (over the sine)
-      const oSign = ((o.nu[0] * l.u[0] + o.nu[1] * l.u[1]) > 0 ? 1 : -1) as 1 | -1;
-      const reach = gapOf(oSign) + th;
-      const sin = Math.max(0.5, Math.abs(l.u[0] * o.u[1] - l.u[1] * o.u[0]));
-      // …and past the arc with its degrees
-      along = Math.min(Lpx - tw / 2, Math.max(along, reach / sin + tw / 2 + space[2] + space[6]));
-    }
-    return chipBy(geo.corner[0] + l.u[0] * along, geo.corner[1] + l.u[1] * along, l.u, l.nu, sign, text, strong, key, gap);
   };
   return (
     <View testID="corner-sketch">
@@ -123,8 +94,8 @@ export function CornerSketch({ d, f, cut, w, angleDeg, fmt = "ftin" }: { d: Draw
             <G key={l.id}>
               <Path d={`M${geo.corner[0]} ${geo.corner[1]}L${l.far[0]} ${l.far[1]}`} stroke={c.ink} strokeWidth={dt.runW} strokeLinecap="round" fill="none" />
               <Path d={`M${geo.m[0]} ${geo.m[1]}L${l.far[0] + l.n[0]} ${l.far[1] + l.n[1]}`} stroke={c.ink} strokeWidth={dt.runW / 2} strokeDasharray={`${dt.runW} ${dt.runW}`} fill="none" />
-              {chipOn(i, -1, `${t("mod.gutters.draw.cutWall")} ${fmtLen(x.backIn, fmt)}`, false, `b${i}`, GAP_WALL)}
-              {chipOn(i, 1, `${t("mod.gutters.draw.cutFace")} ${fmtLen(x.frontIn, fmt)}`, true, `f${i}`, GAP_FACE)}
+              {/* the gutter's number past its end, level (#3078, design review №15): its lengths are in «Раскрой» under the drawing, «Gutter N» */}
+              {chip(l.far[0] + l.u[0] * (th / 2 + space[2]), l.far[1] + l.u[1] * (th / 2 + space[2]), String(d.runs.findIndex((r) => r.id === l.id) + 1), true, `n${i}`)}
             </G>
           );
         })}

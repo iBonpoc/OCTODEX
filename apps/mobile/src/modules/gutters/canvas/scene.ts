@@ -262,7 +262,8 @@ function buildSceneAll(d: Drawing, o: SceneOpts): Scene {
   });
   if (o.cornerText) for (const k of corners) {
     // the degrees sit on the bisector of the angle, just outside its arc (founder 12.11: «градус возле дуги, с той стороны, где угол», #1275)
-    const rr = k.arc ? k.arc.r : o.dsPad ?? 0;
+    // a picked corner's round ring (#3071) is the degrees' inner edge too: they never touch it (#3078, design review №19)
+    const rr = Math.max(k.arc ? k.arc.r : o.dsPad ?? 0, k.picked ? DT.dsR * 2 + DT.labelGap * 2 : 0);
     // the degrees are placed BEFORE the lengths (a length slides along its gutter; the angle has one place) and have many places to try: on the
     // bisector, then turned off it, then farther — a sharp wedge still finds one free of the lines (#1352 review: the angle is not lost)
     const hc = Math.ceil(font.size.micro * 1.4);

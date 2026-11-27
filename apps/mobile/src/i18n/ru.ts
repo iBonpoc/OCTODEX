@@ -3561,6 +3561,7 @@ export const ru = {
   "mod.gutters.draw.cornerNote": "Сменится сторона всей линии",
   "mod.gutters.draw.redoShort": "Вперёд",
   "mod.gutters.draw.splash": "Splash guard",
+  "mod.gutters.draw.sketchKey": "Сплошная — стена, пунктир — лицевая; длины — в «Раскрое» ниже",
   "mod.gutters.draw.cutTitle": "Раскрой",
   "mod.gutters.draw.cutAngle": "угол {deg}°",
   "mod.gutters.draw.cutRun": "Gutter {n}",

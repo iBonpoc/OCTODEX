@@ -3561,6 +3561,7 @@ export const en: Dict = {
   "mod.gutters.draw.cornerNote": "The side of the whole line changes",
   "mod.gutters.draw.redoShort": "Redo",
   "mod.gutters.draw.splash": "Splash guard",
+  "mod.gutters.draw.sketchKey": "Solid — wall, dashed — face; the lengths are in the cut list below",
   "mod.gutters.draw.cutTitle": "Cut list",
   "mod.gutters.draw.cutAngle": "corner {deg}°",
   "mod.gutters.draw.cutRun": "Gutter {n}",
