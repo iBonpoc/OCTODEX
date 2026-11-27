@@ -45,7 +45,7 @@ const GROUP_TITLE = { overdue: "proto.money.g.overdue", waiting: "proto.money.g.
 export default function Invoices() {
   const { f: fParam, customer, g: gParam } = useLocalSearchParams<{ f?: string; customer?: string; g?: string }>();
   const { db, role } = useStore();
-  const { t, money, day } = useI18n();
+  const { t, tn, money, day } = useI18n();
   const remind = useInvoiceRemind();
   const chips = useMoneyChips("invoices");
   const { create, onCreate } = useMoneyCreate();
@@ -100,7 +100,7 @@ export default function Invoices() {
     const job = db.jobs.find((j) => j.id === i.jobId);
     const prop = db.properties.find((x) => x.id === job?.propertyId) ?? db.properties.find((x) => x.customerId === i.customerId);
     const partOf = owes > 0 && i.paidCents > 0 ? t("lst.ofTotal", { amount: money(i.totalCents) }) : undefined;
-    const sub = [partOf, when, late ? t("proto.money.reminders", { n: remindersOf(db, i.id).length }) : undefined].filter(Boolean).join(" · ");
+    const sub = [partOf, when, late && remindersOf(db, i.id).length ? tn("lst.reminded", remindersOf(db, i.id).length) : undefined].filter(Boolean).join(" · ");
     return {
       key: i.id,
       testID: `invoice-row-${i.id}`,

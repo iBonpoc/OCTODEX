@@ -11,6 +11,8 @@ import { filterStoreKey } from "@/ui/filterBarRules";
 import { usePersistentState } from "@/data/persist";
 import { Empty, Screen } from "@/ui/surfaces";
 import { openContact } from "@/ui/listCard";
+import { mapsUrl, type OS } from "@/ui/listCardLayout";
+import { Platform } from "react-native";
 import { GroupedList, GroupRow, ListGroup } from "@/ui/groupedList";
 import { telHref } from "@/features/contactLinks";
 import { initialsOf } from "@/features/invoice/moneySummary";
@@ -78,21 +80,27 @@ export default function Jobs() {
     const when = v && j.status !== "unscheduled" ? time(v.start) : undefined;
     const who = visitPeople(db, v).map((m) => memberLabel(m, t)).filter(Boolean).join(", ") || undefined;
     const tel = telHref(c?.phone);
+    const addrFull = p ? [p.address, p.city].filter(Boolean).join(", ") : "";
     return (
       <GroupRow
         key={j.id}
         testID={`job-row-${j.id}`}
         title={c?.name ?? "—"}
-        // #3018 (founder #3017): 1 — the client · the phone; 2 — the address; 3 — when · what · who (not «me» to the tech) · the sum (office)
-        titleNote={c?.phone || undefined}
+        // #3018 (founder #3017): 1 — the client; 2 — the address; 3 — the sum (office) · when · what · who (not «me» to the tech)
+        // with «Позвонить · Маршрут» on the right the phone in the name's line pushed the deeds into a 4th line: the call button IS the phone
         subtitle={p ? shortAddress(p.address, p.city) : undefined}
-        extra={[when, j.title, office ? who : undefined].filter(Boolean).join(" · ") || undefined}
-        // the sum first in line 3 and never cut (#2672, design-review); the tech never sees it
-        value={office ? money(j.amountCents) : undefined}
+        // line 3 — the sum first, never cut (#2672; the tech never sees it), then when · what · who
+        extra={[office ? money(j.amountCents) : undefined, when, j.title, office ? who : undefined].filter(Boolean).join(" · ") || undefined}
+        wrap
         lead={{ initials: initialsOf(c?.name) }}
         // read only: a job has no hand moves (statusMoves) — the date comes from scheduling, «done» from the visit's payment
         status={showStatus ? { status: st.status, label: t(st.label) } : undefined}
-        actions={tel ? [{ icon: "phone", a11y: `${t("client.call")} ${c?.name ?? ""}`, onPress: () => openContact({ kind: "call", icon: "phone", url: tel, value: c?.phone ?? "" }), testID: `job-row-call-${j.id}` }] : undefined}
+        // founder #3018: «Давай маршрут. А нельзя сделать несколько кнопок? Позвонить, маршрут» — two icons, call first (the order of
+        // contactActions: call, SMS, map), each its 44 zone; only what the job has
+        actions={[
+          ...(tel ? [{ icon: "phone" as const, a11y: `${t("client.call")} ${c?.name ?? ""}`, onPress: () => openContact({ kind: "call", icon: "phone", url: tel, value: c?.phone ?? "" }), testID: `job-row-call-${j.id}` }] : []),
+          ...(addrFull ? [{ icon: "map" as const, a11y: `${t("client.route")}: ${addrFull}`, onPress: () => openContact({ kind: "map", icon: "map", url: mapsUrl(addrFull, Platform.OS as OS), value: addrFull }), testID: `job-row-route-${j.id}` }] : []),
+        ]}
         onPress={() => router.push(`/job/${j.id}`)}
       />
     );

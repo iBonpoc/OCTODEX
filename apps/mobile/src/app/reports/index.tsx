@@ -60,7 +60,8 @@ export default function Reports() {
     // «за этот месяц» once, under the title — not «Месяц ·» in four rows of five (layout review 27.11, Д-строка-5)
     <Screen title={t("rpt.title")} subtitle={t("rpt.monthLine")} back={back} help={t("rpt.help")} hintKey="reports">
       <GroupedList testID="rpt-list">
-        <ListGroup>{REPORTS.map(row)}</ListGroup>
+        {/* founder #3018: «каждой строке свою» — каталог и отчёты тоже */}
+        <ListGroup separate>{REPORTS.map(row)}</ListGroup>
       </GroupedList>
     </Screen>
   );
