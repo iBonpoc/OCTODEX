@@ -11,6 +11,8 @@ import { Card, FieldGroup, SectionTitle } from "@/ui/surfaces";
 import { SECTIONS } from "./registry";
 import { StatusNote } from "@/ui/statusNote";
 import { ViewTabs } from "@/ui/viewTabs";
+import { ScrollFadeRow } from "@/ui/scrollFade";
+import { useTheme } from "@/theme/ThemeProvider";
 
 const UNITS = ["ft", "in", "yd", "m", "cm", "mm"] as const;
 /** DS §9б: short words → the menu at the field; long names → the list («›»); a colour → the colour field (demo palette — data, not tokens) */
@@ -63,6 +65,8 @@ export function SelectorsSection() {
   const [reqName, setReqName] = useState("");
   const [reqKind, setReqKind] = useState<"a" | "b" | null>(null);
   const [reqDone, setReqDone] = useState(false);
+  const { c } = useTheme();
+  const [fadePick, setFadePick] = useState<string>(MANY[0]);
   return (
     <View testID="showcase-selectors" style={{ gap: space[3] }}>
       <SectionTitle title={`${t(s.title)} · ${s.ds}`} />
@@ -74,6 +78,14 @@ export function SelectorsSection() {
         <View testID="showcase-vtabs-picked">
           <T v="caption">{t("ds.vtabs.picked", { name: t(VTABS.find(([k]) => k === vtab)![1]) })}</T>
         </View>
+      </Card>
+      {/* DS «ScrollFade» horizontal (#3080): a row of chips wider than its place fades at the edge with more past it */}
+      <Card>
+        <T v="heading">{t("ds.sfade.title")}</T>
+        <T v="caption" tone="mut">{t("ds.sfade.hint")}</T>
+        <ScrollFadeRow ground={c.surf} testID="showcase-sfade-row">
+          <ChoiceChips nowrap items={MANY.map((m) => ({ key: m, label: m }))} value={fadePick} onChange={setFadePick} />
+        </ScrollFadeRow>
       </Card>
       <Card>
         <T v="heading">{t("ds.select.title")}</T>

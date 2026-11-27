@@ -369,8 +369,8 @@ function DrawCanvas() {
   };
 
   // the latest values for gesture callbacks and the delayed save
-  const cur = useRef({ drawing, view, tool, story, selected, pickedCorner, m, canSave, ch, layers, autoDs, size, newDef });
-  cur.current = { drawing, view, tool, story, selected, pickedCorner, m, canSave, ch, layers, autoDs, size, newDef };
+  const cur = useRef({ drawing, view, tool, story, selected, pickedCorner, m, canSave, ch, layers, autoDs, size, newDef, wide });
+  cur.current = { drawing, view, tool, story, selected, pickedCorner, m, canSave, ch, layers, autoDs, size, newDef, wide };
   // the store of this render for the save that runs later (module.op through the core's queue)
   const storeRef = useRef(store);
   storeRef.current = store;
@@ -763,7 +763,9 @@ function DrawCanvas() {
       if ((lab?.id.startsWith("len:") || lab?.id.startsWith("ds:")) && liftTap.current) return;
       if (lab?.id.startsWith("len:")) {
         setSelected(lab.id.slice(4));
-        setLenEdit(lab.id.slice(4));
+        // 820/1280: the column on the right already holds this gutter's length (its tape) — no window over it, one place to edit
+        // (design-review #3066 №13); 390: the length window
+        if (!cur.current.wide) setLenEdit(lab.id.slice(4));
         return;
       }
       // (the lift of a drag of an end or a corner is a tap on the spot on the web: not a tap on its label, #818 review)
@@ -1774,7 +1776,9 @@ function DrawCanvas() {
 
       {/* 820/1280: the panel on the right (what is picked, or how to pick); 390: the sheet from «Свойства» */}
       {wide ? (
-        <View testID="draw-panel" style={{ position: "absolute", right: ins.right + space[3], top: ins.top + space[2], bottom: ins.bottom + space[3], width: component.panelW, padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd, gap: space[2] }}>
+        // the length window of a new gutter (it goes away on «Отменить») stands over the column: the column dims and takes no
+        // touch until it closes — one place to edit the length (design-review #3066 №13)
+        <View testID="draw-panel" pointerEvents={quick ? "none" : "auto"} accessibilityElementsHidden={!!quick} importantForAccessibility={quick ? "no-hide-descendants" : "auto"} style={{ opacity: quick ? component.dimOpacity : 1, position: "absolute", right: ins.right + space[3], top: ins.top + space[2], bottom: ins.bottom + space[3], width: component.panelW, padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd, gap: space[2] }}>
           {newSheet ? (
             <>
               <AttrBody>{newBody()}</AttrBody>
