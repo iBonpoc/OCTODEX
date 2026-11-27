@@ -38,7 +38,6 @@ import { Button, IconButton, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card, Empty, Screen, SectionTitle } from "@/ui/surfaces";
 import { fabItems } from "@/nav/sections";
-import { CardGrid, ListCard } from "@/ui/listCard";
 import { FilterBar } from "@/ui/filterBar";
 import { Banner } from "@/ui/banner";
 import { GroupRow, ListGroup } from "@/ui/groupedList";
@@ -81,7 +80,7 @@ export default function JobScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const store = useStore();
   const { db } = store;
-  const { t, money, day, time, duration } = useI18n();
+  const { t, money, moneyWhole, day, time, duration } = useI18n();
   const toast = useToast();
   const [tab, setTab] = useState<Section>("overview");
   const [filter, setFilter] = useState<JobHistoryFilter>("all");
@@ -367,24 +366,24 @@ export default function JobScreen() {
         }
       />
       {visits.length ? (
-        <CardGrid>
+        // #3022 (founder 26.11: «заходишь в работы, там тоже списки… разделить»): each record its own frame, the lists' rows (#3017)
+        <ListGroup separate testID="job-visits">
           {visits.map((v) => {
             const vs = visitStatus(v, db.members, Date.now(), lateAfterOf(db), visitDueCents(db, v));
             const tech = db.members.find((m) => m.id === v.techId);
             return (
-              <ListCard
+              <GroupRow
                 key={v.id}
-                density="compact"
                 testID={`job-visit-${v.id}`}
-                lead={{ kind: "icon", icon: "calendar" }}
+                lead={{ icon: "calendar" }}
                 title={`${day(v.start)} · ${visitWhen(v, time, t("plan5.allDay"), false)}`}
-                when={[memberLabel(tech, t) ?? t("sch.noTech"), v.allDay ? undefined : duration(v.durationMin)].filter(Boolean).join(" · ")}
-                status={{ tone: vs.status, label: t(vs.label) }}
+                subtitle={[memberLabel(tech, t) ?? t("sch.noTech"), v.allDay ? undefined : duration(v.durationMin)].filter(Boolean).join(" · ")}
+                status={{ status: vs.status, label: t(vs.label) }}
                 onPress={() => openVisit(v.id)}
               />
             );
           })}
-        </CardGrid>
+        </ListGroup>
       ) : (
         <Empty icon="calendar" title={t("job3.noVisit")} />
       )}
@@ -396,22 +395,22 @@ export default function JobScreen() {
   const estimateCard = (e: Estimate) => {
     const v = estView[e.status];
     return (
-      <ListCard
+      <GroupRow
         key={e.id}
-        density="compact"
         testID={`job-estimate-${e.id}`}
-        lead={{ kind: "icon", icon: "invoice" }}
+        lead={{ icon: "invoice" }}
         title={e.title || e.number || t("cc.kind.estimate")}
-        when={e.title ? e.number : undefined}
-        value={money(e.totalCents)}
-        status={{ tone: v.s, label: t(v.l), draft: v.d }}
+        titleNote={e.title ? e.number : undefined}
+        figureRight
+        value={moneyWhole(e.totalCents)}
+        status={{ status: v.s, label: t(v.l), draft: v.d }}
         onPress={() => router.push(`/estimate/${e.id}`)}
       />
     );
   };
   const newEstimate = office && estimateHref && !j.estimateId && makes.some((m) => m.id === "estimate") ? () => router.push(estimateHref as never) : undefined;
   const estimatesSection = estimates.length ? (
-    <CardGrid>{estimates.map(estimateCard)}</CardGrid>
+    <ListGroup separate testID="job-estimates">{estimates.map(estimateCard)}</ListGroup>
   ) : (
     <View testID="job-money-no-estimate">
       <Empty
@@ -463,19 +462,18 @@ export default function JobScreen() {
         }
       />
       {expenses.length ? (
-        <CardGrid>
+        <ListGroup separate testID="job-expenses">
           {expenses.map((x) => (
-            <ListCard
+            <GroupRow
               key={x.id}
-              density="compact"
               testID={`job-expense-${x.id}`}
-              lead={{ kind: "icon", icon: "wallet" }}
+              lead={{ icon: "wallet" }}
               title={x.vendor}
-              when={`${t(`exp.cat.${x.category}` as DictKey)} · ${day(x.at)}`}
+              subtitle={`${t(`exp.cat.${x.category}` as DictKey)} · ${day(x.at)}`}
               value={money(x.amountCents)}
             />
           ))}
-        </CardGrid>
+        </ListGroup>
       ) : null}
     </>
   );
@@ -512,19 +510,18 @@ export default function JobScreen() {
         />
       </View>
       {items.length ? (
-        <CardGrid>
+        <ListGroup separate testID="job-history">
           {items.map((e) => (
-            <ListCard
+            <GroupRow
               key={e.id}
-              density="compact"
-              lead={{ kind: "icon", icon: e.icon }}
+              lead={{ icon: e.icon }}
               title={t(e.title)}
-              when={[day(e.at), e.reason ? t(e.reason) : undefined, e.detail].filter(Boolean).join(" · ")}
+              subtitle={[day(e.at), e.reason ? t(e.reason) : undefined, e.detail].filter(Boolean).join(" · ")}
               value={e.cents !== undefined ? money(e.cents) : undefined}
               onPress={e.href ? () => router.push(e.href as never) : undefined}
             />
           ))}
-        </CardGrid>
+        </ListGroup>
       ) : (
         <Empty icon="history" title={t("job3.h.empty")} />
       )}
