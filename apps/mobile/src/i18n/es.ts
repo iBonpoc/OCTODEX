@@ -5781,4 +5781,5 @@ export const es: Dict = {
   "oc.est.sentToday": "Enviado hoy · sin firmar",
   "oc.est.sentAgo": "Enviado hace {n} d · sin firmar",
   "oc.est.noAnswer": "Sin respuesta · {n} d · sin firmar",
+  "oc.client.forInvoices": "Para facturas",
 };
