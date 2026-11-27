@@ -5,6 +5,13 @@
  */
 import { fracLabel } from "../canvas/format";
 
+/** the main row: eighths, 0 … 7 of 8 (a fraction in sixteenths = 2 × this) */
+export const EIGHTHS = [0, 1, 2, 3, 4, 5, 6, 7] as const;
+/** the second row, behind «1/16»: the odd sixteenths */
+export const ODD_SIXTEENTHS = [1, 3, 5, 7, 9, 11, 13, 15] as const;
+/** a fraction in sixteenths (0..15) → the key of its button in the eighths row, or null when it is a sixteenth (odd) */
+export const eighthKey = (e16: number): string | null => (e16 % 2 === 0 ? String(e16 / 2) : null);
+
 /** the fraction's place is as wide as the widest of 1/16 … 15/16 (figures are tabular): the row is the same with any value — it never wraps on 11/16 and back */
 export const FRAC_SLOT = Array.from({ length: 15 }, (_, i) => fracLabel(i + 1)).reduce((a, b) => (b.length > a.length ? b : a), "");
 
