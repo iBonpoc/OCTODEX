@@ -64,7 +64,8 @@ export default function Payments() {
     const how = t(`pay.${x.method}` as DictKey);
     const way = ref && (ref.toLowerCase().includes(x.method) || ref.toLowerCase().includes(how.toLowerCase())) ? ref : [how, ref].filter(Boolean).join(" ");
     // #2992 (lists B): the sum alone on the right; the way («Чек #1042», «Zelle») leads the line, then the day and the invoice
-    const sub = [review, way, day(x.at), inv?.number, x.refundedCents ? t("mny.refunded", { amount: money(x.refundedCents) }) : undefined];
+    // the group «Сегодня» already says the day (layout review 27.11, Д-строка-5)
+    const sub = [review, way, whenOf(x as Payment) === "today" ? undefined : day(x.at), inv?.number, x.refundedCents ? t("mny.refunded", { amount: money(x.refundedCents) }) : undefined];
     return {
       key: x.id,
       testID: `payment-row-${x.id}`,
