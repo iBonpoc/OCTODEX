@@ -142,10 +142,11 @@ export default function CompanyIntake() {
             {form ? (
               <View style={{ gap: space[2] }}>
                 <ListGroup testID="intake-form-actions">
-                  <GroupRow testID="intake-copy-link" title={t("intake.set.copyLink")} subtitle={link} lead={{ icon: "copy" }} onPress={() => void copyText(link).then(() => toast.show(t("intake.set.copied")))} />
-                  <GroupRow testID="intake-share" title={t("intake.set.share")} lead={{ icon: "send" }} onPress={() => shareText(t("intake.set.shareText"), link)} />
-                  <GroupRow testID="intake-copy-code" title={t("intake.set.copyCode")} subtitle={t("intake.set.codeHint")} wrap lead={{ icon: "copy" }}
-                    onPress={() => void copyText(siteSnippet(link, t("intake.title"))).then(() => toast.show(t("intake.set.copied")))} />
+                  <GroupRow testID="intake-copy-link" title={t("intake.set.copyLink")} subtitle={form.enabled ? link : t("intake.set.formOff")} wrap lead={{ icon: "link" }}
+                    onPress={() => void copyText(link).then(() => toast.show(t("intake.set.copiedLink")))} />
+                  <GroupRow testID="intake-share" title={t("intake.set.share")} subtitle={form.enabled ? undefined : t("intake.set.formOff")} wrap lead={{ icon: "share" }} onPress={() => shareText(t("intake.set.shareText"), link)} />
+                  <GroupRow testID="intake-copy-code" title={t("intake.set.copyCode")} subtitle={form.enabled ? t("intake.set.codeHint") : t("intake.set.formOff")} wrap lead={{ icon: "doc" }}
+                    onPress={() => void copyText(siteSnippet(link, t("intake.title"))).then(() => toast.show(t("intake.set.copiedCode")))} />
                 </ListGroup>
                 {/* while it saves the row stays where it is, off (nothing jumps under the finger, DS §14.4) */}
                 <ReadOnly value={busy}>

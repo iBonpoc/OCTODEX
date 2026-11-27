@@ -4697,6 +4697,9 @@ export const ru = {
   "intake.set.copyCode": "Скопировать код для сайта",
   "intake.set.codeHint": "Код — кнопка-ссылка: на сайте она открывает форму в новой вкладке.",
   "intake.set.copied": "Скопировано",
+  "intake.set.copiedLink": "Ссылка скопирована",
+  "intake.set.copiedCode": "Код скопирован",
+  "intake.set.formOff": "Форма выключена — по ссылке заявку не отправить",
   "intake.set.rotate": "Сменить ссылку",
   "intake.set.rotateAsk": "Старая ссылка сразу перестанет работать. На сайте и в Google нужно будет поставить новую.",
   "intake.set.hook": "Zapier и Make",
@@ -5831,6 +5834,10 @@ export const ru = {
   "ov3061.pinnedMine": "{who} · {when} · видите только вы",
   "ov3061.unpin": "Открепить заметку",
   "ov3061.unpinned": "Заметка откреплена",
+  "ov3068.place": "Объект {n}",
+  "ov3068.placeN": "Объект {n} · {label}",
+  "ov3068.allJobs": "Все работы · {n}",
+  "ov3068.billingSame": "Как у объекта {n}",
   "ov3061.all": "Все",
 } as const;
 

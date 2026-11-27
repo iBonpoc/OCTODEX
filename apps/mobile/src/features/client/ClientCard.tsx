@@ -172,7 +172,7 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
   };
 
   /* ---------- the strip ---------- */
-  const keys = clientSectionKeys(role, f.hasMoney, r.properties.length > 1);
+  const keys = clientSectionKeys(role, f.hasMoney, r.properties.length > 0);
   const current: ClientSectionKey = keys.includes(section) ? section : "overview";
   const workN = office ? r.jobs.length : f.visits.length;
   const sections = useMemo(

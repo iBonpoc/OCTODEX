@@ -153,19 +153,9 @@ export function ClientOverview({ c, f, onSection, withNow }: {
   // v2 макет 3: the card's own visit is a row too — the card holds the job, the rows the days (not the visit twice: the card has no visit line)
   void nowVisitId;
   const ahead = f.visits.filter((v) => isOpenVisit(v) && dayOffsetOf(isoDayKey(v.start)) >= 0).slice(0, 2);
-  // the pinned notes of the client (v2 «Gate code 4512 · small dog / закреплено · видят мастера»): the warm plate first
-  // #3061 (crm-review): only what the viewer may read — the team's notes and his own private ones (the same rule as NotesBlock)
-  const pinned = db.notes.filter((n) => n.subjectType === "customer" && n.subjectId === c.id && n.pinned && !(n as { deletedAt?: string }).deletedAt && (n.visibility === "team" || n.authorId === db.me));
   const aheadRow = useAheadRow(f);
   const openTasks = r.tasks.filter((x) => !x.doneAt);
-  const place = r.properties.find((p) => p.accessNotes || p.gateCode) ;
-  const gateSeen = place ? canSeeGateCode(db, f.role, place.id) : false;
   const dw = useDayWord();
-  // #3061 (founder: «кто это закрепил? как это закрепить?»): the note says who wrote it, when and who sees it; «Открепить» — one tap
-  // on the row's pin, with «Вернуть» (rule 5); pinning — the pin of a note in «Журнал»
-  const pinLine = (n: (typeof pinned)[number]) =>
-    t(n.visibility === "team" ? "ov3061.pinnedTeam" : "ov3061.pinnedMine", { who: memberName(db, n.authorId, t)?.split(" ")[0] ?? "—", when: dw(n.at) });
-  const unpin = (id: string) => toast.show(t("ov3061.unpinned"), store.updateNote(id, { pinned: false }));
   const toggleTask = (x: (typeof openTasks)[number]) => {
     const res = store.saveTask({ ...x, doneAt: x.doneAt ? undefined : new Date().toISOString() });
     toast.show(t("task.done"), res.undo);
@@ -194,30 +184,8 @@ export function ClientOverview({ c, f, onSection, withNow }: {
       {/* #3061: every group says what it is — «Важно знать» (the pinned notes, the access), «Впереди» (the visits) — no row without
           its title; every record its own frame (#3060) */}
       <GroupedList testID="client-top">
-        <ListGroup separate title={t("ov3061.important")} testID="client-top-group">
-          {pinned.map((n) => (
-            <GroupRow
-              key={n.id}
-              testID={`client-pinned-${n.id}`}
-              lead={{ icon: "note" }}
-              wrap
-              title={n.body}
-              subtitle={pinLine(n)}
-              actions={office || n.authorId === db.me ? [{ icon: "pushpin", a11y: t("ov3061.unpin"), onPress: () => unpin(n.id), testID: `client-unpin-${n.id}` }] : undefined}
-              onPress={() => onSection("log")}
-            />
-          ))}
-          {place && (place.accessNotes || place.gateCode) ? (
-            <GroupRow
-              testID="client-access"
-              lead={{ icon: "key" }}
-              wrap
-              title={place.gateCode ? (gateSeen ? t("proto.client.gateIs", { code: place.gateCode }) : t("proto.client.gateLater")) : t("proto.client.access")}
-              subtitle={[place.accessNotes, r.properties.length > 1 ? propertyTitle(place) : null].filter(Boolean).join(" · ") || undefined}
-              onPress={r.properties.length > 1 ? () => onSection("places") : () => router.push(`/property/${place.id}`)}
-            />
-          ) : null}
-        </ListGroup>
+        {/* #3068 (founder 27.11: «в обзоре не нравится… важно знать… код ворот… заметка… прикреплена, откреплена»): no «Важно знать» —
+            the access, the people and the notes of a place are in «Объекты», the client's pinned notes first in «Журнал» */}
         <ListGroup separate title={t("ov3061.ahead")} testID="client-ahead">
           {ahead.map((v) => aheadRow(v))}
         </ListGroup>
@@ -675,40 +643,95 @@ export function ClientPlaces({ c, f, onRoute }: { c: Customer; f: ClientFacts; o
         />
       ) : (
         <GroupedList>
-          {r.properties.map((p) => {
-            const seen = canSeeGateCode(db, f.role, p.id);
-            const people = propertyPeople(db, p);
-            const jobs = r.jobs.filter((j) => j.propertyId === p.id);
-            const open = jobs.filter((j) => j.status !== "done" && !j.cancelledAt).length;
-            return (
-              <ListGroup key={p.id} testID={`client-property-${p.id}`}>
-                <GroupRow
-                  lead={{ icon: "home2" }}
-                  title={propertyTitle(p)}
-                  subtitle={[p.city, p.label, p.stories ? t("proto.client.stories", { n: p.stories }) : null].filter(Boolean).join(" · ")}
-                  actions={[{ icon: "navigate", a11y: `${t("client.route")}: ${propertyTitle(p)}`, onPress: () => onRoute(p), testID: `client-property-route-${p.id}` }]}
-                  onPress={() => router.push(`/property/${p.id}`)}
-                />
-                {p.gateCode ? (
-                  <GroupRow compact lead={{ icon: "key" }} title={seen ? t("proto.client.gateIs", { code: p.gateCode }) : t("proto.client.tile.gate")} subtitle={seen ? (office ? t("proto.client.gateRule") : undefined) : t("proto.client.gateLater")} testID={`client-property-gate-${p.id}`} />
-                ) : null}
-                {p.accessNotes ? <GroupRow compact lead={{ icon: "alert" }} title={t("proto.client.access")} subtitle={p.accessNotes} /> : null}
-                {people.length ? <GroupRow compact lead={{ icon: "users" }} title={t("proto.client.onSite")} subtitle={people.map((x) => x.name).join(" · ")} /> : null}
-                {jobs.length ? (
-                  <GroupRow compact lead={{ icon: "wrench" }} title={t("proto.client.jobsHere", { n: jobs.length })} subtitle={open ? t("prop.openJobs", { n: open }) : undefined} onPress={() => router.push(`/property/${p.id}`)} />
-                ) : null}
-              </ListGroup>
-            );
-          })}
+          {r.properties.map((p, i) => <PlaceCard key={p.id} p={p} n={i + 1} f={f} onRoute={onRoute} />)}
           {office ? (
-            <ListGroup testID="client-billing">
-              <GroupRow lead={{ icon: "invoice" }} title={t("client.row.billing")} subtitle={c.billing ? billingLine(c.billing) : t("client.row.billingSame")} onPress={() => router.push(`/client/edit?id=${c.id}`)} />
+            // #3068 (crm/design review): the billing address is the client's, under its own title; the same as a place — said so
+            <ListGroup title={t("client.row.billing")} testID="client-billing">
+              <GroupRow
+                lead={{ icon: "invoice" }}
+                title={c.billing ? billingLine(c.billing) : propertyTitle(r.properties[0]!)}
+                subtitle={c.billing ? undefined : t("ov3068.billingSame", { n: 1 })}
+                chevron
+                onPress={() => router.push(`/client/edit?id=${c.id}`)}
+              />
+            </ListGroup>
+          ) : null}
+          {add ? (
+            <ListGroup testID="client-places-add">
+              <GroupRow lead={{ icon: "plus" }} title={t("prop.add")} onPress={add} testID="client-add-property" />
             </ListGroup>
           ) : null}
         </GroupedList>
       )}
       <PropertySheet value={newProp} onClose={() => setNewProp(null)} />
     </View>
+  );
+}
+
+/**
+ * #3068 (founder 27.11: «объект 1, объект 2… адрес, по нему какие-то комментарии, доступы на объекте, имена, работы»): one card a place,
+ * under its title «Объект 1 · Home» — the address with the route, the access (the gate code by its rights, the words of the way in),
+ * the notes of the place (pinned first, two), the people on site, the jobs there (three, with their status; «Все работы · N»).
+ */
+function PlaceCard({ p, n, f, onRoute }: { p: Property; n: number; f: ClientFacts; onRoute: (p: Property) => void }) {
+  const { t } = useI18n();
+  const dw = useDayWord();
+  const { db, r, office } = f;
+  const seen = canSeeGateCode(db, f.role, p.id);
+  const people = propertyPeople(db, p);
+  const jobs = r.jobs.filter((j) => j.propertyId === p.id).sort((a, b) => Number(a.status === "done") - Number(b.status === "done") || b.id.localeCompare(a.id));
+  const notes = db.notes
+    .filter((x) => x.subjectType === "property" && x.subjectId === p.id && !(x as { deletedAt?: string }).deletedAt && (x.visibility === "team" || x.authorId === db.me))
+    .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.at.localeCompare(a.at));
+  const street = [p.address, p.unit].filter(Boolean).join(", ");
+  const open = () => router.push(`/property/${p.id}`);
+  return (
+    <ListGroup title={p.label ? t("ov3068.placeN", { n, label: p.label }) : t("ov3068.place", { n })} testID={`client-property-${p.id}`}>
+      <GroupRow
+        lead={{ icon: "home2" }}
+        title={street || propertyTitle(p)}
+        subtitle={[p.place ? [p.place.city, [p.place.state, p.place.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ") : p.city, p.stories ? t("proto.client.stories", { n: p.stories }) : null].filter(Boolean).join(" · ")}
+        actions={[{ icon: "navigate", a11y: `${t("client.route")}: ${propertyTitle(p)}`, onPress: () => onRoute(p), testID: `client-property-route-${p.id}` }]}
+        onPress={open}
+      />
+      {p.gateCode || p.accessNotes ? (
+        <GroupRow
+          lead={{ icon: "key" }}
+          wrap
+          title={p.gateCode ? (seen ? t("proto.client.gateIs", { code: p.gateCode }) : t("proto.client.gateLater")) : t("proto.client.access")}
+          subtitle={p.accessNotes || undefined}
+          // the rule is said once, to whom it matters: the tech who does not see the code yet
+          testID={`client-property-gate-${p.id}`}
+        />
+      ) : null}
+      {notes.slice(0, 2).map((x) => (
+        <GroupRow
+          key={x.id}
+          testID={`client-property-note-${x.id}`}
+          lead={{ icon: x.pinned ? "pushpin" : "note" }}
+          wrap
+          title={x.body}
+          subtitle={t(x.visibility === "team" ? "ov3061.pinnedTeam" : "ov3061.pinnedMine", { who: memberName(db, x.authorId, t)?.split(" ")[0] ?? "—", when: dw(x.at) })}
+          onPress={open}
+        />
+      ))}
+      {people.map((x) => (
+        <GroupRow key={x.id} testID={`client-property-person-${x.id}`} lead={{ icon: "user" }} title={x.name} subtitle={t("proto.client.onSite")} />
+      ))}
+      {jobs.slice(0, 3).map((j) => (
+        <GroupRow
+          key={j.id}
+          compact
+          testID={`client-property-job-${j.id}`}
+          lead={{ icon: "wrench" }}
+          title={j.title || j.number || t("cc.kind.job")}
+          subtitle={[j.number, jobVisitLine(f.visits, j, t)].filter(Boolean).join(" · ") || undefined}
+          status={{ status: jobStatusView[j.status].status, label: t(jobStatusView[j.status].label) }}
+          onPress={() => router.push(`/job/${j.id}`)}
+        />
+      ))}
+      {jobs.length > 3 ? <GroupRow compact lead={{ icon: "wrench" }} title={t("ov3068.allJobs", { n: jobs.length })} chevron onPress={open} testID={`client-property-jobs-${p.id}`} /> : null}
+    </ListGroup>
   );
 }
 
