@@ -8,7 +8,7 @@
  * - «Назад» takes the last pick back.
  * No fixed pauses: it waits on what it checks.
  */
-const { skipLength, pickAttr, attrKeys, attrChosen, attrClose, winSave } = require("../gutters.cjs");
+const { skipLength, pickAttr, attrKeys, attrChosen, attrClose, winSave, tilesEven, pairFits, openAttrMore } = require("../gutters.cjs");
 const { sheetGone } = require("../sheet.cjs");
 const KEY = "octo.db.v5";
 
@@ -80,6 +80,19 @@ exports.run = async (h) => {
   const over = await items.evaluateAll((es) => es.filter((e) => e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1 || !e.querySelector("svg")).map((e) => e.getAttribute("data-testid")));
   h.expect(over.length === 0 && (await items.count()) === 4, `four tiles with an icon each, none overflows (${over.join(",")})`);
   h.expect((await tid("attr-ds-kind-button").count()) === 0, "the kind is no menu field any more");
+  // #3051: the tiles are one width and height, in one row; the pairs stand in one line, nothing cut — with the longest words
+  { const bad = await tilesEven(p, "attr-ds-kind"); h.expect(bad === "", `the kind tiles are even (${bad})`); }
+  await pickAttr(p, "attr-head", "conductor"); // «Leader head» — the longest top
+  { const bad = await pairFits(p, "attr-ds-size", "attr-ds-story"); h.expect(bad === "", `size · storey in one line (${bad || "ok"})`); }
+  // every bottom beside the longest top: none is cut
+  for (const key of await attrKeys(p, "attr-bottom")) {
+    await pickAttr(p, "attr-bottom", key);
+    const bad = await pairFits(p, "attr-bottom", "attr-head");
+    h.expect(bad === "", `Низ · Верх in one line with «${key}» (${bad || "ok"})`);
+  }
+  await openAttrMore(p);
+  if (await tid("attr-gauge-button").count()) { const bad = await pairFits(p, "attr-material", "attr-gauge"); h.expect(bad === "", `material · gauge (${bad || "ok"})`); }
+  await h.shot("pairs");
   await h.shot("kinds");
 
   // «Сохранить» keeps the window's picks as ONE step (DS §7.3, #2412 PR3): one «Назад» takes them all back — smooth rectangular again
