@@ -95,7 +95,7 @@ exports.run = async (h) => {
   h.expect(await line.undo(h), "«Вернуть» pressed");
   await p.waitForFunction((n) => document.querySelectorAll('[data-testid^="est-line-"]').length === n, before.length, { timeout: 3000 });
   h.expect((await lineIds()).join() === before.join(), "all three back, each on its place");
-  h.expect(/\$35\b/.test(await tid(`est-sum-${keep}`).innerText()), "the price changed between the deletions stays ($35)");
+  h.expect(/\$35\.00\b/.test(await tid(`est-sum-${keep}`).innerText()), "the price changed between the deletions stays ($35.00)");
 
   // another toast between two deletions ends the series: the next deletion is «Позиция удалена», not «Удалено позиций: 2»
   await del(x);

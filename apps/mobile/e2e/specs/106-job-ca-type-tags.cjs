@@ -23,7 +23,7 @@ exports.run = async (h) => {
   await p.getByText("Repair", { exact: true }).first().click(); await p.waitForTimeout(400);
   await h.sheet().getByPlaceholder("Цена").fill("100.01");
   await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).last().click(); await p.waitForTimeout(500);
-  await h.expectText(/Нужен договор/, "over $500 on a home in CA — the warning");
+  await h.expectText(/Нужен договор/, "over $500.00 on a home in CA — the warning");
   await h.expectText(/нужен письменный договор/, "it says what is needed");
   h.expect((await p.getByRole("button", { name: /Сделать смету/ }).count()) === 0, "no «Сделать смету» button (it would make a second job)");
   await h.shot("ca");

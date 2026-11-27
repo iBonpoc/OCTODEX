@@ -1,6 +1,6 @@
 # ADR-002. Монорепозиторий и общие пакеты
 
-- **Статус:** Proposed — needs founder/tech review
+- **Статус:** действует с поправкой · сверено с кодом 26.11.2026. Монорепозиторий на npm workspaces есть, но пакетов два — `packages/design-tokens` и `packages/estimating-engine`, а приложение одно — `apps/mobile`. Десяти пакетов из ADR нет (#2709). Было: Proposed — needs founder/tech review
 - **Дата:** 03.11.2026
 - **Связано:** `06-architecture.md` §3, ADR-001, ADR-005, ADR-008
 

@@ -58,7 +58,8 @@ exports.run = async (h) => {
   await h.expectText(/К оплате/, "tech: «К оплате»");
   h.expect(!/Прибыль/.test(await h.text()), "tech: no profit");
   // B4: each invoice of his job is a compact card with what is left to collect — not the invoice total
-  const usd = (c) => (c % 100 ? `$${(c / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : `$${(c / 100).toLocaleString("en-US")}`);
+  // #2888: the app shows money always with cents (founder #2672)
+  const usd = (c) => `$${(c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   h.expect(db.invoices.some((i) => i.jobId === job.id), "the job has an invoice (the check below is not blind)");
   for (const inv of db.invoices.filter((i) => i.jobId === job.id)) {
     const card = p.getByTestId(`job-invoice-${inv.id}`).locator("visible=true");

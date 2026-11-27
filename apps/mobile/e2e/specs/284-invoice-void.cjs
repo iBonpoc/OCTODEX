@@ -38,7 +38,7 @@ exports.run = async (h) => {
   await p.getByTestId("job-screen-sections-invoices").locator("visible=true").click();
   await p.getByTestId(`statement-void-${wrong.id}`).waitFor();
   await p.waitForFunction(() => /\$0(\.00)?$/.test((document.querySelector('[data-testid="statement-invoiced"]')?.textContent ?? "").trim()));
-  h.expect(true, "the statement counts nothing for it (Выставлено $0)");
+  h.expect(true, "the statement counts nothing for it (Выставлено $0.00)");
   await p.getByTestId("statement-bill-balance").click();
   db = await pick((d) => d.invoices.some((i) => i.jobId === "j6"), "the right invoice goes through");
   h.expect(db.invoices.filter((i) => i.jobId === "j6").length === 1 && db.voidInvoices.filter((i) => i.jobId === "j6").length === 1, "one live, one voided");

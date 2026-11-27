@@ -34,7 +34,7 @@ exports.run = async (h) => {
   // С1 on the visit itself
   await h.go(`/visit/${a.id}`);
   await p.getByText("Подписан · закрыть").locator("visible=true").first().waitFor({ timeout: 8000 });
-  h.expect((await p.getByText("Ждёт оплаты", { exact: true }).locator("visible=true").count()) === 0, "С1 the visit with $0 due is not «Ждёт оплаты»");
+  h.expect((await p.getByText("Ждёт оплаты", { exact: true }).locator("visible=true").count()) === 0, "С1 the visit with $0.00 due is not «Ждёт оплаты»");
   await h.shot("visit-zero");
   // С2 on the visit with money to take
   await h.go(`/visit/${b.id}`);

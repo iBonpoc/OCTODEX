@@ -1,6 +1,6 @@
 # ADR-005. Движок смет — общий детерминированный пакет с decimal-деньгами
 
-- **Статус:** Proposed — needs founder/tech review
+- **Статус:** действует · сверено с кодом 26.11.2026: `packages/estimating-engine` (decimal.js, целые центы) — единственный расчёт денег (правило 8). Было: Proposed — needs founder/tech review
 - **Дата:** 03.11.2026
 - **Связано:** `02-product-vision.md` §4, `04-domain-model.md` §0, §3 (Assembly), PRD `05`, `06`, `18-money-test-cases.md`, ADR-002
 

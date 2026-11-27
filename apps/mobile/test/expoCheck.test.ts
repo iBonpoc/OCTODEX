@@ -48,6 +48,33 @@ describe("scripts/depsChanged.cjs against a real git history (the base is the ME
     const head = commit(d, "package-lock.json", "{}");
     expect(run(d, { EVENT_NAME: "pull_request", BASE_SHA: base, HEAD_SHA: head }).stdout).toContain("deps=true");
   });
+  // #2945: PR #2917 changed only "scripts" and "description" in package.json and went red on the Expo patch check.
+  const pkg = (extra: Record<string, unknown>) => JSON.stringify({ name: "x", scripts: { a: "1" }, dependencies: { expo: "54.0.1" }, ...extra }, null, 2);
+  const prOn = (file: string, before: string, after: string) => {
+    const d = mkdtempSync(join(tmpdir(), "deps-"));
+    git(d, "init", "-q", "-b", "main");
+    const base = commit(d, file, before);
+    git(d, "checkout", "-q", "-b", "pr");
+    const head = commit(d, file, after);
+    return run(d, { EVENT_NAME: "pull_request", BASE_SHA: base, HEAD_SHA: head }).stdout;
+  };
+  it("package.json: only scripts / description changed → false (#2945)", () => {
+    for (const f of ["package.json", "apps/mobile/package.json"]) expect(prOn(f, pkg({}), pkg({ scripts: { a: "2", b: "3" }, description: "new" })), f).toContain("deps=false");
+  });
+  it("package.json: a version in any dependency field changed → true (#2945)", () => {
+    expect(prOn("apps/mobile/package.json", pkg({}), pkg({ dependencies: { expo: "54.0.2" } }))).toContain("deps=true");
+    for (const field of ["devDependencies", "peerDependencies", "optionalDependencies", "overrides", "resolutions"])
+      expect(prOn("package.json", pkg({}), pkg({ [field]: { left: "1.0.0" } })), field).toContain("deps=true");
+  });
+  it("package.json that cannot be compared (new file, broken JSON) → true (the strict side)", () => {
+    expect(prOn("package.json", "{ not json", pkg({}))).toContain("deps=true");
+    const d = mkdtempSync(join(tmpdir(), "deps-"));
+    git(d, "init", "-q", "-b", "main");
+    const base = commit(d, "README.txt", "x");
+    git(d, "checkout", "-q", "-b", "pr");
+    const head = commit(d, "packages/new/package.json", pkg({}));
+    expect(run(d, { EVENT_NAME: "pull_request", BASE_SHA: base, HEAD_SHA: head }).stdout).toContain("deps=true");
+  });
   it("a base that cannot be found → true (the strict side); push / nightly → false (a warning only)", () => {
     const d = mkdtempSync(join(tmpdir(), "deps-"));
     git(d, "init", "-q", "-b", "main");
