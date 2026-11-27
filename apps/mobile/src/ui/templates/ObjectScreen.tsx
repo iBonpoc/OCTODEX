@@ -17,6 +17,7 @@ import { MainStep, type MainStepTotal } from "../mainStep";
 import { ObjectHeader, objectHeadSub, type ObjectHeaderProps } from "../objectHeader";
 import { Card, Screen, useFooterShown } from "../surfaces";
 import { ViewTabs } from "../viewTabs";
+import { T } from "../primitives";
 import { CreateButton, MoreButton, TemplateFrame } from "./parts";
 import { SECOND_KEY, moreItems, templateLayout } from "./templateRules";
 import type { CreateAction, MainAction, MoreAction } from "./types";
@@ -101,8 +102,17 @@ function useObjectParts<S extends string>(p: ObjectScreenProps<S>) {
     () => (p.sections.length ? <ViewTabs testID={`${p.testID}-sections`} items={p.sections} value={p.section} onChange={p.onSection} label={p.sectionsLabel} look={p.sectionsLook} /> : null),
     [p.sections, p.section, p.onSection, p.sectionsLabel, p.sectionsLook, p.testID],
   );
+  // the whole line under the name with the status (#3012/#3031 review: «Оплачено» stood a grey word without its icon — rule 2):
+  // the status with its icon first, then the line («✓ Оплачено · $342.00»); never cut — it wraps whole
+  const statusLine = p.subtitle && p.header.status ? (
+    <View testID={`${p.testID}-subtitle`} style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: space[1] }}>
+      {objectHeadSub(p.header).line2}
+      {p.subtitle ? <T v="caption" w="medium" tone="mut">{`· ${p.subtitle}`}</T> : null}
+    </View>
+  ) : null;
   const top = (
     <View style={{ gap: space[4] }}>
+      {statusLine}
       {/* v2 «Объект»: the quick actions stand right under the big block (its 4 + the column's 12 — v2 6 + 6), not a gap further */}
       <View style={{ gap: space[1] }}>
         <ObjectHeader {...p.header} inHead open={open} onToggle={setOpen} />
@@ -156,6 +166,7 @@ function ObjectLive<S extends string>(p: ObjectScreenProps<S>) {
       footer={bar ?? undefined}
       testID={p.testID}
       title={p.header.title}
+      subtitle={p.header.status ? undefined : p.subtitle}
       head={head}
       back={p.back}
       right={right}
