@@ -82,12 +82,13 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
   const route = (p: Property) => Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(propertyMapQuery(p))}`).catch(() => {});
   // #2996: «Замер» is the measuring module's measurement (never a new estimate); no such module — no icon
   const measureHref = canServe(db, c.id) ? clientMeasureHref(db, role, clientPlaceCtx(db, c.id, r.leadIds, r.properties)) : undefined;
-  /** v2 «быстрые действия»: five icons 44 with their words; what cannot be done is dimmed with the reason (VoiceOver) */
+  /** v2 «быстрые действия»: five icons 44 with their words — one order on every object (#2995): Позвонить · SMS · Почта · Маршрут · Замер;
+   *  what cannot be done is dimmed with the reason (VoiceOver) */
   const quick: IconRowItem[] = [
     { icon: "phone", label: t("client.call"), a11y: `${t("client.call")} ${c.name}`, onPress: call, testID: "client-call", disabled: !tel, reason: t("w2b.client.noPhone") },
     { icon: "message", label: t("cc.sms"), a11y: `${t("cc.sms")} ${c.name}`, onPress: () => sms(), testID: "client-write", disabled: !tel || !main, reason: t("w2b.client.noPhone") },
-    { icon: "route", label: t("client.route"), a11y: place ? `${t("client.route")}: ${place.address}` : t("client.route"), onPress: () => place && route(place), testID: "client-route", disabled: !place, reason: t("w2b.client.noPlace") },
     { icon: "mail", label: t("cl6.writeMail"), a11y: `${t("cl6.writeMail")} ${c.name}`, onPress: () => mail && Linking.openURL(mail).catch(() => {}), testID: "client-mail", disabled: !mail, reason: t("w2b.client.noMail") },
+    { icon: "route", label: t("client.route"), a11y: place ? `${t("client.route")}: ${place.address}` : t("client.route"), onPress: () => place && route(place), testID: "client-route", disabled: !place, reason: t("w2b.client.noPlace") },
     ...(measureHref ? [{ icon: "measure" as const, label: t("w2b.client.measure"), a11y: `${t("w2b.client.measure")}: ${c.name}`, onPress: () => router.push(measureHref as Href), testID: "client-measure" }] : []),
   ];
 
