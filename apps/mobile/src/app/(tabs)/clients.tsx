@@ -139,6 +139,8 @@ export default function Clients() {
       value: m && m.owesCents > 0 ? moneyWhole(m.owesCents) : undefined,
       status: status ? { ...status, iconOnly: true } : undefined,
       valueTop: true,
+      // #3035: the client's own number under the sum
+      refNo: c.number || undefined,
       // #3017: the call stays for a debtor too — they are called most (crm-review 27.11)
       actions: tel ? [{ icon: "phone" as const, a11y: `${t("client.call")} ${c.name}`, onPress: () => openContact({ kind: "call", icon: "phone", url: tel, value: c.phone ?? "" }), testID: `client-row-call-${c.id}` }] : undefined,
       swipe: { left: swipeLeft, right: swipeRight },

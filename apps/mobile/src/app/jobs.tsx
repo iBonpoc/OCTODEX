@@ -93,6 +93,7 @@ export default function Jobs() {
         extra={[office ? moneyWhole(j.amountCents) : undefined, when, j.title, office ? who : undefined].filter(Boolean).join(" · ") || undefined}
         wrap
         lead={{ initials: initialsOf(c?.name) }}
+        refNo={j.number || undefined}
         // read only: a job has no hand moves (statusMoves) — the date comes from scheduling, «done» from the visit's payment
         status={showStatus ? { status: st.status, label: t(st.label) } : undefined}
         // founder #3018: «Давай маршрут. А нельзя сделать несколько кнопок? Позвонить, маршрут» — two icons, call first (the order of

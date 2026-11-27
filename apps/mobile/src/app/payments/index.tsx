@@ -76,6 +76,7 @@ export default function Payments() {
       testID: `payment-row-${x.id}`,
       title: c?.name ?? "—",
       titleNote: way || undefined,
+      refNo: x.receiptNumber || undefined,
       subtitle: prop ? shortAddress(prop.address, prop.city) : undefined,
       extra: sub.filter(Boolean).join(" · ") || undefined,
       figureRight: true,

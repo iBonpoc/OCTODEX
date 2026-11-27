@@ -191,6 +191,9 @@ export interface GroupRowProps {
   /** #3018 (design/crm review): a money list keeps its sum on the right, big — a column read top to bottom (Jobber, Wallet); with
    *  `titleNote` and without it the sum goes to line 3 (clients, leads, jobs: the right side is the call) */
   figureRight?: boolean;
+  /** #3035 (founder 27.11; design/crm review — В): the object's own number («CLT-0008», «EST-0006»), right-aligned in line 2 under
+   *  the sum, `micro` `mut`, never cut — the address gives way; a linked document's number stays in line 3 */
+  refNo?: string;
   /** #3033: the sum in the name's own line, at the right end (with the status icon when there is one) — the clients' list */
   valueTop?: boolean;
   /** the line under the title: «работа · адрес · когда» */
@@ -229,7 +232,7 @@ export interface GroupRowProps {
  * The inside of a GroupRow — the lead, the title 15/600 over its line 13 `mut`, the figure or columns, a StatusPill and «›» — for a
  * row whose press is its owner's (an estimate's line: it opens in place, it is held to be carried). One look for every row (#2387).
  */
-export function GroupRowBody({ title, titleNote, extra, figureRight, valueTop, subtitle, lead, value, cols, status, compact, wrap, selected, chevron, quiet, valueMark, padRight = space[4], below, ids }: Pick<GroupRowProps, "title" | "titleNote" | "extra" | "figureRight" | "valueTop" | "subtitle" | "lead" | "value" | "cols" | "status" | "compact" | "wrap" | "selected" | "chevron" | "valueMark"> & {
+export function GroupRowBody({ title, titleNote, extra, figureRight, valueTop, refNo, subtitle, lead, value, cols, status, compact, wrap, selected, chevron, quiet, valueMark, padRight = space[4], below, ids }: Pick<GroupRowProps, "title" | "titleNote" | "extra" | "figureRight" | "valueTop" | "refNo" | "subtitle" | "lead" | "value" | "cols" | "status" | "compact" | "wrap" | "selected" | "chevron" | "valueMark"> & {
   /** a row that counts for nothing now (a hidden line, a line on the client's choice): the title and the figure `mut` */
   quiet?: boolean;
   padRight?: number;
@@ -241,6 +244,16 @@ export function GroupRowBody({ title, titleNote, extra, figureRight, valueTop, s
   const { c } = useTheme();
   const check = lead && "done" in lead ? lead : null;
   const top = !!value && !titleNote && (!!status?.iconOnly || !!valueTop);
+  /** #3035: where the sum stands in the right column, the number goes under it there; else at the end of line 2 */
+  const refRight = !!refNo && !!value && !top && !(titleNote && !figureRight) && !cols?.length;
+  const refLine2 = refNo && !refRight ? refNo : undefined;
+  const refUnder = refRight ? (
+    <View testID="row-ref-no">
+      <T v="micro" tone="mut" tabular numberOfLines={1}>
+        {refNo}
+      </T>
+    </View>
+  ) : null;
   /** a column with a status word («Просрочен 9 дн», DS §3.3) is wide and never shrinks: the name takes a second line, the subtitle is cut first */
   const wordCol = !!cols?.some((x) => x.tone);
   const pad = { minHeight: compact ? component.rowCompact : component.listRow.h, paddingVertical: space[2], gap: space[3] };
@@ -290,13 +303,22 @@ export function GroupRowBody({ title, titleNote, extra, figureRight, valueTop, s
             </View>
           ) : null}
         </View>
-        {subtitle ? (
-          <View testID={ids?.subtitle}>
-            <View testID={ids?.subtitleInner}>
-              <T v="caption" tone="mut" tabular numberOfLines={wrap ? 2 : 1}>
-                {subtitle}
-              </T>
+        {subtitle || refLine2 ? (
+          <View testID={ids?.subtitle} style={refLine2 ? { flexDirection: "row", alignItems: "baseline", gap: space[2] } : undefined}>
+            <View testID={ids?.subtitleInner} style={refLine2 ? { flex: 1, minWidth: 0 } : undefined}>
+              {subtitle ? (
+                <T v="caption" tone="mut" tabular numberOfLines={wrap ? 2 : 1}>
+                  {subtitle}
+                </T>
+              ) : null}
             </View>
+            {refLine2 ? (
+              <View testID="row-ref-no" style={{ flexShrink: 0 }}>
+                <T v="micro" tone="mut" tabular numberOfLines={1}>
+                  {refLine2}
+                </T>
+              </View>
+            ) : null}
           </View>
         ) : null}
         {/* #3017: with the phone in the name's line the right side keeps only the call — the status and the sum go to line 3
@@ -323,10 +345,11 @@ export function GroupRowBody({ title, titleNote, extra, figureRight, valueTop, s
         {below}
       </View>
       {titleNote && figureRight && value ? (
-        <View testID={ids?.value} style={{ flexShrink: 0 }}>
+        <View testID={ids?.value} style={{ flexShrink: 0, alignItems: "flex-end" }}>
           <T v="body" w="bold" tabular tone={quiet ? "mut" : "ink"} numberOfLines={1}>
             {value}
           </T>
+          {refUnder}
         </View>
       ) : titleNote ? null : cols?.length
         ? cols.map((x, i, all) => (
@@ -351,11 +374,12 @@ export function GroupRowBody({ title, titleNote, extra, figureRight, valueTop, s
               <T v="body" w="semibold" tabular tone={quiet ? "mut" : "ink"} numberOfLines={1}>
                 {value}
               </T>
+              {refUnder}
               <StatusPill status={status.status} label={status.label} draft={status.draft} />
             </View>
           )
         : value ? (
-            <View testID={ids?.value}>
+            <View testID={ids?.value} style={refUnder ? { alignItems: "flex-end" } : undefined}>
               {valueMark ? (
                 <T v="caption" tone="mut" numberOfLines={1}>
                   {value}
@@ -365,6 +389,7 @@ export function GroupRowBody({ title, titleNote, extra, figureRight, valueTop, s
                   {value}
                 </T>
               )}
+              {refUnder}
             </View>
           ) : null}
       {status?.iconOnly && !value && !titleNote ? (
@@ -378,7 +403,7 @@ export function GroupRowBody({ title, titleNote, extra, figureRight, valueTop, s
   );
 }
 
-export function GroupRow({ title, titleNote, extra, figureRight, valueTop, subtitle, lead, value, cols, status, actions = [], swipe, onPress, compact, wrap, selected, chevron, valueTestID, valueMark, testID }: GroupRowProps) {
+export function GroupRow({ title, titleNote, extra, figureRight, valueTop, refNo, subtitle, lead, value, cols, status, actions = [], swipe, onPress, compact, wrap, selected, chevron, valueTestID, valueMark, testID }: GroupRowProps) {
   const { c } = useTheme();
   const [down, setDown] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -387,7 +412,7 @@ export function GroupRow({ title, titleNote, extra, figureRight, valueTop, subti
   const onLong = more.length ? (e: GestureResponderEvent) => setMenu({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY, w: 0, h: 0 }) : undefined;
   const onAction = (e: AccessibilityActionEvent) => more.find((a) => a.key === e.nativeEvent.actionName)?.onPress();
   const check = lead && "done" in lead ? lead : null;
-  const main = <GroupRowBody title={title} titleNote={titleNote} extra={extra} figureRight={figureRight} valueTop={valueTop} subtitle={subtitle} lead={lead} value={value} cols={cols} status={status} compact={compact} wrap={wrap} selected={selected} chevron={chevron} padRight={actions.length ? 0 : space[4]} ids={valueTestID ? { value: valueTestID } : undefined} valueMark={valueMark} />;
+  const main = <GroupRowBody title={title} titleNote={titleNote} extra={extra} figureRight={figureRight} valueTop={valueTop} refNo={refNo} subtitle={subtitle} lead={lead} value={value} cols={cols} status={status} compact={compact} wrap={wrap} selected={selected} chevron={chevron} padRight={actions.length ? 0 : space[4]} ids={valueTestID ? { value: valueTestID } : undefined} valueMark={valueMark} />;
   const tap = onPress || onLong ? (
     <Press
       onPress={onPress}
