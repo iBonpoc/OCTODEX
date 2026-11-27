@@ -13,6 +13,7 @@ import type { DocAttachPage } from "@/features/docPages";
 import { pagesProblem } from "@/features/docPages";
 import type { DB, Estimate, EstimateDoc } from "@/data/types";
 import { estimateTitle, newDoc, uid } from "@/features/estimateDoc";
+import { SECTIONS_MAX, SECTION_TITLE_MAX } from "@octo/estimating-engine";
 import { moduleActive, type ModuleEstimateStore } from "../registry";
 import { leadEstimatePropertyId } from "@/features/access";
 import { docLanguageFor } from "@/data/people";
@@ -49,6 +50,49 @@ export function otherEstimates(db: Pick<DB, "estimates">, m: Pick<MeasurementRow
   return db.estimates
     .filter((e) => e.status !== "declined" && !hasLinesOf(e, m.id) && ((!!m.leadId && e.leadId === m.leadId) || (!!m.propertyId && e.propertyId === m.propertyId)))
     .sort((a, b) => (b.number ?? "").localeCompare(a.number ?? "", "en", { numeric: true }));
+}
+
+/**
+ * #3027 (founder 26.11, #3047 А, #3048 А, решение #3054; spec 70 §4.2): ONE estimate for the whole job — which one a measurement's
+ * lines go to. 1) the estimate with its lines (`own`); 2) else the lead's / the address's open DRAFT without them; 3) else its sent
+ * one without an answer (it becomes «Изменена после отправки» — «Отправить изменения», #2637); 4) else a new one. A signed or a
+ * declined one is never joined (a signed one gets «Доп. смета», #2728).
+ */
+export type EstimateTarget = { kind: "own"; estimate: Estimate } | { kind: "join"; estimate: Estimate } | { kind: "new" };
+export function estimateTarget(db: Pick<DB, "estimates">, m: Pick<MeasurementRow, "id" | "leadId" | "propertyId">): EstimateTarget {
+  const own = estimateOfMeasurement(db, m.id);
+  if (own) return { kind: "own", estimate: own };
+  const open = otherEstimates(db, m).filter((e) => !SIGNED.has(e.status));
+  const pick = open.find((e) => e.status === "draft") ?? open.find((e) => e.status === "sent");
+  return pick ? { kind: "join", estimate: pick } : { kind: "new" };
+}
+
+/**
+ * #3027 (spec 70 §4.1 А): does the estimate step run BY ITSELF now («Готово» on the canvas, a draft just linked)? Yes for a new
+ * estimate, for joining an open one (a sent one too — #3048 А) and for a draft of its own the drawing changed after. A sent or a
+ * signed one of its own is never changed by itself: the card's step asks («Перенести изменения» → «Отправить изменения»; «Доп. смета»).
+ */
+export function autoEstimate(db: Pick<DB, "estimates"> & Partial<Pick<DB, "moduleData" | "company">>, m: Pick<MeasurementRow, "id" | "status" | "leadId" | "propertyId"> | null, hasElements: boolean): boolean {
+  const a = estimateAction(db, m, hasElements);
+  if (a.kind === "make") return true;
+  if (a.kind !== "update") return false;
+  return db.estimates.find((e) => e.id === a.estimateId)?.status === "draft";
+}
+
+/** the measurement's own section in an option (spec 70 §4.3: «Gutters» — the measurement's lines; a person's own lines outside it) */
+export const sectionIdOf = (measurementId: string) => `${KEY}:${measurementId}`.slice(0, 64);
+/** the option with the measurement's section (put first once, when its lines first come) and its lines without a section put in it */
+function withSection<O extends EstimateDoc["options"][number]>(o: O, measurementId: string, title: string): O {
+  if (!o.lines.some((l) => ofMeasurement(l, measurementId))) return o;
+  const secs = Array.isArray(o.sections) ? o.sections : [];
+  // a saved new version of a sent estimate gives every section a new id (reIdDoc, the lines follow): the measurement's section is the one
+  // its lines already stand in — never a second one
+  const held = o.lines.find((l) => ofMeasurement(l, measurementId) && !!l.sectionId && secs.some((x) => x?.id === l.sectionId))?.sectionId;
+  const id = held ?? sectionIdOf(measurementId);
+  const has = secs.some((x) => x?.id === id);
+  if (!has && secs.length >= SECTIONS_MAX) return o;
+  const sections = has ? secs : [{ id, title: title.slice(0, SECTION_TITLE_MAX), kind: "module" as const, module: KEY }, ...secs];
+  return { ...o, sections, lines: o.lines.map((l) => (ofMeasurement(l, measurementId) && !l.sectionId ? { ...l, sectionId: id } : l)) };
 }
 
 export function estimateOfMeasurement(db: Pick<DB, "estimates">, measurementId: string): Estimate | undefined {
@@ -179,13 +223,14 @@ export function estimateAction(db: Pick<DB, "estimates"> & Partial<Pick<DB, "mod
  * (review M8b №5). A line someone deleted comes back on «Обновить» — to keep a part out, set its quantity to 0
  * (a hand change: it stays 0); spec П23.8.
  */
-export function docWithLines(prev: EstimateDoc | undefined, next: readonly ModuleLine[], measurementId: string, fresh: () => EstimateDoc, catalog: readonly CatalogItem[] = []): EstimateDoc {
+export function docWithLines(prev: EstimateDoc | undefined, next: readonly ModuleLine[], measurementId: string, fresh: () => EstimateDoc, catalog: readonly CatalogItem[] = [], section?: string): EstimateDoc {
+  const sec = (d: EstimateDoc): EstimateDoc => (section ? { ...d, options: d.options.map((o) => withSection(o, measurementId, section)) } : d);
   if (!prev) {
     const d = fresh();
-    return { ...d, options: d.options.map((o, i) => (i === 0 ? { ...o, lines: [...(next as EstimateDoc["options"][number]["lines"])] } : o)) };
+    return sec({ ...d, options: d.options.map((o, i) => (i === 0 ? { ...o, lines: [...(next as EstimateDoc["options"][number]["lines"])] } : o)) });
   }
   const touched = prev.options.some((o) => o.lines.some((l) => ofMeasurement(l, measurementId)));
-  return {
+  return sec({
     ...prev,
     options: prev.options.map((o, i) => {
       const mine = o.lines.some((l) => ofMeasurement(l, measurementId));
@@ -194,7 +239,7 @@ export function docWithLines(prev: EstimateDoc | undefined, next: readonly Modul
       const out = resyncLines(o.lines as ModuleLine[], next, (l) => sourceOf(l)?.module === KEY && !ofMeasurement(l, measurementId), catalog);
       return { ...o, lines: out as typeof o.lines };
     }),
-  };
+  });
 }
 
 /** the measurement's drawing as the estimate's attached page (spec 33 П24.7, S6g; #705): this measurement's page is
@@ -224,13 +269,15 @@ export interface MakeInput {
   fallbackTitle: string;
   /** the clock (tests) */
   now?: () => string;
+  /** #3027: the title of the measurement's section in the estimate, in the CLIENT's language («Gutters · по замеру 11/26») */
+  section?: string;
   /** the drawing as the client sees it (the sheet, #739) — in the CLIENT's language, no prices; none — the estimate's
    *  page of this measurement is left as it is */
   page?: DocAttachPage;
 }
 
 export type MakeResult =
-  | { ok: true; estimateId: string; undo: GuardedUndo; updated: boolean }
+  | { ok: true; estimateId: string; undo: GuardedUndo; updated: boolean; /** #3027: put into the lead's / the address's open estimate */ joined?: true }
   /** off: the module is not active (О2); signed: never changed; noClient: no lead or property this person can make an estimate for */
   | { ok: false; reason: "off" | "signed" | "noClient" | "notHere" };
 
@@ -243,7 +290,9 @@ export function makeEstimate(store: ModuleEstimateStore, x: MakeInput): MakeResu
   const db = store.db;
   // the module first: a lead's client is made only for an estimate that will be (review M8b №1, rule 5)
   if (!moduleActive(db.company, KEY)) return { ok: false, reason: "off" };
-  const e = estimateOfMeasurement(db, x.m.id);
+  // #3027: one estimate for the job — its own, else the lead's / the address's open one (a section «Gutters» in it), else a new one
+  const to = estimateTarget(db, x.m);
+  const e = to.kind === "new" ? undefined : to.estimate;
   if (e && SIGNED.has(e.status)) return { ok: false, reason: "signed" };
   // #1138 (review of #1169 Б1): a NEW estimate only where the person may make one (a tech: a property he works at, the
   // server's estimates_insert) — asked before anything is written: no revision, no «ready», no client from the lead, no
@@ -284,7 +333,7 @@ export function makeEstimate(store: ModuleEstimateStore, x: MakeInput): MakeResu
   const undoReady = store.moduleOp(KEY, { kind: K.mSave, payload: { m: row }, apply: (d) => withGutterData(d, putMeasurement({ ...was, status: "ready" })), coalesceKey: was.id, made: [was.id] });
 
   const lines = linesFromParts(x.parts, x.catalog, x.name, uid, revisionId, x.m.id, (x.now ?? (() => new Date().toISOString()))(), GUTTER_PARTS_VERSION);
-  const withLines = docWithLines(e?.doc, lines, x.m.id, () => newDoc(db.company?.estimate?.depositBps), x.catalog);
+  const withLines = docWithLines(e?.doc, lines, x.m.id, () => newDoc(db.company?.estimate?.depositBps), x.catalog, x.section);
   // the drawing of this revision goes with the estimate (S6g): the client sees on /p/ and in the PDF what it was counted from
   const doc = x.page ? withMeasurementPage(withLines, x.m.id, x.page) : withLines;
   const estimateId = e?.id ?? uid();
@@ -300,7 +349,8 @@ export function makeEstimate(store: ModuleEstimateStore, x: MakeInput): MakeResu
   return {
     ok: true,
     estimateId,
-    updated: !!e,
+    updated: to.kind === "own",
+    ...(to.kind === "join" ? { joined: true as const } : {}),
     // the estimate, the measurement a draft again («Смета» stays in reach; the revision itself is history, it stays) and
     // the lead's new client: all of them go back or none (DS §15.2)
     undo: undoAll(store, [t.undo, undoReady, undoSave]),

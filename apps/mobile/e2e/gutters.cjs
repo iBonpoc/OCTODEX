@@ -425,4 +425,27 @@ async function docsFor(p, id) {
   if (!crew) await showSection(p, id);
 }
 
-module.exports = { tilesEven, pairFits, showSection, editDrawing, canEditDrawing, docsFor, winSave, winClose, pressUndo, pickDsKind, pickAttr, attrShown, attrKeys, attrChosen, attrClose, attrShut, openAttrMore, openDsMenu, openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };
+/** #3027: a lead with nothing open of its own — its «Готово» makes a NEW estimate (a lead with an open one gets the drawing in it, e2e 556) */
+function freeLead(d) {
+  const free = (l) => !d.estimates.some((e) => e.status !== "declined" && ((e.leadId && e.leadId === l.id) || (l.propertyId && e.propertyId === l.propertyId)));
+  return d.leads.find((l) => free(l) && l.propertyId && !["won", "lost", "declined"].includes(l.status)) || d.leads.find((l) => free(l) && !["won", "lost", "declined"].includes(l.status));
+}
+
+/**
+ * #3027 (founder 26.11, #3047 А): after «Готово» the estimate comes by itself — its id, waited for in the phone's data; `edit` — then into
+ * the estimate's editor, where «Сделать смету» used to go.
+ */
+async function autoEstimateOf(p, mid, edit = true) {
+  const id = await p.waitForFunction((m) => {
+    const d = (JSON.parse(localStorage.getItem("octo.db.v5") || "null") || {}).db;
+    const e = (d?.estimates || []).find((x) => (x.doc?.options || []).some((o) => o.lines.some((l) => l.source && l.source.module === "gutters" && l.source.measurementId === m)));
+    return e ? e.id : null;
+  }, mid, { timeout: 8000 }).then((h) => h.jsonValue());
+  if (edit) {
+    await p.goto(new URL(`/estimate/new?id=${encodeURIComponent(id)}`, p.url()).toString());
+    await p.waitForURL(/\/estimate\/new\?id=/, { timeout: 8000 });
+  }
+  return id;
+}
+
+module.exports = { freeLead, autoEstimateOf, tilesEven, pairFits, showSection, editDrawing, canEditDrawing, docsFor, winSave, winClose, pressUndo, pickDsKind, pickAttr, attrShown, attrKeys, attrChosen, attrClose, attrShut, openAttrMore, openDsMenu, openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };

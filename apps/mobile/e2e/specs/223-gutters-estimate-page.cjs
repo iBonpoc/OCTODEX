@@ -8,7 +8,7 @@
  * Finds things by testID; waits on what it checks (CHECKS §9).
  */
 const { estMore, estAct, estHas } = require("../estimateMenu.cjs");
-const { skipLength, openView, backToCanvas, pressWhenStill } = require("../gutters.cjs");
+const { freeLead, autoEstimateOf, skipLength, openView, backToCanvas, pressWhenStill } = require("../gutters.cjs");
 const DB_KEY = "octo.db.v5";
 const TOKEN = "e2e223gutterpage0000000000000001";
 
@@ -36,7 +36,7 @@ exports.run = async (h) => {
   const runsOn = (pg) => pg.items.filter((x) => x.t === "l" && x.sw === 2.5).length;
 
   await h.go("/today");
-  const lead = (await db()).leads.find((l) => l.propertyId) || (await db()).leads[0];
+  const lead = freeLead(await db()); // #3027: no open estimate of its own — «Готово» makes a new one
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
   await waitFor(async () => !!(await db())?.company?.modules?.gutters?.enabled, "the trial is on");
@@ -48,9 +48,8 @@ exports.run = async (h) => {
   await waitFor(() => !!new URL(p.url()).searchParams.get("m"), "saved: the address names the measurement");
   const mid = new URL(p.url()).searchParams.get("m");
   await openView(p);
-  await pressWhenStill(tid("view-action-make"));
-  await p.waitForURL(/\/estimate\/new\?id=/, { timeout: 8000 });
-  const eid = new URL(p.url()).searchParams.get("id");
+  // #3027: «Готово» made the estimate by itself
+  const eid = await autoEstimateOf(p, mid);
   await waitFor(async () => !!(await pageOf(eid, mid)), "the estimate carries the drawing as its page");
   const pg = await pageOf(eid, mid);
   h.expect(pg.title === "Gutter drawing", `in the client's language (${pg.title})`);

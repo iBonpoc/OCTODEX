@@ -2,8 +2,8 @@
  * e2e 555 — после «Привязать» замер говорит, что дальше (#2990, основатель 27.11: «вот я привязал чертёж к лиду Линда Альварес. Что должно
  * произойти? Непонятно»; #2994 — делать сразу на стенде). Every view.
  * - a drawn draft → «Готово» → the card → «Привязать к клиенту или лиду» → a lead that already has an estimate (not of this drawing);
- * - the card says whose it is now («Замер в карточке лида …»), that the lead already has «смета EST-… · <state> — без этого чертежа», the state
- *   chip is «Без сметы из замера» (not a bare «Без сметы»), «Открыть EST-…» opens that estimate, «Открыть лид» opens the lead — where the
+ * - #3048 А (founder 26.11): the drawing goes INTO the lead's open estimate by itself — its section «Gutters · по замеру …», the estimate's
+ *   own lines stay, no second estimate; the card's step is «Открыть смету» (it opens that estimate); «Лид» opens the lead — where the
  *   measurement stands on top of «Обзор», above the events;
  * - #3028: the card is the object frame — the name, «Замер · лид», «Сейчас» with the step, the sections; «Документы» (#2989) on «Сметы»: only «Чертёж» and «Заказ материалов» on the card; «⋯ → Документы бригады» has the cut and the shop drawings.
  * Finds things by testID; waits on what it checks.
@@ -66,15 +66,29 @@ exports.run = async (h) => {
   await waitFor(async () => (await tid("link-sheet").count()) === 0, "the sheet closes");
   await sheetGone(p);
 
-  // what the card says now: the lead's name on top, «Замер · лид»; «Сейчас» — the estimate the lead has without this drawing
+  // what the card says now: the lead's name on top, «Замер · лид»; #3048 А (founder 26.11: «надо делать в ту же смету»): the drawing went INTO
+  // the lead's estimate by itself — its section «Gutters · по замеру …», one estimate for the job (not a second one, not «без этого чертежа»)
   await waitFor(async () => (await text("screen-title")).includes(lead.name), "the lead's name on top");
   h.expect(/Замер · лид/.test(await text("screen-head-big")), `«Замер · лид» (${await text("screen-head-big")})`);
-  h.expect((await text("view-now")).includes(est.number) && /без этого чертежа/.test(await text("view-now")), `«Сейчас»: the lead's estimate without this drawing (${await text("view-now")})`);
-  h.expect(/Без сметы из замера/.test(await text("view-head-status")), `the state is not a bare «Без сметы» (${await text("view-head-status")})`);
-  h.expect((await tid("view-action-make").count()) === 1, "«Сделать смету» from the measurement is still the main step");
+  const mid = new URL(p.url()).searchParams.get("m");
+  const ofM = (l) => l.source && l.source.module === "gutters" && l.source.measurementId === mid;
+  await waitFor(async () => {
+    const e = (await db()).estimates.find((x) => x.id === est.id);
+    const o = e?.doc?.options?.[0];
+    return !!o && o.lines.some(ofM) && (() => { const sid = o.lines.find(ofM).sectionId; return !!sid && o.lines.filter(ofM).every((l) => l.sectionId === sid) && (o.sections || []).some((x) => x.id === sid); })();
+  }, `the drawing is in ${est.number}, its own section`);
+  const after = await db();
+  h.expect(after.estimates.filter((e) => e.leadId === lead.id && e.status !== "declined").length === d0.estimates.filter((e) => e.leadId === lead.id && e.status !== "declined").length, "no second estimate for the lead");
+  // a sent one is saved as its new version (the core gives the lines new ids, reIdDoc): its own lines stay — by what they are
+  const key = (l) => `${l.name}|${l.quantity}|${l.unitPriceCents}`;
+  const before = d0.estimates.find((e) => e.id === est.id).doc.options[0].lines.map(key);
+  const now = after.estimates.find((e) => e.id === est.id).doc.options[0].lines.map(key);
+  h.expect(before.every((k) => now.includes(k)), "the estimate's own lines stay");
+  await tid("view-action-open").waitFor({ timeout: 8000 });
+  h.expect((await tid("view-action-make").count()) === 0 && (await tid("view-open-other").count()) === 0, "no «Сделать смету», no «другая смета»: it is this one");
   await h.shot("after-link");
 
-  // «Открыть лид» → the lead; back; «Открыть EST-…» → that estimate
+  // «Лид» → the lead; back; «Открыть смету» → that estimate
   // #3028: «Лид» is a place in the row of actions (no loose «Открыть лид ›» line)
   await pressWhenStill(tid("view-open-who"));
   await waitFor(() => new URL(p.url()).pathname === `/lead/${lead.id}`, `«Открыть лид» opens the lead (${p.url()})`);
@@ -84,8 +98,7 @@ exports.run = async (h) => {
   h.expect(!!mp && !!ev && mp.y < ev.y, `the measurement is above the lead's events (${mp && Math.round(mp.y)} < ${ev && Math.round(ev.y)})`);
   await h.shot("lead");
   await p.goBack();
-  // the second step stands beside the main one in «Сейчас» (#3028)
-  await tid("view-open-other").waitFor({ timeout: 8000 });
-  await pressWhenStill(tid("view-open-other"));
-  await waitFor(() => new RegExp(`/estimate/${est.id}$`).test(new URL(p.url()).pathname), `«Открыть ${est.number}» opens it (${p.url()})`);
+  await tid("view-action-open").waitFor({ timeout: 8000 });
+  await pressWhenStill(tid("view-action-open"));
+  await waitFor(() => new RegExp(`/estimate/${est.id}$`).test(new URL(p.url()).pathname), `«Открыть смету» opens ${est.number} (${p.url()})`);
 };

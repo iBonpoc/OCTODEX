@@ -32,7 +32,7 @@ import { docWho } from "../docWho";
 import { fmtLen } from "../canvas/format";
 import { fromElements } from "../canvas/model";
 import { gutterData, KEY, measurementOf } from "../data";
-import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, ofMeasurement, otherEstimates, pageIdOf } from "../estimateLink";
+import { autoEstimate as autoEstimateNow, clientLangOf, estimateAction, estimateOfMeasurement, estimateTarget, makeEstimate, ofMeasurement, otherEstimates, pageIdOf } from "../estimateLink";
 import { estimateStatusView } from "@/features/estimateStatus";
 import { CardHead } from "./CardHead";
 import { MeasurementObject } from "./MeasurementObject";
@@ -143,11 +143,14 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
     const d = docWho(store.db, m, tt("mod.gutters.pdf.draft"));
     return d.address ?? d.who;
   };
-  const doEstimate = () => {
+  /** `silent` (#3027, spec 70 §4.1 А): the step that runs by itself — after «Готово» or a link the person stays on the card, a toast says
+   *  what was done with «Вернуть»; where the person may not make an estimate (a tech, «notHere») — nothing, no false toast */
+  const doEstimate = (silent = false) => {
     if (!m || busy.current) return;
-    if (action.kind === "open") return router.push(`/estimate/${action.estimateId}` as Href);
+    if (action.kind === "open") return silent ? undefined : router.push(`/estimate/${action.estimateId}` as Href);
     busy.current = true;
     const tc = tFor(clientLangOf(store.db, m));
+    const companyTz = companyForPortal(store.db, store.companyName ?? APP_NAME).timezone;
     // the drawing as on paper (#739), in the client's language: the estimate's page on /p/ and in its PDF (S6g, #705)
     const company = companyForPortal(store.db, store.companyName ?? APP_NAME);
     const page = drawing.runs.length
@@ -158,17 +161,38 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
           blueprint(drawing, tc, { company: company.name, address: placeText(tc), date: docDay(new Date().toISOString(), company.timezone), rough: m.accuracy !== "tape", fmt }, DP.pageW),
         )
       : undefined;
-    const r = makeEstimate(store, { m, elements: elements ?? [], parts, catalog: store.db.catalog, name: (p) => partName(tc, p, fmt), fallbackTitle: tc("mod.gutters.title"), ...(page ? { page } : {}) });
+    // #3027 (spec 70 §4.3): the measurement's own section in the estimate, in the client's language — «Gutters · по замеру 11/26»
+    const section = tc("mod.gutters.est.section", { d: docDay(new Date().toISOString(), companyTz) });
+    const r = makeEstimate(store, { m, elements: elements ?? [], parts, catalog: store.db.catalog, name: (p) => partName(tc, p, fmt), fallbackTitle: tc("mod.gutters.title"), section, ...(page ? { page } : {}) });
     if (!r.ok) {
       busy.current = false;
+      if (silent) return;
       toast.show(t(r.reason === "noClient" ? "mod.gutters.est.noClient" : r.reason === "signed" ? "mod.gutters.est.signed" : r.reason === "notHere" ? "est.tech.notHere" : "mod.gutters.est.off"));
       return;
     }
-    toast.show(t(r.updated ? "mod.gutters.est.updated" : "mod.gutters.est.made"), r.undo);
+    const n = store.db.estimates.find((e) => e.id === r.estimateId)?.number;
+    toast.show(r.joined ? t("mod.gutters.est.joined", { n: n ?? "" }) : t(r.updated ? "mod.gutters.est.updated" : silent ? "mod.gutters.est.madeAuto" : "mod.gutters.est.made"), r.undo);
+    if (silent) {
+      busy.current = false;
+      return;
+    }
     router.push(`/estimate/new?id=${encodeURIComponent(r.estimateId)}` as Href);
   };
   // «Смета из замера» (the lead) and «Обновить из замера» (the estimate's note) come here with estimate=1. Opening a link never writes:
   // an estimate to open is opened (nothing changes); one to make or update is ASKED — the person presses (the question on top)
+  // #3027 (founder 26.11, #3047 А, #3048 А): the estimate comes BY ITSELF — after «Готово» on the canvas (from=draw) and when a draft gets its
+  // lead or client here (a link): a new one, into the job's open one (a sent one too: «Изменена после отправки»), or its own draft
+  // brought up to the drawing. Its own sent or signed one is never changed by itself (the step asks). Once per arrival / per link.
+  const who = m ? m.leadId ?? m.propertyId ?? null : null;
+  const autoAt = useRef<{ who: string | null; done: boolean }>({ who, done: from !== "draw" });
+  useEffect(() => {
+    if (!m || panel) return;
+    const linked = !autoAt.current.who && !!who;
+    autoAt.current.who = who;
+    if (autoAt.current.done && !linked) return;
+    autoAt.current.done = true;
+    if (autoEstimateNow(store.db, m, drawing.runs.length > 0)) doEstimate(true);
+  });
   const auto = useRef(!!autoEstimate);
   const [ask, setAsk] = useState(false);
   useEffect(() => {
@@ -328,7 +352,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
               <Button
                 label={t(action.kind === "make" ? "mod.gutters.est.make" : action.kind === "update" ? "mod.gutters.est.update" : "mod.gutters.est.open")}
                 icon={action.kind === "open" ? "chevronRight" : "plus"}
-                onPress={doEstimate}
+                onPress={() => doEstimate()}
               />
               {action.kind === "update" ? (
                 <View testID="view-stale"><T v="caption" tone="mut">{t("mod.gutters.view.stale")}</T></View>
@@ -527,11 +551,14 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
     </>
   );
   if (!obj || !route) return content;
+  // #3027: the job's open estimate the step puts this drawing into — «Добавить в EST-0006» (not a second estimate)
+  const tg = action.kind === "make" ? estimateTarget(store.db, m) : null;
+  const joinTo = tg?.kind === "join" ? tg.estimate : null;
   // #2995: the one step by the state (#699) — under the name and its row of actions; a second one («Открыть EST-…») goes into «⋯»
   const main = !money$ ? undefined
     : action.kind === "needLead" ? { label: t("mod.gutters.view.link"), onPress: () => setLinkOpen(true), testID: "view-action-link" }
     : action.kind === "make" || action.kind === "update" || action.kind === "open"
-      ? { label: t(action.kind === "make" ? "mod.gutters.est.make" : action.kind === "update" ? "mod.gutters.est.update" : "mod.gutters.est.open"), onPress: doEstimate, testID: `view-action-${action.kind === "open" && action.signed ? "signed" : action.kind}` }
+      ? { label: joinTo ? t("mod.gutters.est.addTo", { n: joinTo.number ?? "" }) : t(action.kind === "make" ? "mod.gutters.est.make" : action.kind === "update" ? "mod.gutters.est.update" : "mod.gutters.est.open"), onPress: () => doEstimate(), testID: `view-action-${action.kind === "open" && action.signed ? "signed" : action.kind}` }
       : undefined;
   const second = money$ && other && action.kind === "make" ? { label: t("mod.gutters.card.openEst", { n: other.number ?? "" }), onPress: () => router.push(`/estimate/${other.id}` as Href), testID: "view-open-other" } : undefined;
   // «Сейчас» (#3028, as the lead's and the client's cards): why this step, the one button, a second one beside it

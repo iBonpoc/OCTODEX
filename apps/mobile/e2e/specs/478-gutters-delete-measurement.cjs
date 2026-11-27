@@ -4,7 +4,7 @@
  * measurement goes, the estimate stays with the same total and its lines no longer «from the measurement»; «Отменить» — both back.
  * Finds things by testID and the store; waits on what it checks.
  */
-const { skipLength, savedOnce, openView } = require("../gutters.cjs");
+const { freeLead, autoEstimateOf, skipLength, savedOnce, openView } = require("../gutters.cjs");
 const DB_KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -15,7 +15,7 @@ exports.run = async (h) => {
   const hasM = async (mid) => ((await db())?.moduleData?.gutters?.measurements ?? []).some((m) => m.id === mid);
 
   await h.go("/today");
-  const lead = (await db()).leads.find((l) => l.propertyId) || (await db()).leads[0];
+  const lead = freeLead(await db()); // #3027: no open estimate of its own — «Готово» makes a new one
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
   await p.waitForFunction((k) => !!(JSON.parse(localStorage.getItem(k) || "null") || {}).db?.company?.modules?.gutters?.enabled, DB_KEY, { timeout: 8000 });
@@ -35,9 +35,8 @@ exports.run = async (h) => {
   await p.waitForFunction(() => !!new URL(location.href).searchParams.get("m"), null, { timeout: 8000 });
   const mid = new URL(p.url()).searchParams.get("m");
   await openView(p);
-  await tid("view-action-make").click();
-  await p.waitForURL(/\/estimate\/new\?id=/, { timeout: 8000 });
-  const eid = new URL(p.url()).searchParams.get("id");
+  // #3027: «Готово» made the estimate by itself
+  const eid = await autoEstimateOf(p, mid);
   await p.waitForFunction(([k, id, m]) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.estimates ?? []).some((e) => e.id === id && (e.doc?.options ?? []).some((o) => o.lines.some((l) => l.source && l.source.measurementId === m))), [DB_KEY, eid, mid], { timeout: 8000 });
   const total0 = ((await db()).estimates.find((e) => e.id === eid) || {}).totalCents;
 
@@ -49,7 +48,7 @@ exports.run = async (h) => {
 
   // С1: asked first, the words say what happens to the estimate; С5: «Отмена» — nothing changes
   await h.go(`/module/gutters/view?m=${encodeURIComponent(mid)}`);
-  await tid("view-head").waitFor({ timeout: 8000 });
+  await tid("view-more").waitFor({ timeout: 8000 }); // #3028: the object frame's «⋯» (its head has no «view-head» of its own)
   await askDelete();
   h.expect((await tid("m-delete-draft").count()) === 1 && (await tid("m-delete-sent").count()) === 0, "the question names the draft estimate (its lines become ordinary)");
   await h.shot("ask");
