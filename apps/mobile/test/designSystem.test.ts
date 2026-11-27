@@ -686,7 +686,6 @@ describe("design system: no column of buttons (DS §7.5, #3065)", () => {
     "modules/ModulePlaces.tsx": 2,
     "modules/gutters/draw/AttrPanel.tsx": 1,
     "modules/gutters/settings/SettingsScreen.tsx": 1,
-    "modules/gutters/view/ViewScreen.tsx": 1,
     "ui/confirmDialog.tsx": 2, // stays: a dialog may have three answers in a column (HIG Alerts; «Сохранить изменения?», DS §7.5)
     "ui/dateField.tsx": 1, // the quick days «Сегодня · Завтра · Без даты» are a choice, not actions — goes when they become ChoiceChips
   };
