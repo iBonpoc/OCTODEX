@@ -5845,6 +5845,11 @@ export const ru = {
   "ov3068.stories.many": "{n} этажей",
   "ov3068.stories.other": "{n} этажа",
   "ov3061.all": "Все",
+  // #3060 «Работы»: the visits of a job as a line under it
+  "c3060.nextVisit": "следующий {when}",
+  "c3060.lastVisit": "последний {when}",
+  "ds.proto.separate": "Каждая запись — своя рамка",
+  "ds.proto.separateExtra": "2 выезда · следующий вс, 29 нояб.",
 } as const;
 
 export type DictKey = keyof typeof ru;
