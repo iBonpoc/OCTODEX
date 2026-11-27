@@ -3839,6 +3839,8 @@ export const ru = {
   "mod.gutters.set.colorNew": "Новый цвет, например Musket Brown",
   "mod.gutters.set.colorAdd": "Добавить",
   "mod.gutters.set.paletteFrom": "Или взять палитру поставщика целиком (заменит список):",
+  "mod.gutters.set.palFrom": "Палитра поставщика",
+  "mod.gutters.set.palOwn": "Своя",
   "mod.gutters.set.palOf": "{name} ({n})",
   "mod.gutters.set.palModule": "Как было",
   "mod.gutters.set.defRun": "Новый gutter по умолчанию",

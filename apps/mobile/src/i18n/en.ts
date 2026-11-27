@@ -3839,6 +3839,8 @@ export const en: Dict = {
   "mod.gutters.set.colorNew": "New color, e.g. Musket Brown",
   "mod.gutters.set.colorAdd": "Add",
   "mod.gutters.set.paletteFrom": "Or take a supplier's whole palette (replaces the list):",
+  "mod.gutters.set.palFrom": "Supplier palette",
+  "mod.gutters.set.palOwn": "Your own",
   "mod.gutters.set.palOf": "{name} ({n})",
   "mod.gutters.set.palModule": "Reset",
   "mod.gutters.set.defRun": "A new run by default",

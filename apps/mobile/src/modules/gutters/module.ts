@@ -67,7 +67,8 @@ const gutters: ModuleDef = {
       ...(ctx.role === "director" || ctx.role === "dispatcher" ? [{ id: "settings", labelKey: "mod.gutters.set.action" as const, icon: "sliders" as const, href: moduleHref("gutters", "settings") }] : []),
       // «Цены и прайс» (M7d, spec 33 П22.10): who writes the price list (all but a tech — app.is_staff, the core's /catalog)
       ...(ctx.role !== "tech" ? [{ id: "prices", labelKey: "mod.gutters.pr.action" as const, icon: "box" as const, href: moduleHref("gutters", "prices") }] : []),
-      { id: "list", labelKey: "mod.gutters.list.action", icon: "note", href: moduleHref("gutters", "list") },
+      // #3065 (crm-reviewer): no «Замеры» here — it is the module's own tab; «Холст замера» stays: before the module is on it is the one
+      // way to try the canvas (it says nothing will be saved)
       { id: "draw", labelKey: "mod.gutters.draw.action", icon: "pencil", href: draw },
       // the speed check is a developer's screen (DS §12.8, #1426): offered in Expo Go and a dev build only, never to an owner of the store app or the web
       ...(benchOfferedHere() ? [{ id: "bench", labelKey: "mod.gutters.bench.action" as const, icon: "clock" as const, href: moduleHref("gutters", "bench") }] : []),

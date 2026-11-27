@@ -246,6 +246,9 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
     return ld ? { kind: "lead" as const, name: ld.name, href: `/lead/${ld.id}` } : null;
   })();
   const other = otherEstimates(store.db, m)[0];
+  // #3027: the job's open estimate the step puts this drawing into — «Добавить в EST-0006» (not a second estimate)
+  const tg = action.kind === "make" ? estimateTarget(store.db, m) : null;
+  const joinTo = tg?.kind === "join" ? tg.estimate : null;
   const clientLang = clientLangOf(store.db, m);
   /** «Открыть» — look first (#2157), «Отправить» — the file to send at once (a phone) */
   const pdf = (kind: "client" | "crew", how: "open" | "send" = "open") => {
@@ -332,13 +335,10 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
           <View testID="view-empty"><T tone="mut">{t("mod.gutters.view.empty")}</T></View>
         ) : null}
 
-        {/* the main action by the state (#699) and «Править чертёж» */}
+        {/* the main action by the state (#699) and «Править чертёж» — one main and one secondary in a row; where to go next — rows «›»
+            (#3065, founder #3064: «никаких столбиков кнопок») */}
         <View style={{ gap: space[2] }}>
-          {!obj && money$ && action.kind === "needLead" ? (
-            <View testID="view-action-link"><Button label={t("mod.gutters.view.link")} icon="user" onPress={() => setLinkOpen(true)} /></View>
-          ) : null}
-          {/* what comes next once it is linked (#2990): whose it is now and where it shows, an estimate they already have without this
-              drawing, «Открыть лид / клиента» — one press there, the person stays where they worked */}
+          {/* what comes next once it is linked (#2990): whose it is now, an estimate they already have without this drawing */}
           {!obj && linkedTo ? (
             <View testID="view-next" style={{ gap: space[1] }}>
               <T v="body" w="semibold">{t(linkedTo.kind === "lead" ? "mod.gutters.card.atLead" : "mod.gutters.card.atClient", { name: linkedTo.name })}</T>
@@ -347,29 +347,33 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
               ) : null}
             </View>
           ) : null}
-          {!obj && money$ && (action.kind === "make" || action.kind === "update" || action.kind === "open") ? (
-            <View testID={`view-action-${action.kind === "open" && action.signed ? "signed" : action.kind}`} style={{ gap: space[2] }}>
-              <Button
-                label={t(action.kind === "make" ? "mod.gutters.est.make" : action.kind === "update" ? "mod.gutters.est.update" : "mod.gutters.est.open")}
-                icon={action.kind === "open" ? "chevronRight" : "plus"}
-                onPress={() => doEstimate()}
-              />
-              {action.kind === "update" ? (
-                <View testID="view-stale"><T v="caption" tone="mut">{t("mod.gutters.view.stale")}</T></View>
-              ) : null}
-            </View>
-          ) : null}
-          {obj && action.kind === "update" ? (
+          <RowView style={{ gap: space[2], flexWrap: "wrap", alignItems: "center" }}>
+            {!obj && money$ && action.kind === "needLead" ? (
+              <View testID="view-action-link"><Button label={t("mod.gutters.view.link")} icon="user" onPress={() => setLinkOpen(true)} /></View>
+            ) : null}
+            {!obj && money$ && (action.kind === "make" || action.kind === "update" || action.kind === "open") ? (
+              <View testID={`view-action-${action.kind === "open" && action.signed ? "signed" : action.kind}`}>
+                <Button
+                  label={joinTo && action.kind === "make" ? t("mod.gutters.est.addTo", { n: joinTo.number ?? "" }) : t(action.kind === "make" ? "mod.gutters.est.make" : action.kind === "update" ? "mod.gutters.est.update" : "mod.gutters.est.open")}
+                  icon={action.kind === "open" ? "chevronRight" : "plus"}
+                  onPress={() => doEstimate()}
+                />
+              </View>
+            ) : null}
+            <View testID="view-edit"><Button label={t("mod.gutters.view.edit")} icon="pencil" variant="secondary" onPress={edit} /></View>
+          </RowView>
+          {action.kind === "update" ? (
             <View testID="view-stale"><T v="caption" tone="mut">{t("mod.gutters.view.stale")}</T></View>
           ) : null}
-          {!obj && money$ && other && action.kind === "make" ? (
-            <View testID="view-open-other"><Button label={t("mod.gutters.card.openEst", { n: other.number ?? "" })} variant="secondary" onPress={() => router.push(`/estimate/${other.id}` as Href)} /></View>
-          ) : null}
-          <View testID="view-edit" style={obj ? { alignItems: "flex-start" } : undefined}><Button label={t("mod.gutters.view.edit")} icon="pencil" variant="secondary" onPress={edit} /></View>
-          {!obj && linkedTo ? (
-            <View testID="view-open-who" style={{ alignItems: "flex-start" }}>
-              <Button label={t(linkedTo.kind === "lead" ? "mod.gutters.card.openLead" : "mod.gutters.card.openClient")} icon="chevronRight" variant="ghost" onPress={() => router.push(linkedTo.href as Href)} />
-            </View>
+          {!obj && ((money$ && other && action.kind === "make") || linkedTo) ? (
+            <ListGroup testID="view-go">
+              {money$ && other && action.kind === "make" ? (
+                <GroupRow testID="view-open-other" title={t("mod.gutters.card.openEst", { n: other.number ?? "" })} lead={{ icon: "invoice" }} chevron onPress={() => router.push(`/estimate/${other.id}` as Href)} />
+              ) : null}
+              {linkedTo ? (
+                <GroupRow testID="view-open-who" title={t(linkedTo.kind === "lead" ? "mod.gutters.card.openLead" : "mod.gutters.card.openClient")} subtitle={linkedTo.name} lead={{ icon: linkedTo.kind === "lead" ? "inbox" : "user" }} chevron onPress={() => router.push(linkedTo.href as Href)} />
+              ) : null}
+            </ListGroup>
           ) : null}
         </View>
         </>) : null}
@@ -551,9 +555,6 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
     </>
   );
   if (!obj || !route) return content;
-  // #3027: the job's open estimate the step puts this drawing into — «Добавить в EST-0006» (not a second estimate)
-  const tg = action.kind === "make" ? estimateTarget(store.db, m) : null;
-  const joinTo = tg?.kind === "join" ? tg.estimate : null;
   // #2995: the one step by the state (#699) — under the name and its row of actions; a second one («Открыть EST-…») goes into «⋯»
   const main = !money$ ? undefined
     : action.kind === "needLead" ? { label: t("mod.gutters.view.link"), onPress: () => setLinkOpen(true), testID: "view-action-link" }
