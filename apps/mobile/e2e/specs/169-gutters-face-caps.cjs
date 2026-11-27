@@ -8,7 +8,7 @@
  * - an inside corner says «отбойник» (a splash guard by itself).
  * Finds things by id / testID; waits on what it checks.
  */
-const { skipLength, pastDoubleTap } = require("../gutters.cjs");
+const { skipLength, pastDoubleTap, winSave, winClose } = require("../gutters.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -87,7 +87,7 @@ exports.run = async (h) => {
     return (await tid("corner-kind").locator('[aria-checked="true"]').innerText()).trim();
   };
   const closeCorner = async () => {
-    await p.getByRole("button", { name: /^(Закрыть|Close|Cerrar)$/ }).last().click({ position: { x: 10, y: 10 } });
+    await winSave(p); // the corner's window keeps its edits by «Сохранить» (DS §7.3, #3071)
     await waitFor(async () => (await tid("corner-sheet").count()) === 0, "the sheet closes");
   };
   const capsBefore = await caps();
@@ -105,4 +105,14 @@ exports.run = async (h) => {
   const capsAfter = await caps();
   h.expect(Object.keys(capsBefore).every((k) => capsAfter[k] && capsAfter[k] !== capsBefore[k]), "the caps swap with the corner");
   await h.shot("corner");
+
+  // one rule for the canvas' windows (DS §7.3, #3071): the corner's window is a draft — «Закрыть» with a change asks, «Не сохранять» takes it back
+  h.expect((await openCorner()) === other, "the corner's window again");
+  await tid("corner-kind").getByRole("radio", { name: k0, exact: true }).click();
+  await waitFor(async () => ((await tid("corner-kind").locator('[aria-checked="true"]').innerText()).trim() === k0), `${k0} picked (a draft)`);
+  await winClose(p);
+  await p.getByRole("button", { name: "Не сохранять" }).locator("visible=true").first().click();
+  await waitFor(async () => (await tid("corner-sheet").count()) === 0, "«Не сохранять»: the window closes");
+  h.expect((await openCorner()) === other, `«Не сохранять»: the corner is still ${other}`);
+  await closeCorner();
 };

@@ -1010,7 +1010,16 @@ function DrawCanvas() {
   const cut = corner ? cornerCut(drawing, corner) : null;
   const cornerKind = (kind: "in" | "out") => {
     // the sheet stays open (founder 09.11: a tap closed it) — the kind switches, the cut below follows
-    if (corner && corner.kind !== kind && corner.kind !== "bay") commit(flipFace(cur.current.drawing, corner.runs[0].id));
+    if (!corner || corner.kind === kind || corner.kind === "bay") return;
+    const before = cur.current.drawing;
+    const next = flipFace(before, corner.runs[0].id);
+    winCommit(next); // a draft of the corner's window: «Сохранить» keeps it, «Не сохранять» takes it back (DS §7.3, #3071)
+    // the whole line's side changed: its other corners changed too, under the window — say so (#3071, crm review №4); the window's
+    // «Закрыть → Не сохранять» takes it all back
+    const kinds = (x: Drawing) => new Map(findCorners(x).map((k) => [k.id, k.kind]));
+    const was = kinds(before), now = kinds(next);
+    const others = [...now].filter(([id, k]) => id !== corner.id && was.get(id) !== undefined && was.get(id) !== k).length;
+    if (others > 0) toast.show(t("mod.gutters.draw.sideFlipped", { n: others }));
   };
   // photos (П21.10): only of what the server has (a files row points at the measurement and its element — FK). The
   // module does not save (off, past the trial — founder О2): the photos it has are shown, nothing is added (M5e)
@@ -1127,6 +1136,7 @@ function DrawCanvas() {
   };
   /** «Разъединить угол» (#933): two gutters with their own end caps; the toast brings it back — from the corner's window and from 🗑 with the corner picked (#3066) */
   const splitAt = (cornerId: string) => {
+    if (winRef.current) saveWin(); // «Разъединить» is an action: what the window changed before it stays (DS §7.3, #3071)
     const before = cur.current.drawing;
     const f = findCorners(before).find((x) => x.id === cornerId);
     setCornerSheet(null);
@@ -1787,7 +1797,15 @@ function DrawCanvas() {
           />
         ) : null}
       </Sheet>
-      <Sheet visible={canSave && !!corner} onClose={() => setCornerSheet(null)}>
+      {/* half the screen on the phone (#3071, design review №8): the corner on the canvas stays in view while its kind changes; pulled up — all of it */}
+      <Sheet
+        visible={canSave && !!corner}
+        onClose={() => { discardWin(); setCornerSheet(null); }}
+        height="medium"
+        dirty={winEdited}
+        onSave={() => { saveWin(); setCornerSheet(null); }}
+        footer={<WinButtons onClose={() => { discardWin(); setCornerSheet(null); }} onSave={() => { saveWin(); setCornerSheet(null); }} />}
+      >
         {corner ? (
           <CornerSheet
             d={drawing}
@@ -1797,9 +1815,9 @@ function DrawCanvas() {
             tape={tape}
             splashOn={!splashOff(drawing, corner)}
             onKind={cornerKind}
-            onSplash={(on) => commit(setCornerSplash(cur.current.drawing, corner, on))}
+            onSplash={(on) => winCommit(setCornerSplash(cur.current.drawing, corner, on))}
             onSplit={() => splitAt(corner.id)}
-            onAngle={(deg) => commit(setCornerAngle(cur.current.drawing, corner, deg))}
+            onAngle={(deg) => winCommit(setCornerAngle(cur.current.drawing, corner, deg))}
           />
         ) : null}
       </Sheet>
