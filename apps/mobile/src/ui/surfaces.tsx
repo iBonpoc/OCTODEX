@@ -1123,7 +1123,9 @@ export function Screen({
       <View style={{ flex: 1 }}>
         <Background />
         {pinned ? (
+          // 820/1280 with a parent: the pinned address bar IS the screen's one header (its row) — the same testID as HeaderBar's
           <View
+            testID="screen-head"
             onLayout={(e) => setBarH(e.nativeEvent.layout.height)}
             style={{ paddingTop: navInsets.safeTop + space[3], paddingBottom: space[1], paddingLeft: navInsets.left, paddingRight: navInsets.right, gap: space[2], borderBottomWidth: component.hairline, borderBottomColor: c.bd }}
           >
