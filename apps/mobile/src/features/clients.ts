@@ -71,6 +71,13 @@ export function clientMoneyOf(db: DB, customerId: ID) {
 }
 
 /**
+ * #3044 (spec 04 §4 «нельзя при открытом балансе»): a client who owes is not made inactive (`archived`) — the owed cents, 0 when free.
+ * Every manual way goes through it (the store's setCustomerStatus); the merge S3d and the import do not (their own server rules).
+ */
+export const archiveOwes = (db: Pick<DB, "invoices" | "payments">, customerId: ID): number => clientMoneyOf(db as DB, customerId).owesCents;
+export const canArchive = (db: Pick<DB, "invoices" | "payments">, customerId: ID): boolean => archiveOwes(db, customerId) <= 0;
+
+/**
  * Overdue money of a client for the list card sign (founder 07.11): the unpaid rest of every overdue invoice
  * and the oldest overdue in calendar days of the company (not the phone's) — «Просрочено $1,400 · 12 дн».
  */
