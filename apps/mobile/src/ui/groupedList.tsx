@@ -248,8 +248,11 @@ export function GroupRowBody({ title, titleNote, extra, figureRight, valueTop, r
   const check = lead && "done" in lead ? lead : null;
   const top = !!value && !titleNote && (!!status?.iconOnly || !!valueTop);
   /** #3035: where the sum stands in the right column, the number goes under it there; else at the end of line 2 */
-  const refRight = !!refNo && !!value && !top && !(titleNote && !figureRight) && !cols?.length;
-  const refLine2 = refNo && !refRight ? refNo : undefined;
+  // #3046 (founder 27.11: «номер — под значком слева»): with an avatar or an icon on the left the number stands under it, centred,
+  // `micro`; the line under the lead is as wide as the lead and the gap after it, so the text column does not move
+  const refLead = !!refNo && !!lead && ("initials" in lead || "icon" in lead);
+  const refRight = !refLead && !!refNo && !!value && !top && !(titleNote && !figureRight) && !cols?.length;
+  const refLine2 = refNo && !refRight && !refLead ? refNo : undefined;
   const refUnder = refRight ? (
     <View testID="row-ref-no">
       <T v="micro" tone="mut" tabular numberOfLines={1}>
@@ -263,7 +266,24 @@ export function GroupRowBody({ title, titleNote, extra, figureRight, valueTop, r
   return (
     <RowView style={[pad, { paddingLeft: check ? 0 : space[4], paddingRight: padRight }]}>
       {selected ? <SelectedCheck left /> : null}
-      {!lead || check ? null : "initials" in lead ? (
+      {!lead || check ? null : refLead ? (
+        <View style={{ width: component.avatar.md, alignItems: "center", gap: spaceHalf.hair }}>
+          {"initials" in lead ? (
+            <Avatar initials={lead.initials} s={component.avatar.md} />
+          ) : (
+            <View style={{ width: component.avatar.md, height: component.avatar.md, borderRadius: radius.pill, backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}>
+              <Icon name={(lead as { icon: IconKey }).icon} s={size.iconMd} color={c.ink} />
+            </View>
+          )}
+          {/* the short form under the lead — «0008», the lead and the list already say what it is (#3046; «CLT-0008» was wider than the
+              lead and ran into line 3); the whole number is said to VoiceOver */}
+          <View testID="row-ref-no" accessible accessibilityLabel={refNo} style={{ width: component.avatar.md, alignItems: "center" }}>
+            <T v="micro" tone="mut" tabular numberOfLines={1}>
+              {refNo.replace(/^[A-Z]{2,4}-/, "")}
+            </T>
+          </View>
+        </View>
+      ) : "initials" in lead ? (
         <Avatar initials={lead.initials} s={component.avatar.md} />
       ) : "time" in lead ? (
         <View style={{ width: component.listRow.timeW }}>
