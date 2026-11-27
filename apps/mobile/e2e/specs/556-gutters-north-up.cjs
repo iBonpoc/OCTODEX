@@ -51,6 +51,11 @@ exports.run = async (h) => {
   await tid("draw-north").waitFor({ timeout: 5000 });
   h.expect(true, "turned: «Север вверх» in the header");
   h.expect((await runs()) === stored, "the turn is the view's only: the stored gutter is the same");
+  // on the canvas, not in the header: «Привязать» stays whole (review of #3014: «При…» at 390), the compass is under the header's row
+  const cut = await p.evaluate(() => { const b = [...document.querySelectorAll('[data-testid="draw-to-lead"]')].find((e) => e.getClientRects().length > 0); return !b ? "none" : [b, ...b.querySelectorAll("*")].some((n) => n.scrollWidth > n.clientWidth + 1) ? "cut" : "whole"; });
+  h.expect(cut === "whole", `turned: «Привязать» is whole (${cut})`);
+  const nb = await tid("draw-north").boundingBox(), back = await tid("draw-back").boundingBox();
+  h.expect(nb.y >= back.y + back.height, `the compass is under the header (${Math.round(nb.y)} ≥ ${Math.round(back.y + back.height)})`);
   await h.shot("turned");
 
   await tid("draw-north").getByRole("button").click();
