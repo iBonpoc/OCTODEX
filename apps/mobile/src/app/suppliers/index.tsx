@@ -9,7 +9,7 @@ import type { Supplier } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { itemsOfSupplier, sortedSuppliers, suppliersOf } from "@/features/suppliers";
 import { Button } from "@/ui/controls";
-import { FilterBar } from "@/ui/filterBar";
+import { FilterBar, useFilterHeader } from "@/ui/filterBar";
 import { filterStoreKey } from "@/ui/filterBarRules";
 import { usePersistentState } from "@/data/persist";
 import { CardList, Empty, Screen } from "@/ui/surfaces";
@@ -56,14 +56,18 @@ export default function Suppliers() {
       />
     );
   };
+  // #3031: the search is the header's first circle on a phone / tablet (one place on every list); 1280 keeps the field in the row
+  const fh = useFilterHeader({ search: { value: q }, testID: "suppliers" });
+  const filterHead = device === "desktop" ? undefined : fh;
   return (
     <Screen
+      headerIcons={filterHead?.icons}
       title={t("sup.title")}
       back={back}
       help={t("sup.help")}
       right={<Button label={t("sup.new")} icon="plus" size="sm" variant="secondary" onPress={() => router.push("/suppliers/new")} />}
     >
-      <FilterBar<Lane>
+      <FilterBar<Lane> header={filterHead?.state}
         search={{ value: q, onChange: setQ, placeholder: t("sup.search") }}
         value={lane}
         onChange={setLane}

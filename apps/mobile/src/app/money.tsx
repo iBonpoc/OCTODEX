@@ -10,7 +10,7 @@ import type { FactKey } from "@/ui/listCardLayout";
 import { useDevice } from "@/theme/ThemeProvider";
 import { useI18n, type Lang } from "@/i18n";
 import { Button, Segmented, StatusChip } from "@/ui/controls";
-import { FilterBar } from "@/ui/filterBar";
+import { FilterBar, useFilterHeader } from "@/ui/filterBar";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, CardList, Divider, Empty, ListRow, Screen, SectionTitle } from "@/ui/surfaces";
@@ -62,8 +62,12 @@ export default function Money() {
     );
   };
 
+  // #3031: the search is the header's first circle on a phone / tablet (one place on every list); 1280 keeps the field in the row
+  const fh = useFilterHeader({ search: { value: q }, testID: "expenses" });
+  const filterHead = device === "desktop" ? undefined : fh;
   return (
     <Screen
+      headerIcons={filterHead?.icons}
       // «Расходы» only: invoices are a section of their own, /invoice (founder 07.11, spec 31 §7а)
       title={t("nav.expenses")}
       help={t("help.money")}
@@ -74,7 +78,7 @@ export default function Money() {
       {db.expenses.length === 0 ? <Empty icon="wallet" title={t("money.expenses")} /> : null}
       {db.expenses.length ? (
         <View style={{ gap: space[3] }}>
-          <FilterBar<string> items={[]} value="" onChange={() => undefined} search={{ value: q, onChange: setQ, placeholder: t("card.filter.searchExpenses") }} />
+          <FilterBar<string> header={filterHead?.state} items={[]} value="" onChange={() => undefined} search={{ value: q, onChange: setQ, placeholder: t("card.filter.searchExpenses") }} />
           <SectionTitle title={`${t("money.expenses")} · ${money(shown.reduce((s, x) => s + x.amountCents, 0))}`} />
           {shown.length === 0 ? <Empty icon="search" title={t("card.emptyFilter")} /> : null}
           {months.map(([m, xs]) => (

@@ -6,7 +6,7 @@ import { useI18n } from "@/i18n";
 import { jobStatusView } from "@/features/jobs";
 import { jobEstimateNumber, jobPeople, matchJob, nextVisitOf, visitPeople } from "@/features/jobList";
 import { categoryLabel } from "@/features/serviceCategories";
-import { FilterBar } from "@/ui/filterBar";
+import { FilterBar, useFilterHeader } from "@/ui/filterBar";
 import { filterStoreKey } from "@/ui/filterBarRules";
 import { usePersistentState } from "@/data/persist";
 import { CardList, Empty, Screen } from "@/ui/surfaces";
@@ -93,35 +93,40 @@ export default function Jobs() {
       />
     );
   };
+  const groups = [
+    ...(office && masters.length > 1
+      ? [{
+          key: "people",
+          title: t("card.filter.masters"),
+          options: [
+            ...masters.map((m) => ({ key: m.id, label: memberLabel(m, t) ?? m.name, count: base.filter((j) => peopleOf(j).includes(m.id)).length, on: who.includes(m.id) })),
+            { key: NOBODY, label: t("card.filter.nobody"), count: base.filter((j) => !peopleOf(j).length).length, on: who.includes(NOBODY) },
+          ],
+          onToggle: toggle(who, setWho),
+        }]
+      : []),
+    ...(office && trades.length > 1
+      ? [{
+          key: "trades",
+          title: t("card.filter.trades"),
+          options: trades.map((id) => ({ key: id, label: categoryLabel(db.serviceCategories.find((x) => x.id === id), t as never) || "—", count: base.filter((j) => j.serviceCategoryId === id).length, on: tradeOn.includes(id) })),
+          onToggle: toggle(tradeOn, setTrades),
+        }]
+      : []),
+  ];
+  // #3031: the search is the header's first circle on a phone / tablet (one place on every list); 1280 keeps the field in the row
+  const fh = useFilterHeader({ search: { value: q }, groups, testID: "jobs" });
+  const filterHead = device === "desktop" ? undefined : fh;
   return (
-    <Screen title={t("jobs.title")} back={back} help={t("jobs.help")} hintKey="jobs">
+    <Screen
+      headerIcons={filterHead?.icons} title={t("jobs.title")} back={back} help={t("jobs.help")} hintKey="jobs">
       {/* spec 31 (variant Б): the search and «Фильтр» in one row, one lane of statuses; «Мастер», «Направление» in the sheet */}
-      <FilterBar<Filter>
+      <FilterBar<Filter> header={filterHead?.state}
         search={{ value: q, onChange: setQ, placeholder: t("card.filter.searchJobs") }}
         value={f}
         onChange={setF}
         items={LANE.map((k) => ({ key: k, label: k === "all" ? t("cat.all") : k === "cancelled" ? t("job.cancel.lane") : t(jobStatusView[k].label), count: count(k) }))}
-        groups={[
-          ...(office && masters.length > 1
-            ? [{
-                key: "people",
-                title: t("card.filter.masters"),
-                options: [
-                  ...masters.map((m) => ({ key: m.id, label: memberLabel(m, t) ?? m.name, count: base.filter((j) => peopleOf(j).includes(m.id)).length, on: who.includes(m.id) })),
-                  { key: NOBODY, label: t("card.filter.nobody"), count: base.filter((j) => !peopleOf(j).length).length, on: who.includes(NOBODY) },
-                ],
-                onToggle: toggle(who, setWho),
-              }]
-            : []),
-          ...(office && trades.length > 1
-            ? [{
-                key: "trades",
-                title: t("card.filter.trades"),
-                options: trades.map((id) => ({ key: id, label: categoryLabel(db.serviceCategories.find((x) => x.id === id), t as never) || "—", count: base.filter((j) => j.serviceCategoryId === id).length, on: tradeOn.includes(id) })),
-                onToggle: toggle(tradeOn, setTrades),
-              }]
-            : []),
-        ]}
+        groups={groups}
         onReset={() => { setWho([]); setTrades([]); }}
       />
       {list.length === 0 ? (
