@@ -37,6 +37,7 @@ import { estimateView } from "@/features/estimateStatus";
 import { CardHead } from "./CardHead";
 import { MeasurementObject } from "./MeasurementObject";
 import { GroupRow, ListGroup } from "@/ui/groupedList";
+import { ButtonPair } from "@/ui/pairs";
 import { NowCard } from "@/ui/nowCard";
 import { MeasurePhotos } from "../draw/Photos";
 import { toMeasurement } from "../geometry";
@@ -250,18 +251,19 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
   const tg = action.kind === "make" ? estimateTarget(store.db, m) : null;
   const joinTo = tg?.kind === "join" ? tg.estimate : null;
   /** the panel's (1280, `!obj`) one main button by the state (#699): «Привязать…», else the estimate's step — beside it only «Править чертёж» (#3065) */
-  const panelMain =
+  const panelMain: { props: { label: string; icon: "user" | "chevronRight" | "plus"; onPress: () => void }; id: string } | null =
     obj || !money$ ? null
-    : action.kind === "needLead" ? <View testID="view-action-link"><Button label={t("mod.gutters.view.link")} icon="user" onPress={() => setLinkOpen(true)} /></View>
-    : action.kind === "make" || action.kind === "update" || action.kind === "open" ? (
-      <View testID={`view-action-${action.kind === "open" && action.signed ? "signed" : action.kind}`}>
-        <Button
-          label={joinTo && action.kind === "make" ? t("mod.gutters.est.addTo", { n: joinTo.number ?? "" }) : t(action.kind === "make" ? "mod.gutters.est.make" : action.kind === "update" ? "mod.gutters.est.update" : "mod.gutters.est.open")}
-          icon={action.kind === "open" ? "chevronRight" : "plus"}
-          onPress={() => doEstimate()}
-        />
-      </View>
-    ) : null;
+    : action.kind === "needLead" ? { props: { label: t("mod.gutters.view.link"), icon: "user", onPress: () => setLinkOpen(true) }, id: "view-action-link" }
+    : action.kind === "make" || action.kind === "update" || action.kind === "open"
+      ? {
+          props: {
+            label: joinTo && action.kind === "make" ? t("mod.gutters.est.addTo", { n: joinTo.number ?? "" }) : t(action.kind === "make" ? "mod.gutters.est.make" : action.kind === "update" ? "mod.gutters.est.update" : "mod.gutters.est.open"),
+            icon: action.kind === "open" ? "chevronRight" : "plus",
+            onPress: () => doEstimate(),
+          },
+          id: `view-action-${action.kind === "open" && action.signed ? "signed" : action.kind}`,
+        }
+      : null;
   const clientLang = clientLangOf(store.db, m);
   /** «Открыть» — look first (#2157), «Отправить» — the file to send at once (a phone) */
   const pdf = (kind: "client" | "crew", how: "open" | "send" = "open") => {
@@ -360,10 +362,12 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
               ) : null}
             </View>
           ) : null}
-          <RowView style={{ gap: space[2], flexWrap: "wrap", alignItems: "center" }}>
-            {panelMain}
-            <View testID="view-edit"><Button label={t("mod.gutters.view.edit")} icon="pencil" variant="secondary" onPress={edit} /></View>
-          </RowView>
+          {/* one main and «Править чертёж» — the pair of DS §7.5 (side by side, or full width one under the other when they do not fit) */}
+          {panelMain ? (
+            <ButtonPair main={panelMain.props} second={{ label: t("mod.gutters.view.edit"), icon: "pencil", onPress: edit }} ids={{ main: panelMain.id, second: "view-edit" }} />
+          ) : (
+            <View testID="view-edit" style={{ alignItems: "flex-start" }}><Button label={t("mod.gutters.view.edit")} icon="pencil" variant="secondary" onPress={edit} /></View>
+          )}
           {action.kind === "update" ? (
             <View testID="view-stale"><T v="caption" tone="mut">{t("mod.gutters.view.stale")}</T></View>
           ) : null}
