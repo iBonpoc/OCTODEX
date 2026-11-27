@@ -256,10 +256,12 @@ export function Tape({ marks, onMarks, max, scale, readout, testID, label, stepL
           </Svg>
         ) : null}
       </View>
-      {/* the value on the yellow pill right under the needle (the one place of `tape.mark*`), the steps beside it */}
-      <RowView style={{ alignItems: "center", justifyContent: "center", gap: space[2] }}>
+      {/* the value on the yellow pill right under the needle (the one place of `tape.mark*`); the steps ‹ › at the tape's two ends, away from it
+          (design-review #3066 №17: «‹ 12′ 7″ ›» side by side read as three buttons next to «Применить»). The pill is a label, not a control:
+          lower than a button (`controlSm`), no press, read as text (DS §3.4 п.2) */}
+      <RowView style={{ alignItems: "center", justifyContent: "space-between", gap: space[2] }}>
         <View testID={`${testID}-less`} style={{ opacity: v <= 1 ? OFF : 1 }}><IconButton icon="chevronLeft" label={stepLabels.less} onPress={v <= 1 ? undefined : () => nudge(-1)} /></View>
-        <View testID={`${testID}-value`} style={{ paddingHorizontal: space[4], minHeight: size.controlMd, borderRadius: radius.pill, backgroundColor: c.tape.markFill, alignItems: "center", justifyContent: "center" }}>
+        <View testID={`${testID}-value`} accessibilityRole="text" style={{ paddingHorizontal: space[3], minHeight: size.controlSm, borderRadius: radius.pill, backgroundColor: c.tape.markFill, alignItems: "center", justifyContent: "center" }}>
           <T v="button" tabular style={{ color: c.tape.markText }}>{readout}</T>
         </View>
         <View testID={`${testID}-more`} style={{ opacity: v >= max ? OFF : 1 }}><IconButton icon="chevronRight" label={stepLabels.more} onPress={v >= max ? undefined : () => nudge(1)} /></View>
