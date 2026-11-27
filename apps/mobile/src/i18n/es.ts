@@ -5561,7 +5561,6 @@ export const es: Dict = {
   "proto.client.stEstimate": "Presupuesto",
   "proto.client.stInvoice": "Factura",
   "proto.client.stJob": "Trabajo",
-  "proto.client.stories": "{n} pl.",
   "proto.client.tags": "Etiquetas",
   "proto.client.takenBy": "cobró {who}",
   "proto.client.task": "tarea",

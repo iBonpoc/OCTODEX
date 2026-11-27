@@ -5561,7 +5561,6 @@ export const ru = {
   "proto.client.stEstimate": "Смета",
   "proto.client.stInvoice": "Счёт",
   "proto.client.stJob": "Работа",
-  "proto.client.stories": "{n} эт.",
   "proto.client.tags": "Метки",
   "proto.client.takenBy": "принял {who}",
   "proto.client.task": "задача",
