@@ -8,7 +8,7 @@ import { isOwnDsSize, isOwnRunSize, readOwnDsSize, readOwnRunSize } from "../src
 import { linesFromParts, noPriceLines } from "../src/modules/gutters/estimate";
 import { laborRows, materialRows, missingItems, sampleJob } from "../src/modules/gutters/prices";
 
-describe("reading a size of its own", () => {
+describe("С3 (spec 33-windows #2978): reading a size of its own", () => {
   it("gutter: whole inches 3–12", () => {
     expect(readOwnRunSize("9")).toBe("9");
     expect(readOwnRunSize(" 10″ ")).toBe("10");
@@ -30,7 +30,7 @@ describe("reading a size of its own", () => {
   });
 });
 
-describe("a size of its own in the attributes", () => {
+describe("С3: a size of its own in the attributes", () => {
   it("a gutter keeps it while the profile stays; a new profile puts a size of the list", () => {
     const a = changeRun({ ...DEFAULT_RUN_ATTRS }, { size: "9" });
     expect(a.size).toBe("9");
@@ -46,7 +46,7 @@ describe("a size of its own in the attributes", () => {
   });
 });
 
-describe("a size of its own in the estimate (answer in #2981: not in the price list — $0, «нет цены»)", () => {
+describe("С3: a size of its own in the estimate (answer in #2981: not in the price list — $0, «нет цены»)", () => {
   const C = "11111111-1111-4111-8111-111111111111";
   const name = (p: { key: string; attrs: Record<string, string> }) => `${p.attrs.part ?? p.attrs.work ?? p.key}`;
   let n = 0;
