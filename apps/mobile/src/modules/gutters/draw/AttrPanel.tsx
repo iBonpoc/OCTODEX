@@ -226,7 +226,8 @@ function UnitPick({ unit, onUnit, testID }: { unit: LenUnit; onUnit: (u: LenUnit
   const ref = useRef<React.ComponentRef<typeof View>>(null);
   const waiting = useRef(false);
   const [at, setAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  const word = unit === "ftin" || unit === "in" ? t(k("in")) : t(k(`unit.${unit}`));
+  // by the title (#3071) it names the whole unit — «фут + дюйм ⌄» is the unit's choice, never read as the inches' label (#3078, design review №12)
+  const word = unit === "in" ? t(k("in")) : t(k(`unit.${unit}`));
   return (
     <>
       <View ref={ref} collapsable={false}>

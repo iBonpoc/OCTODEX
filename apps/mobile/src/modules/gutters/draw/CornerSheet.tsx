@@ -62,6 +62,8 @@ export function CornerSheet({ d, f, cut, fmt, tape, splashOn, onKind, onSplash, 
           <View onLayout={(e) => setSketchW(e.nativeEvent.layout.width)}>
             {sketchW > 0 ? <CornerSketch d={d} f={f} cut={cut.runs} w={sketchW} angleDeg={cut.angleDeg} fmt={fmt} /> : null}
           </View>
+          {/* the key of the drawing (#3078): its numbers are the gutters of «Раскрой» below, where the lengths are */}
+          <View testID="corner-sketch-key"><T v="caption" tone="mut">{t("mod.gutters.draw.sketchKey")}</T></View>
           <RowView style={{ justifyContent: "space-between" }}>
             <T v="body" w="semibold">{t("mod.gutters.draw.cutTitle")}</T>
             <View testID="corner-cut-angle"><T v="caption" tone="mut">{t("mod.gutters.draw.cutAngle", { deg: cut.angleDeg })}</T></View>

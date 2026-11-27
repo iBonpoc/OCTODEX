@@ -3,7 +3,7 @@
  * - a pinch whose first finger has moved before the second lands (always so on a phone): the drawing gets smaller —
  *   and again (two pinches), and nothing is drawn;
  * - the corner sheet: «Outside» / «Inside» switch the kind and the sheet stays open;
- * - the cut's small drawing is as wide as the sheet, with «стена …» / «лицевая …» chips and the arc with its degrees (no letters: #1276);
+ * - the cut's small drawing is as wide as the sheet, its gutters numbered (#3078) and the arc with its degrees (no letters: #1276);
  *   the triangle says A, B, C in plain words;
  * - drawn on from a gutter's free end straight on → one gutter, its length the sum (no second line).
  * Finds things by testID / id; waits on what it checks.
@@ -159,20 +159,20 @@ exports.run = async (h) => {
   const sheetW = (await tid("corner-sheet").boundingBox()).width;
   h.expect(sk.width >= sheetW * 0.9, `the sketch is as wide as the sheet (${Math.round(sk.width)} of ${Math.round(sheetW)})`);
   const texts = await tid("corner-sketch").locator("text").evaluateAll((ts) => ts.map((t) => (t.textContent || "").trim()));
-  h.expect(texts.filter((t) => /^стена /.test(t)).length === 2 && texts.filter((t) => /^лицевая /.test(t)).length === 2, `«стена …», «лицевая …» on each gutter (${texts.join(" | ")})`);
-  h.expect(!["A", "B", "C"].some((x) => texts.includes(x)) && texts.includes("90°"), "no letters A, B, C on the drawing (#1276: they are the triangle's, in words); the arc says 90°");
+  // #3078 (design review №15): level numbers «1», «2» at the gutters' ends and the arc's degrees — the lengths are listed under it («Раскрой»)
+  h.expect(texts.includes("1") && texts.includes("2") && texts.includes("90°") && !texts.some((t) => /^(стена|лицевая) /.test(t)), `the drawing: 1, 2, 90°, no length chips (${texts.join(" | ")})`);
+  h.expect((await tid("corner-sketch-key").count()) === 1, "its key under it: solid — wall, dashed — face");
   // the chips do not overlap
   const boxes = await tid("corner-sketch").locator("rect").evaluateAll((rs) => rs.map((r) => { const b = r.getBoundingClientRect(); return [b.x, b.y, b.x + b.width, b.y + b.height]; }));
   const overlap = boxes.some((a, i) => boxes.some((c, j) => j > i && a[0] < c[2] && c[0] < a[2] && a[1] < c[3] && c[1] < a[3]));
   h.expect(!overlap, "the chips do not overlap");
-  // the face is away from the house: on an outside corner the «лицевая» chips are outside the angle (farther from the
-  // arc's degrees than the «стена» ones), on an inside corner inside it
+  // the face is away from the house: on an outside corner the dashed face lines are outside the angle (farther from the arc's degrees than
+  // the solid walls), on an inside corner inside it
   const pos = await tid("corner-sketch").locator("text").evaluateAll((ts) => ts.map((t) => { const r = t.getBoundingClientRect(); return { t: (t.textContent || "").trim(), x: r.x + r.width / 2, y: r.y + r.height / 2 }; }));
-  const at = (re) => pos.filter((q) => re.test(q.t));
-  const deg = at(/^\d+°$/)[0]; // the arc's degrees stand inside the angle (the letters A, B and the C line are gone, #1276)
-  const cm = [deg.x, deg.y];
-  const far = (qs) => qs.reduce((n, q) => n + Math.hypot(q.x - cm[0], q.y - cm[1]), 0) / qs.length;
-  const faceOut = far(at(/^лицевая /)) > far(at(/^стена /));
+  const deg = pos.find((q) => /^\d+°$/.test(q.t));
+  const sketchLines = await tid("corner-sketch").locator("path").evaluateAll((ps) => ps.filter((x) => x.getAttribute("fill") === "none" && x.getAttribute("stroke-width") && !/A/.test(x.getAttribute("d") || "")).map((x) => { const r = x.getBoundingClientRect(); return { dashed: !!x.getAttribute("stroke-dasharray"), x: r.x + r.width / 2, y: r.y + r.height / 2 }; }));
+  const far = (qs) => qs.reduce((n, q) => n + Math.hypot(q.x - deg.x, q.y - deg.y), 0) / Math.max(1, qs.length);
+  const faceOut = far(sketchLines.filter((q) => q.dashed)) > far(sketchLines.filter((q) => !q.dashed));
   h.expect(faceOut === (kind0 === "Outside"), `${kind0}: the face is ${kind0 === "Outside" ? "outside" : "inside"} the angle`);
   // 4) the triangle in plain words
   h.expect(/^A — /.test(await tid("tri-a").innerText()) && /^B — /.test(await tid("tri-b").innerText()) && /^C — /.test(await tid("tri-c").innerText()), "A, B, C in plain words");
