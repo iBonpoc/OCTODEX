@@ -29,7 +29,7 @@ const monthOf = (key: string, lang: Lang) => {
 
 /** Owner's money view: overdue → awaiting → paid. Manual payments now, Stripe in wave 4. */
 export default function Money() {
-  const { t, money, day, lang } = useI18n();
+  const { t, money, day, lang, moneyWhole } = useI18n();
   const { db } = useStore();
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
 
@@ -61,7 +61,7 @@ export default function Money() {
         extra={memberName(db, x.memberId, t) || undefined}
         figureRight
         lead={{ icon: receipt ? "camera" : "dollar" }}
-        value={`−${money(x.amountCents)}`}
+        value={`−${moneyWhole(x.amountCents)}`}
         status={mark ? { status: "neutral", label: mark } : undefined}
       />
     );
@@ -84,9 +84,9 @@ export default function Money() {
           {/* the month's total once, as a line; the days are the groups with their sums (P23: one total, not «Расходы · $X» over «Ноябрь · $X») */}
           <GroupedList testID="expenses-list">
             {months.map(([m, xs]) => [
-              <SectionTitle key={`t-${m}`} title={`${monthOf(m, lang).replace(/\s*г\.$/, "")} · ${money(sumCents(xs.map((x) => x.amountCents)))}`} />,
+              <SectionTitle key={`t-${m}`} title={`${monthOf(m, lang).replace(/\s*г\.$/, "")} · ${moneyWhole(sumCents(xs.map((x) => x.amountCents)))}`} />,
               ...[...xs.reduce((d, x) => d.set(dayKeyIn(x.at), [...(d.get(dayKeyIn(x.at)) ?? []), x]), new Map<string, Expense[]>())].map(([k, ds]) => (
-                <ListGroup key={k} separate title={`${cap(day(ds[0]!.at))} · −${money(sumCents(ds.map((x) => x.amountCents)))}`} testID={`expenses-day-${k}`}>
+                <ListGroup key={k} separate title={`${cap(day(ds[0]!.at))} · −${moneyWhole(sumCents(ds.map((x) => x.amountCents)))}`} testID={`expenses-day-${k}`}>
                   {ds.map(expenseRow)}
                 </ListGroup>
               )),

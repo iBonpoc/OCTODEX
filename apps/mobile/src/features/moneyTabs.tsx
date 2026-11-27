@@ -61,20 +61,20 @@ export function useMoneyCreate(): { create: CreateAction; onCreate: (k: string) 
  */
 export function MoneyTotal({ tab, selected, onSelect }: { tab: MoneyTab; selected?: MoneyTile; onSelect?: (k: MoneyTile | undefined) => void }) {
   const { db, role, mode } = useStore();
-  const { t, tn, money } = useI18n();
+  const { t, tn, moneyWhole } = useI18n();
   if (!canSeeInvoiceList(role)) return null;
   const items: SummaryItem[] = [];
   if (tab === "estimates") {
     const o = moneyOverview(db, db.estimates.filter((e) => canSeeEstimate(db, { role, mode, me: db.me }, e.id)));
-    if (o.estimates.n) items.push({ label: t("px3.money.est"), value: money(o.estimates.cents), testID: "money-tile-estimates" });
+    if (o.estimates.n) items.push({ label: t("px3.money.est"), value: moneyWhole(o.estimates.cents), testID: "money-tile-estimates" });
     if (o.estimates.waiting) items.push({ label: tn("px3.money.waitN", o.estimates.waiting), value: "", status: "warn", testID: "money-tile-waitReply" });
   } else {
     const s = moneySummary(db);
     if (tab === "invoices") {
       const tap = (k: MoneyTile) => (onSelect ? () => onSelect(selected === k ? undefined : k) : undefined);
-      if (s.waiting.n) items.push({ label: t("proto.money.tile.waiting"), value: money(s.waiting.cents), onPress: tap("waiting"), selected: selected === "waiting", testID: "money-tile-waiting" });
-      if (s.overdue.n) items.push({ label: t("proto.money.tile.overdue"), value: money(s.overdue.cents), status: "bad", onPress: tap("overdue"), selected: selected === "overdue", testID: "money-tile-overdue" });
-    } else if (s.received.n) items.push({ label: t("proto.money.tile.received"), value: `${money(s.received.cents)} · ${tn("px1.payN", s.received.n)}`, testID: "money-tile-received" });
+      if (s.waiting.n) items.push({ label: t("proto.money.tile.waiting"), value: moneyWhole(s.waiting.cents), onPress: tap("waiting"), selected: selected === "waiting", testID: "money-tile-waiting" });
+      if (s.overdue.n) items.push({ label: t("proto.money.tile.overdue"), value: moneyWhole(s.overdue.cents), status: "bad", onPress: tap("overdue"), selected: selected === "overdue", testID: "money-tile-overdue" });
+    } else if (s.received.n) items.push({ label: t("proto.money.tile.received"), value: `${moneyWhole(s.received.cents)} · ${tn("px1.payN", s.received.n)}`, testID: "money-tile-received" });
   }
   if (!items.length) return null;
   return <SummaryLine testID="money-tiles" items={items} />;

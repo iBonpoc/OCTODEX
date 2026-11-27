@@ -38,7 +38,7 @@ const initials = (n: string) => n.split(/\s+/).filter(Boolean).map((p) => p[0]).
  * two on a long press and to VoiceOver (the web has no swipe). «＋» — a new client; «⋯» — import from CSV (the office's).
  */
 export default function Clients() {
-  const { t, money, day, time } = useI18n();
+  const { t, money, day, time, moneyWhole } = useI18n();
   const dw = useDayWord();
   const store = useStore();
   const { db, role } = store;
@@ -135,7 +135,7 @@ export default function Clients() {
       extra: addr ? line : undefined,
       lead: { initials: initials(c.name) },
       // one money figure: the debt; none — a call icon (BUILD-SPEC §2.3 table)
-      value: m && m.owesCents > 0 ? money(m.owesCents) : undefined,
+      value: m && m.owesCents > 0 ? moneyWhole(m.owesCents) : undefined,
       status,
       // #3017: the call stays for a debtor too — they are called most (crm-review 27.11)
       actions: tel ? [{ icon: "phone" as const, a11y: `${t("client.call")} ${c.name}`, onPress: () => openContact({ kind: "call", icon: "phone", url: tel, value: c.phone ?? "" }), testID: `client-row-call-${c.id}` }] : undefined,
