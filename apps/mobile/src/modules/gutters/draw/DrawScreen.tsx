@@ -248,6 +248,9 @@ function DrawCanvas() {
   /** a cap picked on its own (#1855): the gutter is `selected`, this end its picked cap; gone when another thing is picked */
   const [pickedEnd, setPickedEnd] = useState<PickedEnd>(null);
   useEffect(() => { if (pickedEnd && pickedEnd.id !== selected) setPickedEnd(null); }, [selected, pickedEnd]);
+  /** a corner picked (#3066, spec 33-canvas-ui §3 «нажатие — выбрать угол»): the corner, not its gutter — nothing else is `selected` then */
+  const [pickedCorner, setPickedCorner] = useState<string | null>(null);
+  useEffect(() => { if (selected && pickedCorner) setPickedCorner(null); }, [selected, pickedCorner]);
   // the drawing changed (a gutter drawn, an end pulled, the length set): what is picked is the gutter, not its cap — the lift of a
   // stroke on the web is a tap on its end
   const drawnAt = useRef<{ d: unknown; at: number }>({ d: null, at: 0 });
@@ -342,8 +345,8 @@ function DrawCanvas() {
   const canvas = useCanvasGestures(viewNow, onTouchView, live, 2, { lim: zoomLim, viewport: size.w > 0 ? size : { w: 390, h: 844 }, onEdge: () => haptics.selection() });
 
   // the latest values for gesture callbacks and the delayed save
-  const cur = useRef({ drawing, view, tool, story, selected, m, canSave, ch, layers, autoDs, size, newDef });
-  cur.current = { drawing, view, tool, story, selected, m, canSave, ch, layers, autoDs, size, newDef };
+  const cur = useRef({ drawing, view, tool, story, selected, pickedCorner, m, canSave, ch, layers, autoDs, size, newDef });
+  cur.current = { drawing, view, tool, story, selected, pickedCorner, m, canSave, ch, layers, autoDs, size, newDef };
   // the store of this render for the save that runs later (module.op through the core's queue)
   const storeRef = useRef(store);
   storeRef.current = store;
@@ -741,6 +744,8 @@ function DrawCanvas() {
       // (the lift of a drag of an end or a corner is a tap on the spot on the web: not a tap on its label, #818 review)
       if (lab?.id.startsWith("corner:") && liftTap.current) return;
       if (lab?.id.startsWith("corner:")) {
+        setSelected(null);
+        setPickedCorner(lab.id.slice(7));
         setCornerSheet(lab.id.slice(7));
         return;
       }
@@ -781,6 +786,15 @@ function DrawCanvas() {
       // a free end: not a corner, not butted to another gutter — and one with «без заглушки» stays one (its sheet brings the cap back)
       const freeEnd = h?.kind === "end" && !corner && (!!d.runs.find((r) => r.id === h.id)?.noCap?.[h.end] || runEnds(d, found)[h.id]?.[h.end]?.kind !== "join");
       if (tapped.act.do === "pick") {
+        // a tap on a corner picks the corner (#3066): a ring round its mark, the gutters stay as they are
+        if (corner) {
+          if (cur.current.pickedCorner !== corner.id) haptics.selection();
+          setSelected(null);
+          setPickedEnd(null);
+          setPickedCorner(corner.id);
+          return;
+        }
+        setPickedCorner(null);
         if ((h ? h.id : null) !== cur.current.selected) haptics.selection();
         setSelected(h ? h.id : null);
         // a tap on a free end with a cap picks the cap: 🗑 takes it off, not the gutter (#1855)
@@ -794,6 +808,19 @@ function DrawCanvas() {
         return;
       }
       if (tapped.act.do === "none" || !h) return;
+      if (corner) {
+        // the second tap on a corner: its sheet, the corner stays the picked one (#3066)
+        setSelected(null);
+        setPickedCorner(corner.id);
+        if (openTimer.current) clearTimeout(openTimer.current);
+        const cid = corner.id;
+        openTimer.current = afterTap(() => {
+          openTimer.current = null;
+          if (cur.current.pickedCorner !== cid || cur.current.tool !== tl) return;
+          setCornerSheet(cid);
+        });
+        return;
+      }
       setSelected(h.id);
       if (!cur.current.canSave && h.kind === "end") return;
       // the window opens a moment later (`durFast`): the browser sends the tap's `click` after the touch ends, to whatever lies under the finger
@@ -805,8 +832,7 @@ function DrawCanvas() {
         openTimer.current = null;
         // what was picked meanwhile or another tool: the tap that asked is no longer the person's wish
         if (cur.current.selected !== pickedId || cur.current.tool !== tl) return;
-        if (corner) setCornerSheet(corner.id);
-        else if (freeEnd && h.kind === "end") setEndSheet({ id: h.id, end: h.end });
+        if (freeEnd && h.kind === "end") setEndSheet({ id: h.id, end: h.end }); // (a corner opens above: #3066)
         else setSheet(true); // the run's (or a downspout's) properties: a sheet on the phone, wider the panel is already open
       });
     },
@@ -824,6 +850,7 @@ function DrawCanvas() {
             padX: space[1],
             gap: dt.labelGap,
             selected,
+            pickedCorner,
             lift: lifted,
             // О3: the colour is never the only sign — every run's label says its storey
             lenWithStory: true,
@@ -837,7 +864,7 @@ function DrawCanvas() {
             layers,
           })
         : null,
-    [drawing, view, size, selected, t, dim, fresh, ch.lenFormat, layers, lifted],
+    [drawing, view, size, selected, pickedCorner, t, dim, fresh, ch.lenFormat, layers, lifted],
   );
   sceneRef.current = scene;
 
@@ -846,7 +873,11 @@ function DrawCanvas() {
   // «· эт N» only with more than one storey on the drawing (#1666, DS §19а — as the lengths on the canvas, #1275)
   const many = manyStories(drawing.runs);
   const capPicked = !!sel && "a" in sel && !!pickedEnd && pickedEnd.id === sel.id && hasCap(drawing, pickedEnd.id, pickedEnd.end);
-  const selText = !sel
+  // a picked corner (#3066): «Corner · Outside · 90°» — the part's name and its kind as the supplier says them (#2979)
+  const pickedC = pickedCorner ? scene?.corners.find((k) => k.id === pickedCorner) : undefined;
+  const selText = pickedC
+    ? t("mod.gutters.draw.selCorner", { kind: t(`mod.gutters.attr.ck.${pickedC.kind}`), deg: pickedC.angleDeg })
+    : !sel
     ? null
     : capPicked
       ? t("mod.gutters.draw.selCap")
@@ -854,7 +885,7 @@ function DrawCanvas() {
       ? t(many ? "mod.gutters.draw.selRun" : "mod.gutters.draw.selRunOne", { len: fmtLen(runLengthIn(sel), ch.lenFormat), n: storyOf(sel.attrs.story) })
       : t(many ? "mod.gutters.draw.selDsKind" : "mod.gutters.draw.selDsKindOne", { kind: t(`mod.gutters.attr.kind.${dsKindOf(sel.shape, sel.dsStyle).key}`).replace("\n", " "), size: dsSizeText(sel.size), n: storyOf(drawing.runs.find((r) => r.id === sel.runId)?.attrs.story) });
   /** the picked downspout's kind icon on the bottom bar (#929): the kind seen at a glance, no colour */
-  const selDsIcon = sel && !("a" in sel) ? dsKindOf(sel.shape, sel.dsStyle).icon : null;
+  const selDsIcon = pickedC ? (pickedC.kind === "in" ? "cornerIn" : "cornerOut") : sel && !("a" in sel) ? dsKindOf(sel.shape, sel.dsStyle).icon : null;
 
   // the attribute panel (П21.8): every choice shows on the canvas at once; the window's choices are one draft (DS §7.3, winDraft.ts) —
   // «Сохранить» keeps them as one step of «Назад», «Закрыть» with edits asks «Сохранить изменения?»

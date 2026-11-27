@@ -73,14 +73,14 @@ exports.run = async (h) => {
   await p.mouse.click(...(await centre(chip)));
   await tid("corner-sheet").waitFor({ timeout: 5000 });
   if (!(await tid("corner-splash").count())) {
-    await tid("corner-kind").getByRole("radio", { name: "внутренний", exact: true }).click();
+    await tid("corner-kind").getByRole("radio", { name: "Inside", exact: true }).click();
     // the sheet stays open after the kind (founder 09.11, #479): the inside corner's splash guard shows in it
     await waitFor(async () => (await tid("corner-sheet").count()) === 1 && (await tid("corner-splash").count()) === 1, "the sheet stays open, the splash guard there");
   }
   await waitFor(async () => (await svg().locator('[id^="splash-"]').count()) === 1, "an inside corner: the splash guard's mark");
-  await tid("corner-splash").getByRole("switch").click();
+  await tid("corner-splash").click(); // a ToggleRow: the row is the switch (#3066)
   await waitFor(async () => (await svg().locator('[id^="splash-"]').count()) === 0, "off: the mark is gone");
-  await tid("corner-splash").getByRole("switch").click();
+  await tid("corner-splash").click(); // a ToggleRow: the row is the switch (#3066)
   await waitFor(async () => (await svg().locator('[id^="splash-"]').count()) === 1, "on again: back");
   await closeSheet();
 

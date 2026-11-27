@@ -89,7 +89,7 @@ export interface SceneRun {
 /** an end cap (founder 08.11): left or right, looking at the face; a tap swaps both caps of the line */
 export interface SceneCap { id: string; runId: string; end: 0 | 1; at: [number, number]; side: "L" | "R"; story: Story; /** the gutter is picked: its free ends are handles to pull (#504) */ selected: boolean; /** picked up by a hold or being dragged (#1272): the point itself is bigger */ lifted?: boolean; /** something is lifted and this free end of ANOTHER gutter is where it can stick (#1272) */ target?: boolean }
 /** a corner: outside / inside (a tap swaps); an inside one gets a splash guard by itself */
-export interface SceneCorner { id: string; runId: string; at: [number, number]; kind: "out" | "in" | "bay"; splash: boolean; /** the angle between the walls, whole degrees (#933): said on the chip */ angleDeg: number; /** the unit vector (screen) along the bisector of the angle between the two gutters, into the angle: where its degrees are written (#1275) */ bis: [number, number]; /** the dash-dot arc across the angle between the two gutters, as an angle is marked in a drawing (founder 12.11); none when a side is too short on the screen or they are one line */ arc: { from: [number, number]; to: [number, number]; r: number; sweep: 0 | 1 } | null; /** a gutter of this corner is picked: the joint is a handle to drag — the ring (#818) */ handle: boolean; /** picked up by a hold or being dragged (#1272) */ lifted?: boolean }
+export interface SceneCorner { id: string; runId: string; at: [number, number]; kind: "out" | "in" | "bay"; splash: boolean; /** the angle between the walls, whole degrees (#933): said on the chip */ angleDeg: number; /** the unit vector (screen) along the bisector of the angle between the two gutters, into the angle: where its degrees are written (#1275) */ bis: [number, number]; /** the dash-dot arc across the angle between the two gutters, as an angle is marked in a drawing (founder 12.11); none when a side is too short on the screen or they are one line */ arc: { from: [number, number]; to: [number, number]; r: number; sweep: 0 | 1 } | null; /** a gutter of this corner is picked: the joint is a handle to drag — the ring (#818) */ handle: boolean; /** the corner itself is picked (#3066): the same ring, its gutters are not */ picked?: boolean; /** picked up by a hold or being dragged (#1272) */ lifted?: boolean }
 export interface SceneDs {
   id: string; at: [number, number]; story: Story; selected: boolean;
   /** «D1» inside the mark (founder 08.11) */
@@ -110,6 +110,8 @@ export interface SceneOpts {
   padX: number;
   gap: number;
   selected?: string | null;
+  /** a corner picked on its own (#3066): its mark gets the ring, no gutter is picked */
+  pickedCorner?: string | null;
   /** what is picked up by a hold or dragged (#1272): the point is drawn bigger, and the free ends it can stick to are marked */
   lift?: import("./edit").Lift | null;
   /** the radius of a downspout's mark: its label stays off it (П20.8) */
@@ -215,6 +217,7 @@ function buildSceneAll(d: Drawing, o: SceneOpts): Scene {
       bis: bisector(us[0]!.u, us[1]!.u),
       arc,
       handle: f.runs.some((x) => x.id === o.selected),
+      ...(o.pickedCorner === f.id ? { picked: true } : {}),
       ...(o.lift?.kind === "corner" && o.lift.cornerId === f.id ? { lifted: true } : {}),
     };
   });
