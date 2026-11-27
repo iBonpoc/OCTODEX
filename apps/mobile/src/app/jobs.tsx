@@ -99,7 +99,7 @@ export default function Jobs() {
         // contactActions: call, SMS, map), each its 44 zone; only what the job has
         actions={[
           ...(tel ? [{ icon: "phone" as const, a11y: `${t("client.call")} ${c?.name ?? ""}`, onPress: () => openContact({ kind: "call", icon: "phone", url: tel, value: c?.phone ?? "" }), testID: `job-row-call-${j.id}` }] : []),
-          ...(addrFull ? [{ icon: "map" as const, a11y: `${t("client.route")}: ${addrFull}`, onPress: () => openContact({ kind: "map", icon: "map", url: mapsUrl(addrFull, Platform.OS as OS), value: addrFull }), testID: `job-row-route-${j.id}` }] : []),
+          ...(addrFull ? [{ icon: "route" as const, a11y: `${t("client.route")}: ${addrFull}`, onPress: () => openContact({ kind: "map", icon: "map", url: mapsUrl(addrFull, Platform.OS as OS), value: addrFull }), testID: `job-row-route-${j.id}` }] : []),
         ]}
         onPress={() => router.push(`/job/${j.id}`)}
       />
