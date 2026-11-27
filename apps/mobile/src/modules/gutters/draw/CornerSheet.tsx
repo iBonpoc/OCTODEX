@@ -13,7 +13,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { OptionTiles } from "@/ui/optionTile";
 import { ToggleRow } from "@/ui/toggleRow";
 import { T } from "@/ui/primitives";
-import { RowView } from "@/ui/surfaces";
+import { Card, RowView } from "@/ui/surfaces";
 import { fmtLen, type LenFormat } from "../canvas/format";
 import { fmtDeg } from "../canvas/cornerPlan";
 import { cutAngleDeg, type CornerCutRun, type Drawing, type FoundCorner } from "../geometry";
@@ -55,6 +55,8 @@ export function CornerSheet({ d, f, cut, fmt, tape, splashOn, onKind, onSplash, 
         action={{ label: t("mod.gutters.draw.cornerSplitShort"), icon: "link", onPress: onSplit, testID: "corner-split" }}
       />
       <T v="caption" tone="mut">{t("mod.gutters.draw.cornerNote")}</T>
+      {/* the splash guard of an inside corner, right under its kind (reviews #3066: it goes into the estimate — not below the fold): a ToggleRow (DS А5) */}
+      {f.kind === "in" ? <ToggleRow testID="corner-splash" label={t("mod.gutters.draw.splash")} value={splashOn} onChange={onSplash} /> : null}
       {cut ? (
         <View testID="corner-cut" style={{ gap: space[2] }}>
           <View onLayout={(e) => setSketchW(e.nativeEvent.layout.width)}>
@@ -66,7 +68,7 @@ export function CornerSheet({ d, f, cut, fmt, tape, splashOn, onKind, onSplash, 
           </RowView>
           {/* a card for each piece: along the wall · along the face · the cut */}
           {cut.runs.map((r) => (
-            <View key={r.id} testID={`corner-cut-${r.id}`} style={{ gap: space[2], padding: space[3], borderRadius: radius.card, borderWidth: component.hairline, borderColor: c.bd }}>
+            <View key={r.id} testID={`corner-cut-${r.id}`}><Card inner style={{ gap: space[2] }}>
               <T v="caption" w="semibold">{t("mod.gutters.draw.cutRun", { n: d.runs.findIndex((x) => x.id === r.id) + 1 })}</T>
               <RowView style={{ gap: space[3], alignItems: "flex-start" }}>
                 <View style={{ flex: 1 }}>
@@ -82,13 +84,11 @@ export function CornerSheet({ d, f, cut, fmt, tape, splashOn, onKind, onSplash, 
                   <View testID="cut-miter"><T v="body" tabular>{`${fmtDeg(cutAngleDeg(180 - cut.angleDeg))}°`}</T></View>
                 </View>
               </RowView>
-            </View>
+            </Card></View>
           ))}
           {/* the measure is rough: ONE line, at the bottom of the cut */}
         </View>
       ) : null}
-      {/* the splash guard of an inside corner: a ToggleRow (DS А5 — no bare Toggle), the row presses */}
-      {f.kind === "in" ? <ToggleRow testID="corner-splash" label={t("mod.gutters.draw.splash")} value={splashOn} onChange={onSplash} /> : null}
       <CornerTriangle key={f.id} d={d} f={f} onAngle={onAngle} />
     </View>
   );
