@@ -5839,5 +5839,9 @@ export const es: Dict = {
   "ov3068.placeN": "Propiedad {n} · {label}",
   "ov3068.allJobs": "Todos los trabajos · {n}",
   "ov3068.billingSame": "Igual que la propiedad {n}",
+  "ov3068.stories.one": "{n} planta",
+  "ov3068.stories.few": "{n} plantas",
+  "ov3068.stories.many": "{n} plantas",
+  "ov3068.stories.other": "{n} plantas",
   "ov3061.all": "Todo",
 };

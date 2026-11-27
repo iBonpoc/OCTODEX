@@ -5840,6 +5840,10 @@ export const ru = {
   "ov3068.placeN": "Объект {n} · {label}",
   "ov3068.allJobs": "Все работы · {n}",
   "ov3068.billingSame": "Как у объекта {n}",
+  "ov3068.stories.one": "{n} этаж",
+  "ov3068.stories.few": "{n} этажа",
+  "ov3068.stories.many": "{n} этажей",
+  "ov3068.stories.other": "{n} этажа",
   "ov3061.all": "Все",
 } as const;
 
