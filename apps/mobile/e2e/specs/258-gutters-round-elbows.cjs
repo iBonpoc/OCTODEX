@@ -5,7 +5,7 @@
  * default (#1776, founder 16.11: «у прямого водостока стандартно колен 0, у ребристого 3 штуки A»).
  * Finds things by testID; waits on what it checks (no pauses).
  */
-const { stands } = require("../gutters.cjs");
+const { stands, docsFor } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -39,6 +39,7 @@ exports.run = async (h) => {
       return r;
     };
   });
+  await docsFor(p, "view-pdf-crew"); // #2989: in «⋯ → Документы бригады»
   await tid("view-pdf-crew").getByRole("button").click();
   await p.waitForFunction(
     () => {

@@ -139,7 +139,8 @@ exports.run = async (h) => {
     await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="draw-tool-ds"] [aria-pressed="true"]')].length > 0, null, { timeout: 3000 });
     if (n === 2) {
       await p.waitForFunction(defaultsShown, null, { timeout: 5000 }).catch(() => h.expect(false, "two taps on «Водосток»: its new ones' properties"));
-      if ((await tid("draw-panel-close").count()) > 0) await tid("draw-panel-close").getByRole("button").click();
+      // «Новые водостоки» has «Закрыть / Сохранить» at the bottom, as a downspout's window (#2987): nothing changed — «Закрыть» closes at once
+      if (h.layout.width > 390) await tid("attr-win-close").getByRole("button").click();
       else {
         await pressEscUntilClosed(p);
         await sheetGone(p);
