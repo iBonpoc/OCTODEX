@@ -354,6 +354,11 @@ describe("stand.yml: who writes, where the code of the PRs runs, where the key i
     expect(job("merge-again")).toContain("stand: ${{ steps.again.outputs.stand }}");
     expect(job("merge")).toContain("stand: ${{ steps.merge.outputs.stand }}");
   });
+  it("deploy never runs in a cancelled run — an old build must not go online (review of #3125 п.6)", () => {
+    const d = job("deploy");
+    expect(d).toContain("if: ${{ !cancelled() && needs.build.result == 'success' && (needs.merge-again.result == 'success' || needs.merge-again.result == 'skipped') }}");
+    expect(s).not.toMatch(/always\(\)/);
+  });
   it("deploy: the environment preview-web, static files checked as in the preview, the alias stand, the pinned task", () => {
     const d = job("deploy");
     expect(d).toMatch(/environment: preview-web/);
