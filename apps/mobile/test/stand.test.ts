@@ -224,8 +224,14 @@ describe("stand: text from a PR is inert in the task body (review of #3125 п.3)
     expect(t).not.toMatch(/(^|[^\\])[[\]()<>`*_#|~!]/);
     expect(t).not.toMatch(/@(?!\u200b)/);
     expect(t).not.toContain("\n");
-    expect(t).toContain("\\[x\\]\\(http://e\\)");
+    expect(t).toContain("\\[x\\]\\(http\u200b://e\\)");
     expect(t).toContain("\\<\\!--");
+  });
+  it("a bare URL is not a link: a zero-width space before «://» and in «www.» (review 2)", () => {
+    const t = S.md("см. https://evil.example/x и www.evil.example");
+    expect(t).not.toMatch(/https:\/\//);
+    expect(t).toContain("https\u200b://evil.example/x");
+    expect(t).not.toMatch(/www\.evil/);
   });
   it("a field is cut to 200 characters, the body to the limit", () => {
     expect(S.md("я".repeat(500)).length).toBeLessThanOrEqual(S.FIELD_MAX);
@@ -235,7 +241,7 @@ describe("stand: text from a PR is inert in the task body (review of #3125 п.3)
   });
   it("a file or branch name from a PR is escaped inside our reasons; our «#N» stays a link", () => {
     const r = S.mergeAll({ mainSha: "M", order: [pr(1, { files: ["[x](http://e).ts"] }), pr(2, { files: ["[x](http://e).ts"] })], merge: fakeMerge() });
-    expect(r.skipped[0].reason).toBe("конфликт с #1, файлы \\[x\\]\\(http://e\\).ts");
+    expect(r.skipped[0].reason).toBe("конфликт с #1, файлы \\[x\\]\\(http\u200b://e\\).ts");
     expect(S.plan({ prs: [pr(3, { baseRef: "@user/[x]" })] }).skipped[0].reason).toContain("@\u200buser/\\[x\\]");
   });
   it("the body: the title and «где смотреть» from a PR come through escaped; a strange link or SHA is not shown", () => {

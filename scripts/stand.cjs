@@ -173,12 +173,14 @@ const BODY_MAX = 60000; // GitHub takes 65536
 
 /**
  * Text from a PR (title, «где смотреть», a reason with file names) made inert for the task body (review of #3125 п.3): one line,
- * at most 200 characters, Markdown and HTML marks escaped, «@» broken with a zero-width space (no mention, no notification).
+ * at most 200 characters, Markdown and HTML marks escaped, «@» broken with a zero-width space (no mention, no notification),
+ * bare URLs broken the same way (no autolink).
  */
 function md(text) {
   let t = String(text ?? "").replace(/[\r\n\t]+/g, " ").replace(/\s{2,}/g, " ").trim();
   if (t.length > FIELD_MAX) t = t.slice(0, FIELD_MAX - 1) + "…";
-  return t.replace(/[\\`*_[\]()<>#|~!]/g, (c) => `\\${c}`).replace(/@/g, "@\u200b");
+  // a bare URL is not a link either: a zero-width space before «://» and in «www.» (review 2 of #3125)
+  return t.replace(/[\\`*_[\]()<>#|~!]/g, (c) => `\\${c}`).replace(/@/g, "@\u200b").replace(/:\/\//g, "\u200b://").replace(/\bwww\./gi, (w) => `${w.slice(0, 3)}\u200b.`);
 }
 
 /** Our own reasons keep their «#N» links: what came from a PR in them (file and branch names) is escaped where they are made. */
