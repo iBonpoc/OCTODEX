@@ -248,8 +248,7 @@ export function ChecklistEditor({ v, title }: { v: Visit; title?: string }) {
               testID={`chk-edit-${i}-open`}
               title={item.label}
               subtitle={[itemRequired(item) ? t("chk3.requiredShort") : t("chk3.optional"), item.templateName ? t("chk3.from", { name: item.templateName }) : null].filter(Boolean).join(" · ")}
-              lead={{ icon: itemKind(item) === "photo" ? "camera" : "checklist" }}
-              wrap
+              lead={itemKind(item) === "photo" ? { icon: "camera" } : undefined}
               onPress={() => setEditing(item)}
               actions={[
                 ...(i > 0 ? [{ icon: "chevronUp" as const, a11y: `${t("chk3.up")} · ${item.label}`, testID: `chk-edit-${i}-up`, onPress: () => say(t("chk3.moved"), store.moveVisitItem(v.id, item.id, -1)) }] : []),

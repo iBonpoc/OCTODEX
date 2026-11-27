@@ -4550,7 +4550,7 @@ export const es: Dict = {
   "chk2b.reviewed": "Revisado",
   "chk2b.reviewedToast": "Marcado como revisado",
   // step 14 CH3 (чек-листы): the office edits a visit's checklist
-  "chk3.hint": "Se edita antes de la visita del técnico. Solo el director quita «Obligatorio».",
+  "chk3.hint": "Se edita antes de la visita del técnico. Toque un punto para editarlo. Solo el director quita «Obligatorio».",
   "chk3.empty": "Aún no hay puntos",
   "chk3.edit": "Editar",
   "chk3.editTitle": "Punto de la lista",

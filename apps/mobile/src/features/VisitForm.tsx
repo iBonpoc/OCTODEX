@@ -331,8 +331,8 @@ export function NotifySheet({ visitId, onClose }: { visitId: ID | null; onClose:
       <T v="body">{text}</T>
       {/* DS §7.5 (#3065): the channel is a row of one choice (as the iOS share sheet), not a column of buttons; «Не сейчас» — the one quiet button */}
       <View testID="vf-notify-channels">
-        {sms ? <ListRow title={t("vf.notify.sms")} left={<Icon name="sms" />} onPress={() => { Linking.openURL(sms).catch(() => {}); done(); }} /> : null}
-        {mail ? <ListRow title={t("vf.notify.email")} left={<Icon name="mail" />} onPress={() => { Linking.openURL(mail).catch(() => {}); done(); }} /> : null}
+        {sms ? <ListRow title={t("vf.notify.sms")} left={<Icon name="sms" />} chevron={false} onPress={() => { Linking.openURL(sms).catch(() => {}); done(); }} /> : null}
+        {mail ? <ListRow title={t("vf.notify.email")} left={<Icon name="mail" />} chevron={false} onPress={() => { Linking.openURL(mail).catch(() => {}); done(); }} /> : null}
         <ListRow title={t("vf.notify.copy")} left={<Icon name="copy" />} chevron={false} onPress={() => { Clipboard.setStringAsync(text).catch(() => {}); toast.show(t("vf.notify.copied")); done(); }} />
       </View>
       <Button label={t("vf.notify.later")} variant="ghost" full onPress={onClose} />
@@ -370,8 +370,8 @@ export function CancelNotifySheet({ visitId, onClose }: { visitId: ID | null; on
       {!sms && !mail ? <T v="caption" tone="mut">{t("visitP2.notify.noContact")}</T> : null}
       {/* DS §7.5 (#3065): the channel — rows of one choice, not a column of buttons */}
       <View testID="vc-notify-channels">
-        {sms ? <ListRow title={t("vf.notify.sms")} left={<Icon name="sms" />} onPress={() => open(sms, "sms")} /> : null}
-        {mail ? <ListRow title={t("vf.notify.email")} left={<Icon name="mail" />} onPress={() => open(mail, "email")} /> : null}
+        {sms ? <ListRow title={t("vf.notify.sms")} left={<Icon name="sms" />} chevron={false} onPress={() => open(sms, "sms")} /> : null}
+        {mail ? <ListRow title={t("vf.notify.email")} left={<Icon name="mail" />} chevron={false} onPress={() => open(mail, "email")} /> : null}
         <ListRow title={t("vf.notify.copy")} left={<Icon name="copy" />} chevron={false} onPress={() => { Clipboard.setStringAsync(n.text).catch(() => {}); toast.show(t("vf.notify.copied")); onClose(); }} />
       </View>
       <Button label={t("vf.notify.later")} variant="ghost" full onPress={onClose} />
