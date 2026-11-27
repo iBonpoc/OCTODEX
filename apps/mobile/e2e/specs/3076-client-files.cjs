@@ -7,6 +7,7 @@ const { atMinute, todayKey, addDays } = require("../companyTime.cjs");
 // a small picture as a data address (it survives a reload, unlike a `blob:`)
 const zlib = require("node:zlib");
 const { pressEscUntilClosed } = require("../sheet.cjs");
+const { settle } = require("../settle.cjs");
 // a small one-colour PNG as a data address (it survives a reload, unlike a `blob:`)
 const px = (hex) => {
   const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
@@ -42,6 +43,8 @@ exports.run = async (h) => {
   await row.click();
   await p.waitForURL(/\/client\/files\/c1/);
   await p.getByTestId("client-files").locator("visible=true").first().waitFor();
+  // the push and the big title's fade are done (the shot is not taken half-way)
+  await settle(p);
 
   // groups by visit, the newest first; one property and one job — no filter fields
   // (a group's count pill is «<testID>-count»: only the groups themselves)

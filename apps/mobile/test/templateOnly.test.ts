@@ -87,6 +87,8 @@ const EXEMPT: Record<string, string> = {
   "(tabs)/inbox.tsx": "переадресация, экрана нет (как NOT_A_SCREEN в screens.test.ts)",
   "module/[key]/[screen].tsx": "холст модуля Gutters — полный экран (DS §19а, основатель 12.11.2026 #1274)",
   "estimate/signature.tsx": "холст подписи — полный экран (правило 2/3 исключения холста)",
+  // ВРЕМЕННО до #3081 (решение руководителя смены 10, 27.11.2026; DS §8.0 «Исключения»)
+  "client/files/[id].tsx": "временно до #3081: «Фото и файлы» клиента — нет шаблона с группой-сеткой фото",
 };
 
 // opis 26.11.2026 (#2893 этап 1): screens built by hand — ONLY SHRINKS

@@ -2,6 +2,7 @@ import { useRef, useState, type ReactNode } from "react";
 import { Image, ScrollView, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { liveUri, madeHere } from "./photoUri";
+import { gridTile } from "./photoGrid";
 import { prepPicked, type PickedPhoto } from "@/data/photoShrink";
 import { canRetry, isPrepFail } from "@/data/photoUpload";
 import { useStore } from "@/data/store";
@@ -25,6 +26,10 @@ export function PhotoStrip({ grid, photos, onAdd, onAddPreparing, onRemove, onRe
   const store = useStore();
   const prepareAgain = onPrepare ?? ((id: string) => store.preparePhotoAgain({ photoId: id }));
   const [opened, setOpen] = useState<Photo | null>(null);
+  // #3076: in the grid the thumbnails fill the width — 4 in a row on a phone, more where `photoThumb` fits more (no new size: the
+  // width is the container's, the least size is `photoThumb`)
+  const [gridW, setGridW] = useState(0);
+  const tile = grid && gridW ? gridTile(gridW) : THUMB;
   // a `blob:` of a page that is gone (web, after a reload) is shown as the picture sign, never loaded (an empty preview
   // and a console error otherwise)
   const shown = photos.map((p) => ({ ...p, uri: liveUri(p.uri) }));
@@ -70,7 +75,7 @@ export function PhotoStrip({ grid, photos, onAdd, onAddPreparing, onRemove, onRe
   };
   return (
     <>
-    <Strip grid={grid}>
+    <Strip grid={grid} onWidth={setGridW}>
       {onAdd ? (
         // the add tile (DS «Плитка добавления»): the size of a thumbnail, a one-line caption on every language, the frame
         // readable (≥ 3:1: `mut`), the icon never squeezed by a big font (the tile grows, not the icon shrinks)
@@ -108,9 +113,9 @@ export function PhotoStrip({ grid, photos, onAdd, onAddPreparing, onRemove, onRe
           accessibilityRole="button"
           accessibilityLabel={`${title ?? (p.kind === "after" ? t("visit.photosAfter") : t("visit.photosBefore"))}, ${t("photo.nOf", { n: i + 1, total: shown.length })}${p.upload ? `, ${t(p.upload.failed === "preparing" ? "photoUp.prep.chip" : "photoUp.a11y")}` : ""}`}
           testID={`photo-thumb-${p.id}`}
-          style={{ width: THUMB, height: THUMB, borderRadius: radius.inner, overflow: "hidden", backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}
+          style={{ width: tile, height: tile, borderRadius: radius.inner, overflow: "hidden", backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}
         >
-          {p.uri ? <Image source={{ uri: p.uri }} style={{ width: THUMB, height: THUMB }} /> : <Icon name="image" s={size.iconLg} color={c.mut} />}
+          {p.uri ? <Image source={{ uri: p.uri }} style={{ width: tile, height: tile }} /> : <Icon name="image" s={size.iconLg} color={c.mut} />}
         </Press>
       ))}
       <Sheet visible={!!open} onClose={() => setOpen(null)} title={title ?? (open?.kind === "after" ? t("visit.photosAfter") : t("visit.photosBefore"))}>
@@ -192,9 +197,9 @@ export function PhotoStrip({ grid, photos, onAdd, onAddPreparing, onRemove, onRe
 }
 
 /** one strip that scrolls sideways, or (#3076) the same thumbnails wrapped into rows */
-function Strip({ grid, children }: { grid?: boolean; children: ReactNode }) {
+function Strip({ grid, onWidth, children }: { grid?: boolean; onWidth: (w: number) => void; children: ReactNode }) {
   return grid ? (
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }} testID="photo-grid">
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }} testID="photo-grid" onLayout={(e) => onWidth(e.nativeEvent.layout.width)}>
       {children}
     </View>
   ) : (
@@ -203,3 +208,4 @@ function Strip({ grid, children }: { grid?: boolean; children: ReactNode }) {
     </ScrollView>
   );
 }
+

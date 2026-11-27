@@ -817,6 +817,12 @@ export function ClientLog({ c, f }: { c: Customer; f: ClientFacts }) {
         <NotesBlock subjectType="customer" subjectId={c.id} extraSubjects={r.leadIds.map((id) => ({ type: "lead" as const, id }))} />
       </View>
       <GroupedList testID="client-feed">
+        {/* #3076 (crm-reviewer): over the feed — a long history never hides it */}
+        {files ? (
+          <ListGroup separate>
+            <GroupRow lead={{ icon: "image" }} title={t("c3076.title")} value={String(files)} chevron onPress={() => router.push(`/client/files/${c.id}`)} testID="client-files-row" />
+          </ListGroup>
+        ) : null}
         <ListGroup
           separate
           title={t("client.row.tasks")}
@@ -851,11 +857,6 @@ export function ClientLog({ c, f }: { c: Customer; f: ClientFacts }) {
             ))}
           </ListGroup>
         ))}
-        {files ? (
-          <ListGroup separate>
-            <GroupRow lead={{ icon: "image" }} title={t("c3076.title")} value={String(files)} chevron onPress={() => router.push(`/client/files/${c.id}`)} testID="client-files-row" />
-          </ListGroup>
-        ) : null}
       </GroupedList>
       <TaskSheet value={taskEdit} onClose={() => setTaskEdit(null)} />
     </View>

@@ -65,9 +65,10 @@ export function ClientFiles({ c }: { c: Customer }) {
       ) : null}
       {!shown.total ? <Empty icon="image" title={t("c3076.emptyFilter")} testID="client-files-none" /> : null}
       {shown.groups.map((g) => (
-        <ListGroup key={g.visit.id} testID={`client-files-visit-${g.visit.id}`} title={day(g.visit.start)} count={g.photos.length}>
+        <ListGroup key={g.visit.id} testID={`client-files-visit-${g.visit.id}`} title={day(g.visit.start)}>
           <GroupRow
             compact
+            wrap
             testID={`client-files-open-${g.visit.id}`}
             lead={{ icon: "calendar" }}
             title={g.job?.title ?? t("c3076.visit")}
