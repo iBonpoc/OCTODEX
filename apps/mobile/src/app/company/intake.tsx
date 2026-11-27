@@ -123,7 +123,6 @@ export default function CompanyIntake() {
             <Card>
               {form ? (
                 <View testID="intake-form-card" style={{ gap: space[3] }}>
-                  <T v="body" numberOfLines={2}>{link}</T>
                   <ReadOnly value={busy}>
                     <Toggle label={t("intake.set.enabled")} on={form.enabled} onChange={(on) => run(() => setEndpoint(form.id, { enabled: on }))} />
                     <Toggle label={t("intake.set.smsBox")} on={form.smsConsent} onChange={(on) => run(() => setEndpoint(form.id, { smsConsent: on }))} />
@@ -143,18 +142,19 @@ export default function CompanyIntake() {
             {form ? (
               <View style={{ gap: space[2] }}>
                 <ListGroup testID="intake-form-actions">
-                  <GroupRow testID="intake-copy-link" title={t("intake.set.copyLink")} lead={{ icon: "copy" }} onPress={() => void copyText(link).then(() => toast.show(t("intake.set.copied")))} />
+                  <GroupRow testID="intake-copy-link" title={t("intake.set.copyLink")} subtitle={link} lead={{ icon: "copy" }} onPress={() => void copyText(link).then(() => toast.show(t("intake.set.copied")))} />
                   <GroupRow testID="intake-share" title={t("intake.set.share")} lead={{ icon: "send" }} onPress={() => shareText(t("intake.set.shareText"), link)} />
                   <GroupRow testID="intake-copy-code" title={t("intake.set.copyCode")} subtitle={t("intake.set.codeHint")} wrap lead={{ icon: "copy" }}
                     onPress={() => void copyText(siteSnippet(link, t("intake.title"))).then(() => toast.show(t("intake.set.copied")))} />
                 </ListGroup>
-                {busy ? null : (
+                {/* while it saves the row stays where it is, off (nothing jumps under the finger, DS §14.4) */}
+                <ReadOnly value={busy}>
                   <ListGroup>
-                    <View testID="intake-rotate" style={{ paddingHorizontal: space[4] }}>
-                      <ActionRow tone="bad" label={t("intake.set.rotate")} onPress={() => setAsk(form)} />
+                    <View testID="intake-rotate">
+                      <ActionRow inGroup tone="bad" label={t("intake.set.rotate")} onPress={() => setAsk(form)} />
                     </View>
                   </ListGroup>
-                )}
+                </ReadOnly>
               </View>
             ) : null}
 
@@ -168,7 +168,6 @@ export default function CompanyIntake() {
                     <ReadOnly value={busy}>
                       <Toggle label={t("intake.set.enabled")} on={hook.enabled} onChange={(on) => run(() => setEndpoint(hook.id, { enabled: on }))} />
                     </ReadOnly>
-                    <Button label={t("intake.set.newKey")} variant="ghost" onPress={() => setAsk(hook)} disabled={busy} />
                   </>
                 ) : (
                   <Button label={t("intake.set.makeKey")} variant="secondary" full disabled={busy || !pickSource}
@@ -176,6 +175,16 @@ export default function CompanyIntake() {
                 )}
               </View>
             </Card>
+            {/* «Новый ключ» (the old one stops) — like «Новая ссылка»: the last row, a red word, asked first (DS §7.5) */}
+            {hook ? (
+              <ReadOnly value={busy}>
+                <ListGroup>
+                  <View testID="intake-new-key">
+                    <ActionRow inGroup tone="bad" label={t("intake.set.newKey")} onPress={() => setAsk(hook)} />
+                  </View>
+                </ListGroup>
+              </ReadOnly>
+            ) : null}
           </>
         ) : null}
 

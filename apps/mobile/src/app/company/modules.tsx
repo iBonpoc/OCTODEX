@@ -92,8 +92,8 @@ export default function CompanyModules() {
         </ListGroup>
         {!ro && v.canDisable ? (
           <ListGroup>
-            <View testID={`module-${d.key}-disable`} style={{ paddingHorizontal: space[4] }}>
-              <ActionRow tone="bad" label={t("mod.disable")} onPress={() => toast.show(saved("mod.disabled"), store.disableModule(d.key))} />
+            <View testID={`module-${d.key}-disable`}>
+              <ActionRow inGroup tone="bad" label={t("mod.disable")} onPress={() => toast.show(saved("mod.disabled"), store.disableModule(d.key))} />
             </View>
           </ListGroup>
         ) : null}
