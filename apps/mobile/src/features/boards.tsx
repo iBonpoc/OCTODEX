@@ -4,7 +4,7 @@ import { useStore } from "@/data/store";
 import type { DB, Estimate, EstimateStatus } from "@/data/types";
 import { ESTIMATE_GROUPS, estimateGroup, type EstimateFilter } from "@/features/listGroups";
 import { useI18n, type DictKey } from "@/i18n";
-import { estimateStatusView, estimateView } from "@/features/estimateStatus";
+import { estimateStatusView } from "@/features/estimateStatus";
 import { canSeeEstimate } from "@/features/access";
 import { estimateSigns } from "@/features/listSigns";
 import { estimateListAmount } from "@/features/estimateDoc";
@@ -70,10 +70,8 @@ export function useEstimateList(q: string, allDone: boolean, onAllDone: () => vo
     const amount = estimateListAmount(e);
     // what is with it now, once: the sign («Без ответа 6 дн»), else the last event, else its status word
     // an estimate waiting for OUR signature says so first: it is in «Нужно действие» for that, not for how long it was silent
-    // #3058: a sent estimate changed after (a draft again) says «Изменена после отправки» — the same word as its header
-    const view = estimateView(e);
-    const what = e.status === "awaiting_countersign" || view !== estView[e.status]
-      ? t(view.l)
+    const what = e.status === "awaiting_countersign"
+      ? t(estView[e.status].l)
       : sign
       ? t(sign.key, sign.params)
       : e.approval

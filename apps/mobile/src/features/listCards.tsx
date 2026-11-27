@@ -9,7 +9,7 @@ import { useStore } from "@/data/store";
 import type { DictKey } from "@/i18n";
 import { useI18n } from "@/i18n";
 import type { Estimate, Invoice, Lead, Payment } from "@/data/types";
-import { estimateView } from "@/features/estimateStatus";
+import { estimateStatusView } from "@/features/estimateStatus";
 import { estimateListAmount } from "@/features/estimateDoc";
 import { estimateSigns, invoiceSigns, leadSigns } from "@/features/listSigns";
 import { invoiceBalance, invoiceStatusView } from "@/features/invoiceStatus";
@@ -104,7 +104,7 @@ export function EstimateListCard({ e, density, panel }: { e: Estimate; density: 
   const { t, money, day } = useI18n();
   const c = db.customers.find((x) => x.id === e.customerId);
   const prop = db.properties.find((x) => x.id === e.propertyId);
-  const v = estimateView(e); // #3058: «Изменена после отправки» like the header
+  const v = estimateStatusView(e.status);
   const sign = estimateSigns(e, Date.now())[0];
   // amount rule of the estimates chat: signed option / «from» the cheapest / the total (money through the engine)
   const amount = estimateListAmount(e);
