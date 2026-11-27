@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { View, ScrollView } from "react-native";
+import { Platform, View, ScrollView, type ViewStyle } from "react-native";
 import { usePathname } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { component, radius, size, space } from "@octo/design-tokens";
@@ -203,6 +203,9 @@ function Item({
   );
 }
 
+/** the web: an unseen copy stays out of the page's text (innerText, copy-paste) — `visibility: hidden` keeps its size */
+const HIDDEN_COPY = (Platform.OS === "web" ? { visibility: "hidden" } : null) as ViewStyle | null;
+
 /**
  * The rail's caption (#3011): two lines between words, centred; the longest word measured once, and when it is wider than the cell the
  * caption is drawn smaller from its top centre (`railLabelScale`, down to `font.fitMinScale`) — a word is never broken, never «…»
@@ -217,7 +220,7 @@ function RailLabel({ label, w }: { label: string; w: "semibold" | "medium" }) {
   return (
     <View style={{ width: railLabelRoom, height: h ? h * s : undefined, overflow: "hidden", alignItems: "center" }}>
       {/* the longest word in one line, unseen: its width decides the scale */}
-      <View aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, width: railLabelRoom * 20, opacity: 0, alignItems: "flex-start" }}>
+      <View aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none" style={[{ position: "absolute", top: 0, left: 0, width: railLabelRoom * 20, opacity: 0, alignItems: "flex-start" }, HIDDEN_COPY]}>
         <View onLayout={(e) => setWord(Math.ceil(e.nativeEvent.layout.width) + 1)}>
           <T v="micro" w={w} numberOfLines={1}>
             {longest}
