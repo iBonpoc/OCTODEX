@@ -198,7 +198,7 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
     ) : current === "visits" ? (
       <ClientVisits f={f} customerId={c.id} />
     ) : current === "places" ? (
-      <ClientPlaces c={c} f={f} onRoute={route} />
+      <ClientPlaces c={c} f={f} onRoute={route} onCall={(p) => callDone(p)} onSms={(p) => sms(p)} />
     ) : current === "log" ? (
       <ClientLog c={c} f={f} />
     ) : (

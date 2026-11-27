@@ -681,7 +681,7 @@ export function ClientMoney({ c, f }: { c: Customer; f: ClientFacts }) {
 
 /* ============================== Объекты ============================== */
 
-export function ClientPlaces({ c, f, onRoute }: { c: Customer; f: ClientFacts; onRoute: (p: Property) => void }) {
+export function ClientPlaces({ c, f, onRoute, onCall, onSms }: { c: Customer; f: ClientFacts; onRoute: (p: Property) => void; onCall?: (p: Person, number: string) => void; onSms?: (p: Person) => void }) {
   const { t } = useI18n();
   const { db, r, office } = f;
   const [newProp, setNewProp] = useState<Property | null>(null);
@@ -697,7 +697,7 @@ export function ClientPlaces({ c, f, onRoute }: { c: Customer; f: ClientFacts; o
         />
       ) : (
         <GroupedList>
-          {r.properties.map((p, i) => <PlaceCard key={p.id} p={p} n={i + 1} f={f} onRoute={onRoute} />)}
+          {r.properties.map((p, i) => <PlaceCard key={p.id} p={p} n={i + 1} f={f} onRoute={onRoute} onCall={onCall} onSms={onSms} />)}
           {office ? (
             // #3068 (crm/design review): the billing address is the client's, under its own title; the same as a place — said so
             <ListGroup title={t("client.row.billing")} testID="client-billing">
@@ -727,8 +727,9 @@ export function ClientPlaces({ c, f, onRoute }: { c: Customer; f: ClientFacts; o
  * under its title «Объект 1 · Home» — the address with the route, the access (the gate code by its rights, the words of the way in),
  * the notes of the place (pinned first, two), the people on site, the jobs there (three, with their status; «Все работы · N»).
  */
-function PlaceCard({ p, n, f, onRoute }: { p: Property; n: number; f: ClientFacts; onRoute: (p: Property) => void }) {
+function PlaceCard({ p, n, f, onRoute, onCall, onSms }: { p: Property; n: number; f: ClientFacts; onRoute: (p: Property) => void; onCall?: (p: Person, number: string) => void; onSms?: (p: Person) => void }) {
   const { t, tn } = useI18n();
+  const dial = useDialThenAsk();
   const dw = useDayWord();
   const { db, r, office } = f;
   const seen = canSeeGateCode(db, f.role, p.id);
@@ -771,7 +772,22 @@ function PlaceCard({ p, n, f, onRoute }: { p: Property; n: number; f: ClientFact
         />
       ))}
       {people.map((x) => (
-        <GroupRow key={x.id} testID={`client-property-person-${x.id}`} lead={{ icon: "user" }} title={x.name} subtitle={t("proto.client.onSite")} />
+        <GroupRow
+          key={x.id}
+          testID={`client-property-person-${x.id}`}
+          lead={{ icon: "user" }}
+          title={x.name}
+          subtitle={t("proto.client.onSite")}
+          // the review of #3060: the person on site is one tap away — the call (as the contacts panel: dial, then ask) and, a mobile, SMS
+          actions={(() => {
+            const ph = x.phones?.[0];
+            if (!ph || !onCall) return undefined;
+            return [
+              { icon: "phone" as const, a11y: `${t("client.call")} ${x.name}: ${ph.number}`, testID: `client-property-call-${x.id}`, onPress: () => dial(ph.number, () => onCall(x, ph.number)) },
+              ...(ph.label === "mobile" && onSms ? [{ icon: "sms" as const, a11y: `${t("cc.sms")} ${x.name}: ${ph.number}`, testID: `client-property-sms-${x.id}`, onPress: () => onSms(x) }] : []),
+            ];
+          })()}
+        />
       ))}
       {jobs.slice(0, 3).map((j) => (
         <GroupRow
