@@ -3517,6 +3517,7 @@ export const en: Dict = {
   "mod.hint": "Add-ons for your trade: measuring, calculation, its own estimate.",
   "mod.tradesLink": "Add-ons for a trade — for example, measuring a house on the phone. Turn on and the free trial.",
   "mod.intro": "A module adds the work of one trade to the app. Clients, estimates and invoices stay shared. Turning it off deletes nothing.",
+  "mod.places": "Module sections",
   "mod.st.off": "Not on",
   "mod.st.disabled": "Turned off",
   "mod.st.trial": "Trial · {n} days left",

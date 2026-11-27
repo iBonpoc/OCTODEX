@@ -3517,6 +3517,7 @@ export const es: Dict = {
   "mod.hint": "Complementos para su oficio: medición, cálculo, su propio presupuesto.",
   "mod.tradesLink": "Complementos para un oficio — por ejemplo, medir una casa en el teléfono. Activar y la prueba gratis.",
   "mod.intro": "Un módulo agrega a la app el trabajo de un oficio. Clientes, presupuestos y facturas siguen siendo comunes. Desactivarlo no borra nada.",
+  "mod.places": "Secciones del módulo",
   "mod.st.off": "No activado",
   "mod.st.disabled": "Desactivado",
   "mod.st.trial": "Prueba · quedan {n} días",
