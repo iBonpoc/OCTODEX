@@ -3,7 +3,7 @@
  * screenshot (the CI artifact); a passed run and an unnamed spec keep none — tracing costs CPU, the matrix must not slow down.
  */
 import { createRequire } from "node:module";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -49,7 +49,11 @@ describe("e2e trace of a failed run (CHECKS §9 №87)", () => {
     expect(run).toMatch(/runFailed = true;/);
     expect(run).toMatch(/await stopTrace\(runFailed\);\n\s+await ctx\.close\(\);/);
     const yml = readFileSync(join(__dirname, "../../../.github/workflows/checks.yml"), "utf8");
-    expect(yml).toMatch(/E2E_TRACE_SPECS: 37-service-categories\.cjs/);
+    expect(yml).toMatch(/E2E_TRACE_SPECS: 37-service-categories\.cjs 480-gutters-done-slow-network\.cjs\n/);
+    // every spec CI names exists — a typo would trace nothing, silently
+    const named = T.tracedSpecs(yml.match(/E2E_TRACE_SPECS: ([^\n]+)/)![1]);
+    expect(named.size).toBeGreaterThan(0);
+    for (const f of named) expect(existsSync(join(__dirname, "../e2e/specs", f)), f).toBe(true);
     // the trace lands in e2e/out/, the folder the artifact uploads
     expect(yml).toContain("path: apps/mobile/e2e/out/");
   });
