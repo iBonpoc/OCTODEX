@@ -654,6 +654,73 @@ const S = {
       <div style="display:flex;gap:8px;margin-top:10px"><span style="flex:1;background:rgba(255,255,255,.16);border-radius:999px;height:40px;display:flex;align-items:center;justify-content:center;font-weight:700">Закончил выезд</span></div>
       <div style="font-size:12px;opacity:.7;margin-top:8px">Нажмите на плашку — откроется выезд: фото, заметка голосом</div></div>
     <div style="font-size:11.5px;opacity:.55;text-align:center;margin-top:10px">Сумм и имени клиента на экране блокировки нет — правило Apple</div></div>` },
+  /* ===== Сценарий (а): мелкая работа на месте — линия из двух точек ===== */
+  Q1: { cap: "(а) 1. Быстрая смета на месте: одна позиция, клиент уже есть", html: `<div class="scroll">
+    <div class="hdr"><span style="color:var(--acc-text);font-weight:600">Отмена</span><span class="sp"></span><b>Быстрая смета</b><span class="sp"></span><span style="width:52px"></span></div>
+    <div style="margin:10px 0 6px;color:var(--mut);font-size:13px">Клиент</div>
+    <div class="lg">${row("people","Sarah Mitchell","1420 Oak Grove Ave","")}</div>
+    <div style="margin:14px 0 6px;color:var(--mut);font-size:13px">Что сделали</div>
+    <div class="lg">${row("doc","Outlet replacement","из каталога · 1 шт","$180.00")}${add("Позиция")}</div>
+    <div class="mbar" style="margin-top:14px"><div class="t"><span>Итого</span><b>$180.00</b></div></div>
+    <div style="color:var(--mut);font-size:12.5px;margin-top:6px">Работа до $500 — договор не нужен, подпись — подтверждение клиента.</div>
+    </div><div class="pinbar" style="bottom:0"><span class="b acc" style="flex:1;height:44px">Подписать на месте</span></div>` },
+  Q2: { cap: "(а) 2. Подписал — сразу «Оплатить сейчас» $180", html: `<div class="scroll"><div class="hdr"><b>Быстрая смета</b></div></div>
+    <div class="sheet"><div class="in">
+      <div style="display:flex;justify-content:space-between;align-items:center;height:36px"><span style="color:var(--acc-text);font-weight:600">Позже</span><b>Оплатить сейчас</b><span style="width:52px"></span></div>
+      <div style="text-align:center;margin:6px 0"><div style="font-size:34px;font-weight:700">$180.00</div><div style="color:var(--mut);font-size:13px">Outlet replacement · подписано 10:42</div></div>
+      <div class="lg">${row("usd","Карта — Tap to Pay","прислонить карту к телефону","")}${row("usd","Наличные","","")}${row("usd","Чек","номер чека","")}${row("send","Ссылка на оплату","SMS клиенту","")}</div>
+      <div style="color:var(--mut);font-size:12.5px;text-align:center">Квитанция уйдёт клиенту сама</div>
+    </div></div>` },
+  Q3: { cap: "(а) 3. Линия схлопнулась: смета и оплата — две точки, работа закрыта", html: `<div class="scroll" style="padding-top:0;inset:0 0 72px 0">
+    <div class="hdr" style="margin:0 -16px;padding:6px 16px;background:var(--bg);border-bottom:1px solid var(--bd);height:56px">${circ("back")}<span><b style="font-size:16px">Outlet replacement</b><br><span style="color:var(--mut);font-size:12px">Sarah Mitchell · сегодня</span></span><span class="sp"></span>${circ("more")}</div>
+    <div class="mbar" style="margin-top:10px"><div class="t"><span>Оплачено <b>$180</b> из $180</span>${st("ok","ok","Закрыта")}</div></div>
+    <div class="line">
+      <div class="nd done"><span>Смета · подписана на месте</span><span style="display:flex;align-items:center"><span class="r"><span class="d">10:42 · $180</span>${st("ok","ok","Подписана")}</span><span class="chev">${svg("chev")}</span></span></div>
+      <div class="nd done"><span>Оплата · Tap to Pay</span><span style="display:flex;align-items:center"><span class="r"><span class="d">10:43 · RCT-0107</span>${st("ok","ok","Оплачено")}</span><span class="chev">${svg("chev")}</span></span></div>
+    </div>
+    <div style="color:var(--mut);font-size:12.5px;margin-top:10px">Инвойс INV-0107 создан и сразу оплачен — отдельным шагом его не показываем. Квитанция ушла клиенту.</div>
+    </div>${tabbarK()}` },
+
+  /* ===== Сценарий (б): новая смета новому клиенту с нуля ===== */
+  N1: { cap: "(б) 1. «＋» на Главной: что создать", html: `<div class="scroll">
+    <div class="hdr"><span class="av">AP</span><span class="demo">• Демо</span><span class="sp"></span>${circ("search")}${circ("plus")}</div>
+    <div class="bigt" style="margin-bottom:6px">Главная</div></div>
+    <div class="sheet"><div class="in"><span class="grab"></span><h2>Создать</h2>
+      <div class="lg">${row("doc","Новая смета","клиент новый или из списка","")}${row("doc","Быстрая смета на месте","одна-две позиции, подпись и оплата сразу","")}${row("doc","Работа без сметы","гарантия, повторный выезд","")}${row("people","Новый лид","звонок, заявка","")}${row("usd","Расход по чеку","","")}</div>
+    </div></div>` },
+  N2: { cap: "(б) 2. Новая смета: клиент, объект и позиции — один экран", html: `<div class="scroll">
+    <div class="hdr"><span style="color:var(--acc-text);font-weight:600">Отмена</span><span class="sp"></span><b>Новая смета</b><span class="sp"></span><span style="width:52px"></span></div>
+    <div style="margin:10px 0 6px;color:var(--mut);font-size:13px">Клиент · новый</div>
+    <div class="lg"><div class="row"><div class="mid"><div class="nm">Mike Ross</div><div class="ds">(626) 555-0177 · mike@example.com</div></div></div><div class="row"><div class="mid"><div class="nm">88 Linden St, Pasadena</div><div class="ds">объект · 2 этажа</div></div></div></div>
+    <div style="margin:14px 0 6px;color:var(--mut);font-size:13px">Работа</div>
+    <div class="lg">${row("doc","Gutter replacement","название работы","")}</div>
+    <div style="margin:14px 0 6px;color:var(--mut);font-size:13px">Позиции</div>
+    <div class="lg">${row("doc","5\" K-style gutter","120 ft","$1,560.00")}${row("doc","Downspouts","4 шт","$420.00")}${add("Позиция или замер")}</div>
+    </div><div class="pinbar" style="bottom:0"><span class="b sec" style="flex:1;height:44px;color:var(--ink)">Подписать на месте</span><span class="b acc" style="flex:1;height:44px">Отправить</span></div>` },
+  N3: { cap: "(б) 3. Готово: новый клиент, у него работа «Ждёт подписи»", html: `<div class="scroll">
+    <div class="hdr">${circ("back")}<span class="who">Клиенты</span><span class="sp"></span>${circ("plus")}${circ("more")}</div>
+    <div class="title" style="margin:6px 0 2px"><h1>Mike Ross</h1></div>
+    <div style="margin-bottom:10px">${st("info","half","Новый")} <span style="color:var(--mut);font-size:13px">· 88 Linden St</span></div>
+    <div class="qa" style="margin:0 0 10px">${[["phone","Позвонить"],["sms","SMS"],["route","Маршрут"],["mail","Почта"]].map(([k,l])=>`<div>${circ(k)}${l}</div>`).join("")}</div>
+    <div class="gt"><h3>Идут <span class="cnt">1</span></h3></div>
+    <div class="lg"><div class="jr"><div class="mid"><div class="nm">Gutter replacement</div><div class="ds">Смета отправлена только что · SMS и e-mail</div><div class="mini"><i class="c"></i><i></i><i></i><i></i><i></i><i></i></div></div><div class="val" style="text-align:right;font-weight:700">$1,980<small style="display:block;font-weight:600">${st("info","half","Ждёт подписи")}</small></div><span class="chev" style="width:14px;color:var(--mut)">${svg("chev")}</span></div></div>
+    <div style="color:var(--mut);font-size:12.5px;margin-top:10px">Создано одним экраном: клиент → объект → работа со сметой. После подписи на линии сам появится инвойс на всю сумму.</div>
+    </div>${tabbarK()}` },
+
+  /* ===== Где «＋»: клиент и План ===== */
+  X1: { cap: "«＋» в клиенте: всё создаётся сразу для этого клиента", html: `<div class="scroll">
+    <div class="hdr">${circ("back")}<span class="who">Клиенты</span><span class="sp"></span>${circ("plus")}${circ("more")}</div>
+    <div class="title" style="margin:6px 0 2px"><h1>Sarah Mitchell</h1></div></div>
+    <div class="sheet"><div class="in"><span class="grab"></span><h2>Для Sarah Mitchell</h2>
+      <div class="lg">${row("doc","Новая смета","новая работа со сметой","")}${row("doc","Быстрая смета на месте","подпись и оплата сразу","")}${row("doc","Работа без сметы","гарантия, повторный выезд","")}${row("cal","Выезд","к работе или осмотр","")}${row("pen","Заметка","","")}</div>
+    </div></div>` },
+  X2: { cap: "«＋» в Плане: выезд, работа, событие, выходной", html: `<div class="scroll">
+    <div class="hdr"><span class="av">AP</span><span class="sp"></span>${circ("plus")}</div>
+    <div class="bigt" style="margin-bottom:6px">План</div></div>
+    <div class="sheet"><div class="in"><span class="grab"></span><h2>Добавить в план</h2>
+      <div class="lg">${row("cal","Выезд","к работе клиента","")}${row("doc","Новая работа","клиент → работа → выезд","")}${row("cal","Событие","встреча, закупка","")}${row("cal","Выходной","","")}${row("people","Новый лид","","")}</div>
+    </div></div>` },
+
 };
 
 // экран работы с нижней панелью своего варианта
