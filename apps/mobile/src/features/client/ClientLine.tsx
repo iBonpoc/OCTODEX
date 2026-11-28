@@ -55,8 +55,8 @@ export function ClientLine({ c, f, panel, onPanel, onRoute }: {
         key={j.id}
         testID={`client-line-job-${j.id}`}
         title={j.title}
-        subtitle={sub}
-        value={office && j.amountCents > 0 ? money(j.amountCents) : undefined}
+        // the sum in the line, not on the right: a StatusPill and a figure beside a long title squeeze it to «Bathroo m…» on 390
+        subtitle={[sub, office && j.amountCents > 0 ? money(j.amountCents) : null].filter(Boolean).join(" · ")}
         status={isCancelled ? { status: "neutral", label: t("line.cancelled") } : { status: st.status, label: t(st.label) }}
         onPress={() => router.push(`/job/${j.id}` as Href)}
         chevron
@@ -74,8 +74,7 @@ export function ClientLine({ c, f, panel, onPanel, onRoute }: {
             key={e.id}
             testID={`client-line-est-${e.id}`}
             title={e.title || e.number || t("line.kind.estimate")}
-            subtitle={[e.number, e.sentAt ? day(e.sentAt) : null].filter(Boolean).join(" · ") || undefined}
-            value={money(e.totalCents)}
+            subtitle={[e.number, e.sentAt ? day(e.sentAt) : null, money(e.totalCents)].filter(Boolean).join(" · ")}
             status={{ status: estView[e.status].s, label: e.status === "draft" ? t(estView[e.status].l) : t("line.awaitSign"), draft: !!estView[e.status].d }}
             onPress={() => router.push(`/estimate/${e.id}` as Href)}
             chevron

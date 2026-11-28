@@ -16,6 +16,8 @@ exports.run = async (h) => {
   await vis("client-header-status").waitFor({ timeout: 8000 });
   h.expect((await count("client-screen-sections")) === 1, "«Обычный» by default: the sections strip");
   h.expect((await count("client-line")) === 0, "«Обычный» by default: no line");
+  await settle(p);
+  await h.shot(0);
 
   // «⋯ → Вид: линия работы»
   await objMore(p, "client-screen", "client-look-line");
