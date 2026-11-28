@@ -4,8 +4,7 @@
  * - «Выкл.» is in the middle; a press on «%» starts the deposit at 10 %, the discount empty, «$» at $0; «Выкл.» — «—»;
  * - the picked row's field takes the focus (one tap to typing); a press on the chosen position keeps the value; «Выкл.» and back
  *   brings the typed value back;
- * - a row wide enough holds the word, the switch, the field and the sum on one line; a narrow one (390, the 820/1280 totals column) is two
- *   lines that read as one (#2954): «word · sum» on top, the switch and its field under it — the field and the sum never hang alone.
+ * - a row wide enough (480) holds the switch, the field and the sum on one line; a narrow one puts the field and the sum under it, on the right.
  */
 exports.run = async (h) => {
   const p = h.page;
@@ -68,25 +67,18 @@ exports.run = async (h) => {
   const [row, seg, field, sum] = [await box("est-deposit-row"), await box("est-deposit-row-mode-pct"), await box("est-deposit-fixed"), await box("est-deposit-row-sum")];
   const inside = (b) => b.x >= row.x - 1 && b.x + b.width <= row.x + row.width + 1 && b.y >= row.y - 1 && b.y + b.height <= row.y + row.height + 1;
   h.expect(inside(seg) && inside(field) && inside(sum), "the switch, the field and the sum lie inside the row");
-  const mid = (b) => b.y + b.height / 2;
-  const oneLine = Math.abs(mid(seg) - mid(sum)) < 4;
-  if (oneLine) {
-    h.expect(Math.abs(mid(field) - mid(sum)) < 4 && field.x + field.width <= sum.x + 1, `one line: the switch, the field, then the sum (switch ${mid(seg)}, field ${mid(field)}, sum ${mid(sum)})`);
-  } else {
-    // #2954: two lines — the word with its sum on top, the switch with its field under it (never the field and the sum alone)
-    const word = await box("est-deposit-row-head");
-    h.expect(Math.abs(mid(word) - mid(sum)) < 4 && sum.y + sum.height <= seg.y + 1, `two lines: the sum on the word's line, above the switch (sum ${mid(sum)}, switch ${seg.y})`);
-    h.expect(Math.abs(mid(field) - mid(seg)) < 4 && field.x > seg.x, `two lines: the field beside the switch (field ${mid(field)}, switch ${mid(seg)})`);
+  h.expect(field.x + field.width <= sum.x + 1, "the field stands left of the sum");
+  // (from 820 the totals card is a column of its own: one line wherever the row is wide enough for it)
+  if (row.width >= 480) {
+    const mid = (b) => b.y + b.height / 2;
+    h.expect(Math.abs(mid(seg) - mid(sum)) < 4 && Math.abs(mid(field) - mid(sum)) < 4, `one line in a wide row (switch ${mid(seg)}, field ${mid(field)}, sum ${mid(sum)})`);
   }
 
   await totals.mode(h, "est-deposit-row", "off");
   await sumIs("est-deposit-row", "—");
   {
     const [r, sg, sm] = [await box("est-deposit-row"), await box("est-deposit-row-mode-off"), await box("est-deposit-row-sum")];
-    // off: «—» on the switch's line where the row is one line; on the word's line where it is two (#2954)
-    const onSwitch = Math.abs(sg.y + sg.height / 2 - (sm.y + sm.height / 2)) < 4;
-    const onWord = !onSwitch && sm.y + sm.height <= sg.y + 1;
-    h.expect((onSwitch || onWord) && sm.y + sm.height <= r.y + r.height + 1, "off: «—» stays in the row's first line");
+    h.expect(Math.abs(sg.y + sg.height / 2 - (sm.y + sm.height / 2)) < 4 && sm.y + sm.height <= r.y + r.height + 1, "off: «—» stays on the switch's line");
   }
   h.expect((await p.getByTestId("est-deposit-fixed").count()) === 0, "off: no field");
   h.expect((await sheets()) === 0, "still no sheet");
