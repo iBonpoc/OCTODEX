@@ -49,7 +49,7 @@ describe("e2e trace of a failed run (CHECKS §9 №87)", () => {
     expect(run).toMatch(/runFailed = true;/);
     expect(run).toMatch(/await stopTrace\(runFailed\);\n\s+await ctx\.close\(\);/);
     const yml = readFileSync(join(__dirname, "../../../.github/workflows/checks.yml"), "utf8");
-    expect(yml).toMatch(/E2E_TRACE_SPECS: 37-service-categories\.cjs 480-gutters-done-slow-network\.cjs\n/);
+    expect(yml).toMatch(/E2E_TRACE_SPECS: 37-service-categories\.cjs 480-gutters-done-slow-network\.cjs 12-tech-day\.cjs\n/);
     // every spec CI names exists — a typo would trace nothing, silently
     const named = T.tracedSpecs(yml.match(/E2E_TRACE_SPECS: ([^\n]+)/)![1]);
     expect(named.size).toBeGreaterThan(0);
