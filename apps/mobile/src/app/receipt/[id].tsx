@@ -108,8 +108,8 @@ export default function ReceiptScreen() {
   const barMain = !wide ? mainBtn(true) : null;
   return (
     <Screen
-      // the number alone is the name («Квитанция RCT-0105» was cut to «Квитанция RCT…» at 390); the parent line says «INV-…»
-      title={p.receiptNumber ?? t("rcpt.title")}
+      // DS §12.13 «Шапка» (#2841, #2843 (а)): a document — its kind and number, like the estimate and the invoice (FitTitle shrinks to 0,75)
+      title={p.receiptNumber ? `${t("rcpt.title")} ${p.receiptNumber}` : t("rcpt.title")}
       back={back}
       right={more}
       footer={barMain ? <ActionBar testID="rcpt-actionbar" main={barMain} second={secondBtn(true) ?? undefined} /> : undefined}
