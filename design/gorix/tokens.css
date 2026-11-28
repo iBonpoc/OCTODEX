@@ -172,6 +172,13 @@
   --component-mode-row-field-w: 96px;
   --component-mode-row-sum-w: 80px;
   --component-mode-row-title-w: 112px;
+  --component-mode-toggle-cell: 30;
+  --component-mode-toggle-h: 30px;
+  --component-mode-toggle-knob: 24px;
+  --component-mode-toggle-dot: 4px;
+  --component-mode-toggle-title-min-w: 64;
+  --component-mode-toggle-field-narrow-w: 80;
+  --component-mode-toggle-sum-min-w: 60;
   --component-tab-h: 30px;
   --component-tab-fade-w: 32;
   --component-switch-w: 42px;
@@ -314,7 +321,7 @@
   --component-tab-bar-icon: 26px;
   --component-tab-bar-fade: 18px;
   --component-tab-bar-badge: 18px;
-  --component-tab-bar-badge-text: 11px;
+  --component-tab-bar-badge-text: 12px;
   --component-queue-line-h: 28px;
   --component-quick-action-row: 44px;
   --component-quick-action-inline: 36;
@@ -396,7 +403,7 @@
   --c-surf3: #C4C5BF;
   --c-hl: rgba(255,255,255,0.50);
   --c-off: #B7B8B2;
-  --c-dash: #6F7279;
+  --c-dash: #65686E;
   --c-tab: #E3E4DE;
   --c-toast: #26282C;
   --c-on-toast: #EEEFF1;
@@ -471,7 +478,7 @@
     --c-surf3: #44464D;
     --c-hl: rgba(255,255,255,0.05);
     --c-off: #4A4D54;
-    --c-dash: #8C9098;
+    --c-dash: #93979E;
     --c-tab: #1F2024;
     --c-toast: #44464D;
     --c-on-toast: #EEEFF1;
@@ -546,7 +553,7 @@
   --c-surf3: #44464D;
   --c-hl: rgba(255,255,255,0.05);
   --c-off: #4A4D54;
-  --c-dash: #8C9098;
+  --c-dash: #93979E;
   --c-tab: #1F2024;
   --c-toast: #44464D;
   --c-on-toast: #EEEFF1;

@@ -2,7 +2,7 @@
  * «Замеры» — the module's home (spec 33 П25.3 А, PR-H1; before П20.22, founder 09.11 версия 475; founder 11.11:
  * «открываешь модуль — там кнопка „Новый замер“, внутри — карточки замеров»): every measurement the phone has, the
  * drafts without a client too, newest first. The search (client, lead, address, phone) and the chips by the computed
- * state (П25.4) — the chip is kept on this device. One ListCard per measurement (rule 12; recipe `measurement`, spec 06).
+ * state (П25.4) — the chip is kept on this device. One row per measurement (rule 12; lists B #2992).
  * A card opens the measurement's card («Просмотр замера», `view`); 1280 — beside the list in the ListPanel.
  */
 import { useRef, useState, type ComponentRef } from "react";
@@ -19,10 +19,11 @@ import { useDevice } from "@/theme/ThemeProvider";
 import { Button, IconButton } from "@/ui/controls";
 import { FilterBar } from "@/ui/filterBar";
 import { filterStoreKey } from "@/ui/filterBarRules";
-import { CardGrid, ListCard, ListCardHeader, type CardSign, type CardStatus } from "@/ui/listCard";
-import type { FactKey } from "@/ui/listCardLayout";
+import type { CardSign, CardStatus } from "@/ui/listCard";
+import { GroupedList, GroupRow, ListGroup } from "@/ui/groupedList";
+import { estimateListAmount } from "@/features/estimateDoc";
 import { ListPanel } from "@/ui/listPanel";
-import { CardList, Empty, RowView, Screen } from "@/ui/surfaces";
+import { Empty, RowView, Screen } from "@/ui/surfaces";
 import { Menu } from "@/ui/overlays";
 import { asMeasurementFilter, filterMeasurements, MEASUREMENT_FILTERS, measurementList, type MeasurementFilter, type MeasurementItem } from "../measurements";
 import { MeasurementView } from "../view/ViewScreen";
@@ -34,12 +35,10 @@ const CHIP: Record<MeasurementFilter, DictKey> = {
   estimate: "mod.gutters.list.f.estimate",
   signed: "mod.gutters.list.f.signed",
 };
-const COLUMNS: readonly FactKey[] = ["addr", "lines"];
-const COLUMNS_PANEL: readonly FactKey[] = ["addr"];
 
 export default function MeasurementsScreen() {
   const store = useStore();
-  const { t, day } = useI18n();
+  const { t, day, money } = useI18n();
   const { device } = useDevice();
   const draw = moduleHref("gutters", "draw");
   const view = moduleHref("gutters", "view");
@@ -81,28 +80,33 @@ export default function MeasurementsScreen() {
     return out.length ? out : undefined;
   };
 
-  const desktop = device === "desktop";
-  const card = (m: MeasurementItem) => (
-    <ListCard
-      key={m.id}
-      testID={`measurement-${m.id}`}
-      title={titleOf(m)}
-      when={m.updatedAt ? day(m.updatedAt) : undefined}
-      lead={{ kind: "icon", icon: "pencil" }}
-      status={statusOf(m)}
-      signs={signsOf(m)}
-      facts={{
-        addr: m.address ?? undefined,
-        lines: t("mod.gutters.list.what", { runs: m.runs, ft: Math.round(m.lengthIn / 12), ds: m.downspouts }),
-      }}
-      // edge only for what needs action: the drawing changed after its estimate
-      edge={m.view.changed || m.view.engineChanged ? "warn" : null}
-      density={desktop ? "row" : "rich"}
-      columns={panel.openId ? COLUMNS_PANEL : COLUMNS}
-      selected={m.id === panel.openId}
-      onPress={() => panel.open(m.id)}
-    />
-  );
+  /**
+   * Lists B (#2992, founder 27.11): a measurement is a row of one group (rule 12) — the measure's icon · who it is for, «адрес ·
+   * пробеги · футы · водостоки» · on the right the estimate's sum (the office) or the day it was touched, under it the state; a
+   * drawing changed after its estimate says so first (warn, icon + word), as the old card's sign did.
+   */
+  const office = store.role !== "tech";
+  const row = (m: MeasurementItem) => {
+    const sign = signsOf(m)?.[0];
+    const st = statusOf(m);
+    const sum = office && m.view.estimate ? estimateListAmount(m.view.estimate) : undefined;
+    return (
+      <GroupRow
+        key={m.id}
+        testID={`measurement-${m.id}`}
+        title={titleOf(m)}
+        // #3018 (founder #3017): 2 — the address; 3 — what is drawn (the module's own words)
+        subtitle={m.address ?? undefined}
+        extra={t("mod.gutters.list.what", { runs: m.runs, ft: Math.round(m.lengthIn / 12), ds: m.downspouts })}
+        lead={{ icon: "pencil" }}
+        value={sum ? money(sum.cents) : m.updatedAt ? day(m.updatedAt) : undefined}
+        valueMark={!sum}
+        status={sign ? { status: sign.tone, label: sign.label } : { status: st.tone, label: st.label, draft: st.draft }}
+        selected={m.id === panel.openId}
+        onPress={() => panel.open(m.id)}
+      />
+    );
+  };
   const pick = (x: MeasurementFilter) => setKept(x);
   const startNew = () => router.push(draw as Href);
   // «＋» in the header is secondary (DS §12.2, #1426): an icon of 36 on the phone, the word from 820; yellow is only the
@@ -190,15 +194,10 @@ export default function MeasurementsScreen() {
           />
           {shown.length === 0 ? (
             <Empty icon="note" title={t("mod.gutters.list.emptyFilter")} action={f !== "all" ? <View testID="measurements-show-all"><Button label={t("mod.gutters.list.showAll")} variant="secondary" onPress={() => pick("all")} /></View> : undefined} />
-          ) : desktop ? (
-            <>
-              <ListCardHeader title={t("mod.gutters.list.colWho")} columns={panel.openId ? COLUMNS_PANEL : COLUMNS} />
-              <CardList>{shown.map(card)}</CardList>
-            </>
-          ) : device === "tablet" ? (
-            <CardGrid>{shown.map(card)}</CardGrid>
           ) : (
-            <CardList>{shown.map(card)}</CardList>
+            <GroupedList testID="measurements-list">
+              <ListGroup separate>{shown.map(row)}</ListGroup>
+            </GroupedList>
           )}
         </>
       )}

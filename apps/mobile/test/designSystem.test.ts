@@ -452,15 +452,11 @@ describe("design system: tokens only", () => {
   // <ListCard is red, a moved one must be struck off here.
   it("lists are ListGroup/GroupRow: ListCard only in the files not moved yet (the list only shrinks)", () => {
     const LISTCARD_LEFT = new Set([
-      "app/catalog/index.tsx", "app/client/import.tsx", "app/client/imports.tsx", "app/company/checklists.tsx",
-      "app/company/intake.tsx", "app/estimate/templates.tsx", "app/jobs.tsx", "app/messages/[key].tsx",
-      "app/money.tsx", "app/property/[id].tsx", "app/purchase-orders/index.tsx", "app/reports/[id].tsx",
-      "app/reports/index.tsx", "app/suppliers/[id].tsx", "app/suppliers/index.tsx", "app/team.tsx",
-      "features/AttentionCards.tsx", "features/JobOrdersBlock.tsx",
+      "app/client/import.tsx", "app/client/imports.tsx", "app/company/checklists.tsx", "app/company/intake.tsx", "app/estimate/templates.tsx", "app/messages/[key].tsx", "app/property/[id].tsx", "app/purchase-orders/index.tsx", "app/reports/[id].tsx", "app/suppliers/[id].tsx", "app/suppliers/index.tsx", "app/team.tsx", "features/AttentionCards.tsx", "features/JobOrdersBlock.tsx",
       "features/ServiceCategoryPicker.tsx", "features/client/ClientDuplicates.tsx", "features/client/PropertySections.tsx",
-      "features/comms/CommsScreen.tsx", "features/comms/MessagesScreen.tsx", "features/invoice/VoidInvoice.tsx",
+      "features/comms/MessagesScreen.tsx", "features/invoice/VoidInvoice.tsx",
       "features/lead/LeadParts.tsx", "features/listCards.tsx", "features/notices.tsx", "features/payments/AdvancesBlock.tsx",
-      "modules/gutters/list/MeasurementsScreen.tsx", "modules/gutters/list/StartScreen.tsx",
+      "modules/gutters/list/StartScreen.tsx",
       "modules/gutters/prices/PricesScreen.tsx",
     ]);
     const using = outsideUi

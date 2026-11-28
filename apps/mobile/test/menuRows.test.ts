@@ -2,7 +2,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { component } from "@octo/design-tokens";
-import { menuListHeight, menuScrollTo } from "../src/ui/menuLayout";
+import { actionMenuWidth, menuListHeight, menuScrollTo } from "../src/ui/menuLayout";
+import { ru } from "../src/i18n/ru";
+import { en } from "../src/i18n/en";
+import { es } from "../src/i18n/es";
 
 const src = (...p: string[]) => readFileSync(join(__dirname, "..", "src", ...p), "utf8");
 const ROW = 44;
@@ -72,4 +75,18 @@ describe("the wiring", () => {
   it("the picker's list is the sheet's own scroll: no ScrollView of its own", () => {
     expect(src("ui", "pickerSheet.tsx")).not.toMatch(/<ScrollView|import[^;]*ScrollView/);
   });
+});
+
+/** review 27.11 (#2935 п.5): «⋯» is as wide as its longest label between `menuW` and `select.menuMaxW` (red before: always 240, RU «Разложить по типам» wrapped) */
+describe("the width of an action menu", () => {
+  it("short labels: `menuW`", () => expect(actionMenuWidth(["Изменить", "PDF"])).toBe(component.menuW));
+  it("the estimate editor's «⋯» in RU / EN / ES: wider than 240 where a label needs it, never past `menuMaxW`", () => {
+    for (const d of [ru, en, es] as Record<string, string>[]) {
+      const w = actionMenuWidth([d["est.sec.layout"]!, d["est.var.add"]!, d["proto.est.rowsFull"]!, d["est.client.on"]!, d["k1.cancel"]!]);
+      expect(w).toBeGreaterThanOrEqual(component.menuW);
+      expect(w).toBeLessThanOrEqual(component.select.menuMaxW);
+    }
+    expect(actionMenuWidth([(ru as Record<string, string>)["est.sec.layout"]!])).toBeGreaterThan(component.menuW);
+  });
+  it("a very long label stops at `menuMaxW` (it wraps there)", () => expect(actionMenuWidth(["x".repeat(80)])).toBe(component.select.menuMaxW));
 });

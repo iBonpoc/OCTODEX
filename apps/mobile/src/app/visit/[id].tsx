@@ -51,6 +51,7 @@ import { mapsUrl, type OS } from "@/ui/listCardLayout";
 import { ObjectScreen, type MainAction } from "@/ui/templates";
 import { canSeeVisit } from "@/features/access";
 import { isoDayKey, todayKey } from "@/features/calendar";
+import { visitHeadLine, visitHeadTitle } from "@/ui/templates/templateRules";
 import { plateHalves } from "@/features/planSlots";
 import { StatusNote } from "@/ui/statusNote";
 import { signedText } from "@/i18n/translate";
@@ -351,16 +352,15 @@ export default function VisitScreen() {
   const whoLine = customer?.name ?? db.leads.find((l) => l.id === v.leadId)?.name ?? day(v.start);
   const header = {
     testID: "visit-head",
-    title: t("visit.title"),
+    // DS §12.13 «Шапка» (#2841, ревью design/crm): the visit is named by its day — «Выезд · Fri, Nov 6» (the app's day format)
+    title: visitHeadTitle(t("visit.title"), day(v.start)),
     meta: [{ id: "client", label: whoLine }],
     status: { name: st.status, label: t(st.label) },
     amount: v.step === "signed" && due > 0 ? money(due) : isoDayKey(v.start) === todayKey() ? undefined : day(v.start),
     labels: { expand: t("proto.job.expand"), collapse: t("proto.job.collapse"), more: (n: number) => t("proto.job.moreN", { n }) },
   };
-  const headSub = {
-    line1: whoLine,
-    line2: [isoDayKey(v.start) === todayKey() ? undefined : day(v.start), span, techFirst, v.step === "signed" && due > 0 ? money(due) : undefined].filter(Boolean).join(" · "),
-  };
+  // under the name, a whole line (no column right of the rule, no «…»): «8:30–12:30 · Alex · Sarah Mitchell»; the sum on the payment step
+  const headLine = visitHeadLine([span, techFirst, customer?.name ?? db.leads.find((l) => l.id === v.leadId)?.name, v.step === "signed" && due > 0 ? money(due) : undefined]);
 
   /* ---------- v2 макет 4: the work card — the job, its progress, the checklist cell with the timer, the step's buttons ---------- */
   const jobVisits = job ? db.visits.filter((x) => x.jobId === job.id).sort((a, b) => a.start.localeCompare(b.start)) : [];
@@ -439,7 +439,7 @@ export default function VisitScreen() {
         testID="visit-screen"
         back={back}
         header={header}
-        sub={headSub}
+        subtitle={headLine}
         lead={lead}
         now={card}
         sections={[]}

@@ -3,6 +3,7 @@
  * how much came. Owner, admin, office (nav/roles.ts; the tech sees the orders of his jobs on the job). «Новый заказ» —
  * an empty order for stock.
  */
+import { HeaderButton } from "@/ui/headerIcon";
 import { useMemo, useState } from "react";
 import { router } from "expo-router";
 import { useStore } from "@/data/store";
@@ -66,7 +67,7 @@ export default function PurchaseOrders() {
       title={t("po.title")}
       back={back}
       help={t("po.help")}
-      right={db.purchaseOrdersLegacy ? undefined : <Button label={t("po.new")} icon="plus" size="sm" variant="secondary" onPress={newOrder} />}
+      right={db.purchaseOrdersLegacy ? undefined : <HeaderButton icon="plus" label={t("po.new")} testID="po-new" onPress={newOrder} />}
     >
       <FilterBar<Lane>
         search={{ value: q, onChange: setQ, placeholder: t("po.title") }}

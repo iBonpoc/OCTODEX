@@ -3,7 +3,8 @@
  * notes/review-v2/k1-2381-stage0.md §4, §10–11; founder 21.11: «закрылось приложение — всё сохранено в телефоне», «Отменить —
  * с подтверждением», «Отменить видно только когда есть правки», «поменяли на другом телефоне — дать выбрать»). Every view, by testID:
  * - a saved estimate opened: no «Отменить», no «несохранённые правки»; an edit → the draft `edit|<id>` on the phone (with its base),
- *   «Отменить» beside «Готово», the line «Правки с момента открытия» with its «?» (#2423);
+ *   «Отменить» — the last item of «⋯» (#2935: the bar holds «Итого · Готово · Отправить»), the line «Правки с момента открытия» with
+ *   its «?» (#2423);
  * - a reload (the app closed by chance): the edit is still there;
  * - «Отменить» asks in the window in the middle (DS Б3): «Продолжить правку» keeps it; «Отменить изменения» — the estimate as saved;
  * - «×» with edits asks: «Отменить изменения» drops them; «Готово» saves them (the store's estimate changes, the draft goes);
@@ -20,6 +21,10 @@ exports.run = async (h) => {
   const EDIT = `/estimate/new?id=${ID}`;
   const tid = (id) => p.getByTestId(id).locator("visible=true").first();
   const count = (id) => p.getByTestId(id).locator("visible=true").count();
+  // #2935: «Отменить» (only with edits) is an item of the header's «⋯» — the bar holds «Итого · Готово · Отправить»
+  const line = require("../estimateLine.cjs");
+  const pressCancel = () => line.editorMenu(h, "k1-cancel");
+  const hasCancel = () => line.editorMenuHas(h, "k1-cancel");
   const titleInput = () => tid("ue-title").locator("input, textarea").first();
   const drafts = () => p.evaluate((k) => JSON.parse(localStorage.getItem(k) || "[]"), DRAFTS);
   const saved = () => p.evaluate(([k, id]) => JSON.parse(localStorage.getItem(k)).db.estimates.find((e) => e.id === id), [DB, ID]);
@@ -63,7 +68,7 @@ exports.run = async (h) => {
 
   // opened: nothing to take back
   await open();
-  h.expect((await count("k1-cancel")) === 0 && (await count("k1-unsaved")) === 0, "a saved estimate, untouched: no «Отменить», no «несохранённые правки»");
+  h.expect(!(await hasCancel()) && (await count("k1-unsaved")) === 0, "a saved estimate, untouched: no «Отменить», no «несохранённые правки»");
   h.expect(!(await hasEditDraft()), "untouched: no draft");
 
   // Р1: «Готово» with no edits only closes — nothing written, «sent» and its time untouched (red before: it saved and made it a draft)
@@ -98,19 +103,19 @@ exports.run = async (h) => {
   await patchSaved({ savedAt: "2026-11-21T11:11:00.000Z" });
   await open();
   h.expect((await count("k1-open-conflict")) === 0, "an old estimate: the server's time moved — no conflict asked");
-  await tid("k1-cancel").click();
+  await pressCancel();
   await dialog("k1-cancel-ask");
   await tid("k1-cancel-yes").getByRole("button").click();
   await waitDraft(false);
   await patchSaved({ doc: before.doc, savedAt: before.savedAt });
   await open();
 
-  // an edit: kept on the phone with its base; «Отменить» beside «Готово»
+  // an edit: kept on the phone with its base; «Отменить» in «⋯»
   await edit("Правка 523");
   const d = (await drafts()).find((x) => x.ctx === `edit|${ID}`);
   h.expect(d && d.title === "Правка 523" && typeof d.baseSavedAt === "string", `the draft edit|e6 with its base (${JSON.stringify(d && { t: d.title, b: d.baseSavedAt })})`);
-  await tid("k1-cancel").waitFor({ timeout: 3000 });
   await tid("k1-unsaved").waitFor({ timeout: 3000 });
+  h.expect(await hasCancel(), "with edits: «Отменить» is in «⋯»");
   // #2423 (founder 23.11: «несохранённые правки — что это значит?»): the line says «Правки с момента открытия», «?» explains it
   h.expect(/Правки с момента открытия/.test(await tid("k1-unsaved").innerText()), "the line: «Правки с момента открытия»");
   await tid("k1-unsaved-help").click();
@@ -126,13 +131,13 @@ exports.run = async (h) => {
   h.expect((await saved()).title === original, "the store's estimate is not changed yet");
 
   // «Отменить»: asked in the window in the middle; «Продолжить правку» keeps; «Отменить изменения» takes back
-  await tid("k1-cancel").click();
+  await pressCancel();
   await dialog("k1-cancel-ask");
   await h.shot("cancel-ask");
   await tid("k1-cancel-no").getByRole("button").click();
   await p.getByTestId("k1-cancel-ask").waitFor({ state: "detached", timeout: 3000 });
   h.expect((await titleInput().inputValue()) === "Правка 523" && (await hasEditDraft()), "«Продолжить правку»: the edit stays");
-  await tid("k1-cancel").click();
+  await pressCancel();
   await dialog("k1-cancel-ask");
   await tid("k1-cancel-yes").getByRole("button").click();
   await waitDraft(false);
@@ -301,7 +306,10 @@ exports.run = async (h) => {
   await restore();
   await open();
   await edit("Правка 523 · двойное");
-  await tid("k1-cancel").dblclick();
+  // (#2935: the item of «⋯» — two presses in one tick, before the menu has gone)
+  await p.getByTestId("est-menu").locator("visible=true").first().getByRole("button").first().click();
+  await tid("k1-cancel").evaluate((el) => { el.click(); el.click(); });
+  await dialog("k1-cancel-ask");
   h.expect((await p.getByTestId("k1-cancel-ask").locator("visible=true").count()) === 1, "«Отменить» pressed twice: one question on the screen");
   await tid("k1-cancel-no").getByRole("button").click();
   // «Отменить» twice then «Отменить изменения»: ONE way back — to the estimate it was opened from, never past it (a check that fails
@@ -313,7 +321,8 @@ exports.run = async (h) => {
   await tid("ue-title").waitFor({ timeout: 8000 });
   await titleInput().fill("Правка 523 · дважды");
   await waitDraft(true);
-  await tid("k1-cancel").dblclick();
+  await p.getByTestId("est-menu").locator("visible=true").first().getByRole("button").first().click();
+  await tid("k1-cancel").evaluate((el) => { el.click(); el.click(); });
   await dialog("k1-cancel-ask");
   await tid("k1-cancel-yes").getByRole("button").click();
   await p.waitForFunction(() => !location.pathname.startsWith("/estimate/new"), null, { timeout: 5000 });

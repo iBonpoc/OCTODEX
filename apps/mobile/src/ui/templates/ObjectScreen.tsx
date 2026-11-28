@@ -54,6 +54,9 @@ export interface ObjectScreenProps<S extends string> {
    * «Sarah Mitchell / 8:30–12:30 · Alex»): a string `line2` is the quiet 13 line — no plate; default — `objectHeadSub(header)`
    */
   sub?: { line1?: string; line2?: ReactNode };
+  /** a whole line UNDER the name instead of the two lines right of the rule (DS §12.13 «Шапка», ревью design/crm #2841: the visit's
+   *  «8:30–12:30 · Alex · Sarah Mitchell» is never cut in a narrow column) */
+  subtitle?: string;
   /** what stands under the header instead of the quick actions row (макет 4 «Выезд»: «◷ Идёт · Код … · ☎ ✉ ◎») */
   lead?: ReactNode;
   /** the open section's content */
@@ -133,7 +136,7 @@ function useObjectParts<S extends string>(p: ObjectScreenProps<S>) {
   // v2 «Объект»: the name 30 | the rule | two lines; a client's «⌄» (the header has a panel) after the name
   const head = {
     kind: "object" as const,
-    sub: p.sub ?? objectHeadSub(p.header),
+    sub: p.subtitle !== undefined ? undefined : p.sub ?? objectHeadSub(p.header),
     expand: p.header.details
       ? { open, onToggle: setOpen, expandLabel: p.header.labels.expand, collapseLabel: p.header.labels.collapse, testID: `${p.header.testID}-toggle`, panel: p.header.contacts ?? <View testID={`${p.header.testID}-details`}><Card>{p.header.details}</Card></View> }
       : undefined,
