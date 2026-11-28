@@ -171,6 +171,27 @@ body.all .note{display:block}
 .pdf{background:#F6F5F1;color:#17181B;border-radius:12px;padding:14px;font-size:12.5px;margin-top:10px}
 .pdf h4{margin:0 0 6px;font-size:15px}
 .pdf .l{display:flex;justify-content:space-between;padding:3px 0}
+
+/* линия работы (28.11, идея основателя) */
+.mbar{background:var(--surf);border-radius:16px;padding:10px 12px;margin-bottom:10px}
+.mbar .t{display:flex;justify-content:space-between;font-size:14px}
+.segbar{display:flex;gap:3px;margin-top:8px}.segbar i{height:8px;border-radius:4px;background:var(--surf2);display:block}.segbar i.p{background:var(--ink);opacity:.75}
+.line{position:relative;padding-left:26px;margin-top:6px}
+.line:before{content:"";position:absolute;left:9px;top:6px;bottom:6px;width:2px;background:var(--bd-field);opacity:.5}
+.nd{position:relative;display:flex;justify-content:space-between;align-items:center;min-height:40px;font-size:14px}
+.nd:before{content:"";position:absolute;left:-22px;top:50%;margin-top:-7px;width:14px;height:14px;border-radius:50%;background:var(--surf);border:2px solid var(--bd-field)}
+.nd.done:before{background:var(--st-ok-text);border-color:var(--st-ok-text)}
+.nd.fut{opacity:.5}
+.nd .d{color:var(--mut);font-size:12.5px}
+.cur{position:relative;background:var(--surf);border-radius:18px;padding:12px 14px;margin:6px 0;box-shadow:var(--sh)}
+.cur:before{content:"";position:absolute;left:-23px;top:18px;width:16px;height:16px;border-radius:50%;background:var(--acc);border:3px solid var(--bg)}
+.thumbs{display:flex;gap:4px}.thumbs i{width:26px;height:26px;border-radius:6px;background:linear-gradient(135deg,#8a7a5c,#4c5560);display:block}
+.pinbar{position:absolute;left:0;right:0;bottom:72px;background:var(--ov-solid);border-top:1px solid var(--bd);padding:8px 12px;display:flex;gap:8px;align-items:center;z-index:4}
+.pinbar .circ{width:44px;height:44px}
+.lock{position:absolute;inset:0;background:linear-gradient(160deg,#2b3444,#14161b);color:#fff;padding:20px 14px;font-family:var(--font)}
+.lock .tm{text-align:center;font-size:64px;font-weight:600;margin-top:24px}
+.la{background:rgba(30,32,38,.92);border-radius:22px;padding:12px 14px;margin-top:60px}
+.la .btn3{display:flex;gap:8px;margin-top:10px}.la .btn3 span{flex:1;background:rgba(255,255,255,.12);border-radius:999px;height:40px;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:14px}
 </style>
 </head>
 <body>
@@ -514,6 +535,71 @@ const S = {
     <div class="gt" style="margin-top:14px"><h3>Ждём денег</h3></div>
     <div class="lg">${row("inv","Sarah Mitchell","Bathroom remodel · предоплата 2","$1,000", st("warn","half","Ждём"))}${row("inv","Robert Chen","Interior painting · до 30 нояб.","$960", st("warn","half","Ждём"))}</div>
     </div>${tabbarK("Главная")}` },
+  /* ===== Концепция 1: «Линия работы» (идея основателя) ===== */
+  L1: { cap: "Линия работы: пройденное сжато, текущий шаг крупно, фото и заметка под пальцем", html: `<div class="scroll" style="padding-top:0">
+    <div class="hdr" style="margin:0 -16px;padding:6px 16px;background:var(--bg);border-bottom:1px solid var(--bd);height:56px">${circ("back")}<span><b style="font-size:16px">Bathroom remodel</b><br><span style="color:var(--mut);font-size:12px">Sarah Mitchell · 1420 Oak Grove Ave</span></span><span class="sp"></span>${circ("more")}</div>
+    <div class="mbar" style="margin-top:10px"><div class="t"><span>Оплачено <b>$1,200</b> из $3,420</span><span style="color:var(--mut)">ждём $1,000</span></div><div class="segbar"><i class="p" style="flex:12"></i><i style="flex:10"></i><i style="flex:12.2"></i></div></div>
+    <div class="chips" style="margin-bottom:6px"><span class="on">Всё</span><span>Фото · 6</span><span>Заметки · 2</span><span>Деньги</span></div>
+    <div class="line">
+      <div class="nd done"><span>Смета · подписана</span><span class="d">12 нояб. · $3,420</span></div>
+      <div class="nd done"><span>Инвойс на всю сумму</span><span class="d">INV-0105 · $3,420</span></div>
+      <div class="nd done"><span>Предоплата 1 <span class="thumbs" style="display:inline-flex;vertical-align:middle;margin-left:4px"><i></i><i></i></span></span><span class="d">$1,200 ✓</span></div>
+      <div class="cur"><div style="display:flex;justify-content:space-between"><b style="font-size:16px">Предоплата 2</b>${st("warn","half","Ждём")}</div>
+        <div style="font-size:26px;font-weight:700;margin:4px 0">$1,000</div>
+        <div style="color:var(--mut);font-size:13px">ссылка отправлена 18 нояб. · до 25 нояб.</div>
+        <div style="margin-top:8px;font-size:13px">✎ «Клиент просил чек на e-mail»</div></div>
+      <div class="nd fut"><span>Выезд · начало работ</span><span class="d">пт, 20 нояб.</span></div>
+      <div class="nd fut"><span>Финал · остаток</span><span class="d">$1,220</span></div>
+      <div class="nd" style="color:var(--acc-text);font-weight:600"><span>＋ Шаг: выезд, доп. работа, предоплата</span></div>
+    </div></div>
+    <div class="pinbar">${circ("camera")}${circ("doc")}<span class="b acc" style="flex:1;height:44px">Взять предоплату 2 · $1,000</span></div>
+    ${tabbarK()}` },
+  L2: { cap: "Та же линия, фильтр «Фото»: снимки по шагам — вместо вкладки", html: `<div class="scroll" style="padding-top:0">
+    <div class="hdr" style="margin:0 -16px;padding:6px 16px;background:var(--bg);border-bottom:1px solid var(--bd);height:56px">${circ("back")}<span><b style="font-size:16px">Bathroom remodel</b><br><span style="color:var(--mut);font-size:12px">Sarah Mitchell · 1420 Oak Grove Ave</span></span><span class="sp"></span>${circ("more")}</div>
+    <div class="chips" style="margin:10px -16px 6px"><span>Всё</span><span class="on">Фото · 6</span><span>Заметки · 2</span><span>Деньги</span></div>
+    <div class="line">
+      <div class="nd done"><span>Замер · 10 нояб.</span><span class="d">4 фото</span></div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin:4px 0 8px"><i style="height:70px;border-radius:10px;background:linear-gradient(135deg,#8a7a5c,#4c5560)"></i><i style="height:70px;border-radius:10px;background:linear-gradient(135deg,#6b7a8c,#3c4550)"></i><i style="height:70px;border-radius:10px;background:linear-gradient(135deg,#8c6b5c,#50403c)"></i><i style="height:70px;border-radius:10px;background:linear-gradient(135deg,#7a8c6b,#40503c)"></i></div>
+      <div class="nd done"><span>Предоплата 1 · 13 нояб.</span><span class="d">2 фото</span></div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin:4px 0 8px"><i style="height:70px;border-radius:10px;background:linear-gradient(135deg,#8a7a5c,#4c5560)"></i><i style="height:70px;border-radius:10px;background:linear-gradient(135deg,#6b7a8c,#3c4550)"></i></div>
+      <div class="nd fut"><span>Выезд · пт, 20 нояб.</span><span class="d">снимки «до» и «после» лягут сюда</span></div>
+    </div></div>
+    <div class="pinbar">${circ("camera")}${circ("doc")}<span class="b acc" style="flex:1;height:44px">Взять предоплату 2 · $1,000</span></div>
+    ${tabbarK()}` },
+
+  /* ===== Концепция 2: вкладки остаются, «Обзор» — прогресс ===== */
+  T1: { cap: "Вкладки остаются (4, без счётчиков); «Обзор» — короткая линия и следующий шаг", html: `<div class="scroll">
+    <div class="hdr">${circ("back")}<span class="who">Sarah Mitchell</span><span class="sp"></span>${circ("plus")}${circ("more")}</div>
+    <div class="title" style="margin:6px 0 10px"><h1>Bathroom remodel</h1></div>
+    <div class="tabs" style="margin-top:0"><span class="on">Обзор</span><span>Документы</span><span>Фото</span><span>Заметки</span></div>
+    <div class="card"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--mut)"><span>Смета</span><span>Подпись</span><span>Инвойс</span><span style="color:var(--ink);font-weight:700">Предопл. 2</span><span>Работа</span><span>Финал</span></div>
+      <div class="segbar" style="margin:6px 0 12px"><i class="p" style="flex:1"></i><i class="p" style="flex:1"></i><i class="p" style="flex:1"></i><i style="flex:1;background:var(--acc)"></i><i style="flex:1"></i><i style="flex:1"></i></div>
+      <b style="font-size:16px">Предоплата 2 · $1,000</b><div style="color:var(--mut);font-size:13px;margin:2px 0 10px">ссылка отправлена 18 нояб. · до 25 нояб.</div>
+      <span class="b acc" style="width:100%;flex:none">Взять оплату</span></div>
+    <div class="mbar" style="margin-top:10px"><div class="t"><span>Оплачено <b>$1,200</b> из $3,420</span><span style="color:var(--mut)">остаток $2,220</span></div></div>
+    <div class="lg">${row("cal","Ближайший выезд","пт, 20 нояб. 8:30 · Alex Petrov","")}${row("camera","Последние фото · 6","10 нояб.","")}</div>
+    </div>${tabbarK()}` },
+
+  /* ===== Концепция 3: «Объект в кармане» — плашка на экране блокировки ===== */
+  P0: { cap: "Объект в кармане: работа на экране блокировки во время выезда", html: `<div class="lock"><div style="text-align:center;font-size:15px;opacity:.8">пятница, 20 ноября</div><div class="tm">9:41</div>
+    <div class="la"><div style="display:flex;justify-content:space-between;font-size:13px;opacity:.85"><span>GoRix · на объекте</span><span>с 8:34</span></div>
+      <div style="font-weight:700;font-size:17px;margin-top:4px">Sarah Mitchell · Bathroom remodel</div>
+      <div class="segbar" style="margin:8px 0 4px"><i class="p" style="flex:12;background:#fff"></i><i style="flex:10;background:rgba(255,255,255,.25)"></i><i style="flex:12.2;background:rgba(255,255,255,.25)"></i></div>
+      <div style="font-size:13px;opacity:.85">оплачено $1,200 из $3,420 · ждём предоплату 2</div>
+      <div class="btn3"><span>📷 Фото</span><span>🎙 Заметка</span><span>$ Оплата</span></div></div>
+    <div style="text-align:center;font-size:12px;opacity:.6;margin-top:14px">Оплата открывается только после Face ID</div></div>` },
+
+  /* ===== #3129: один договорной инвойс на всю сумму — что видит клиент ===== */
+  INV1: { cap: "Клиент: один инвойс на всю сумму, предоплаты внутри", html: `<div class="doc">
+    <div class="co">Demo Contractor · (626) 555-0100</div>
+    <h3>Invoice INV-0105</h3><div class="co">Bathroom remodel · 1420 Oak Grove Ave · Sarah Mitchell</div>
+    <div class="box"><div class="l"><span>Contract total</span><span>$3,420.00</span></div>
+      <div class="l"><span>Deposit 1 · paid Nov 13</span><span>$1,200.00 ✓</span></div>
+      <div class="l"><span><b>Deposit 2 · due Nov 25</b></span><b>$1,000.00</b></div>
+      <div class="l"><span>Final · after completion</span><span>$1,220.00</span></div>
+      <div class="due"><span>Balance</span><span>$2,220.00</span></div></div>
+    <div class="pay">Pay Deposit 2 · $1,000.00</div><div class="sm">A receipt for every payment comes by email right away.</div></div>` },
+
 };
 
 // экран работы с нижней панелью своего варианта
