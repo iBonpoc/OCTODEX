@@ -23,6 +23,7 @@ import { SummaryLine } from "@/ui/summaryLine";
 import { Card, SectionTitle } from "@/ui/surfaces";
 import { MoreButton } from "@/ui/templates/parts";
 import { ViewSteps } from "@/ui/viewTabs";
+import { StepLine } from "@/ui/stepLine";
 import { ProtoTemplates } from "./ProtoTemplates";
 
 /** a demo person of the samples (not a UI word) */
@@ -126,6 +127,22 @@ export function ProtoObject() {
           { label: t("ds.proto.lastVisit"), value: "Nov 12", testID: "showcase-sum-visit" },
         ]}
       />
+      {/* #3124 В1, DS §8.15: «Линия шагов» — passed (✓), the current one in its card, the next ones hollow, «＋ Шаг» */}
+      <View style={{ gap: space[2] }}>
+        <T v="heading">{t("line.steps")}</T>
+        <StepLine
+          testID="showcase-step-line"
+          label={t("line.steps")}
+          items={[
+            { key: "e", title: t("line.kind.estimate"), sub: "Nov 12", value: "$3,420.00", state: "done", status: { status: "ok", label: t("line.done") }, onPress: said(t("line.kind.estimate")) },
+            { key: "d", title: t("line.kind.deposit"), sub: "Nov 13", value: "$342.00", state: "done", status: { status: "ok", label: t("line.done") }, onPress: said(t("line.kind.deposit")) },
+            { key: "p", title: t("line.kind.progress"), sub: "Nov 25", value: "$1,000.00", state: "current", status: { status: "info", label: t("line.now") }, onPress: said(t("line.kind.progress")), testID: "showcase-step-current" },
+            { key: "v", title: t("line.kind.visit"), sub: "Nov 20", state: "todo" },
+            { key: "f", title: t("line.kind.final"), value: "$2,078.00", state: "todo" },
+          ]}
+          add={{ label: t("line.add"), items: [{ key: "visit", label: t("line.kind.visit"), icon: "calendar" }, { key: "expense", label: t("line.kind.expense"), icon: "dollar" }], onSelect: (k) => said(k)(), testID: "showcase-step-add" }}
+        />
+      </View>
       {/* Д-факты-2 (#2993): the money total over «Счета» — a part that narrows the list, chosen = the «Заливка» surf2; press — on/off */}
       <SummaryLine
         testID="showcase-summary-filter"

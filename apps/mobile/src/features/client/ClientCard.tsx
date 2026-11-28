@@ -28,6 +28,8 @@ import { clientMeasureHref, clientPlaceCtx } from "@/features/client/clientMeasu
 import { ClientContacts } from "@/features/client/ClientContacts";
 import { ClientDetails, ClientEstimates, ClientLog, ClientMoney, ClientNowCard, ClientOverview, ClientPlaces, ClientVisits, ClientWork, clientStepOf, useClientFacts } from "@/features/client/ClientSections";
 import { TaskSheet, type TaskDraft } from "@/features/tasks/TaskSheet";
+import { ClientLine, type ClientLinePanel } from "@/features/client/ClientLine";
+import { lookItems, useClientLook } from "@/features/client/clientLook";
 import { cleanPhone, mailtoHref } from "@/features/contactLinks";
 import { propertyMapQuery } from "@/features/properties";
 import { fabItems } from "@/nav/sections";
@@ -68,6 +70,9 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
   const [writing, setWriting] = useState<MessagePreset | null>(null);
   const [taskEdit, setTaskEdit] = useState<TaskDraft | null>(null);
   const [newProp, setNewProp] = useState<Property | null>(null);
+  // #3124 В1: «Обычный» (the card as it is) or «Линия работы» — one value on the device, switched in «⋯»
+  const [look, setLook] = useClientLook();
+  const [panel, setPanel] = useState<ClientLinePanel>(null);
   const [main] = peopleOf(c);
   const chip = clientStatusChip[status];
   const tags = tagsOf(db, c);
@@ -154,18 +159,24 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
     const item = made.find((i) => i.id === k);
     if (item?.href) return router.push(item.href as Href);
     if (k === "task") return setTaskEdit({ subjectType: "customer", subjectId: c.id, title: "", assigneeId: db.me });
-    if (k === "note") return onSection("log");
+    if (k === "note") return look === "line" ? setPanel("log") : onSection("log");
     if (k === "property") return setNewProp(newProperty(c.id));
   };
-  const more: MoreAction = office
-    ? [
-        { key: "edit", label: t("ue.edit"), icon: "pencil", testID: "client-act-edit" },
-        ...(statusOptions.length ? [{ key: "status", label: t("client.statusTitle"), icon: "tag" as const, testID: "client-act-status" }] : []),
-        { key: "tags", label: t("proto.client.tags"), icon: "tag", testID: "client-act-tags" },
-        { key: "people", label: t("client.people"), icon: "users", testID: "client-act-people" },
-      ]
-    : [];
+  const more: MoreAction = [
+    ...(office
+      ? [
+          { key: "edit", label: t("ue.edit"), icon: "pencil" as const, testID: "client-act-edit" },
+          ...(statusOptions.length ? [{ key: "status", label: t("client.statusTitle"), icon: "tag" as const, testID: "client-act-status" }] : []),
+          { key: "tags", label: t("proto.client.tags"), icon: "tag" as const, testID: "client-act-tags" },
+          { key: "people", label: t("client.people"), icon: "users" as const, testID: "client-act-people" },
+        ]
+      : []),
+    ...(look === "line" ? [{ key: "history", label: t("line.history"), icon: "history" as const, testID: "client-act-history" }] : []),
+    ...lookItems(look, t, "client"),
+  ];
   const onMore = (k: string) => {
+    if (k === "look.plain" || k === "look.line") return setLook(k === "look.line" ? "line" : "plain");
+    if (k === "history") return setPanel("log");
     if (k === "edit") router.push(`/client/edit?id=${c.id}`);
     else if (k === "status") setPicking(true);
     else if (k === "tags" || k === "people") setSheet(k);
@@ -189,7 +200,9 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
   );
 
   const body =
-    current === "work" ? (
+    look === "line" ? (
+      <ClientLine c={c} f={f} panel={panel} onPanel={setPanel} onRoute={route} />
+    ) : current === "work" ? (
       <ClientWork c={c} f={f} />
     ) : current === "estimates" ? (
       <ClientEstimates f={f} />
@@ -231,8 +244,9 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
           labels: { expand: t("hdr.contacts"), collapse: t("hdr.contactsHide"), more: (n) => t("cw4.moreTags", { n }), edit: t("ue.edit") },
         }}
         actions={quick}
-        now={<ClientNowCard f={f} main={mainStep} />}
-        sections={sections}
+        // the line look: no «Сейчас» card — its job is a row of «Идут» (two answers about one job, design review); the money is a line
+        now={look === "line" ? undefined : <ClientNowCard f={f} main={mainStep} />}
+        sections={look === "line" ? [] : sections}
         section={current}
         onSection={onSection}
         sectionsLabel={t("cl6.tabs")}

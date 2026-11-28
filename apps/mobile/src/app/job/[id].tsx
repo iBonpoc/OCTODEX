@@ -53,6 +53,8 @@ import { CancelJobSheet, CancelledJobBody } from "@/features/job/CancelJob";
 import { jobFigures } from "@/features/client/nextStep";
 import { jobHeadParts } from "@/features/job/headName";
 import { NowCard } from "@/ui/nowCard";
+import { lookItems, useClientLook } from "@/features/client/clientLook";
+import { JobLine } from "@/features/job/JobLineView";
 
 /** the job's sections, in the strip under the header (BUILD-SPEC §2.5) */
 type Section = "overview" | "visits" | "estimates" | "invoices" | "expenses" | "orders" | "photos" | "notes";
@@ -90,6 +92,8 @@ export default function JobScreen() {
   const [calling, setCalling] = useState<CallPreset | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [writing, setWriting] = useState<MessagePreset | null>(null);
+  // #3124 В1: the same look as the client card («⋯ → Вид»), one value on the device
+  const [look, setLook] = useClientLook();
   const back = () => (router.canGoBack() ? router.back() : router.replace("/jobs"));
   const open = useCallback((k: Section) => {
     setFocusNote(false);
@@ -253,8 +257,10 @@ export default function JobScreen() {
     ...(j.status !== "done" && (store.role === "director" || store.role === "dispatcher")
       ? [{ key: "cancel", label: t("job.cancel.menu"), icon: "close" as const, destructive: true, dim: !!cancelBlocked, testID: "job-act-cancel" }]
       : []),
+    ...lookItems(look, t, "job"),
   ];
   const onMore = (k: string) => {
+    if (k === "look.plain" || k === "look.line") return setLook(k === "look.line" ? "line" : "plain");
     if (k === "number") toast.show(jobNo);
     else if (k === "enRoute") enRoute();
     else if (k === "pay" && payTo) router.push(payTo as never);
@@ -585,8 +591,8 @@ export default function JobScreen() {
         actions={actions}
         // #2995 (layout review 27.11): the title's tail «vanity, toilet, tile» was cut right of the rule on 390 — a whole line under the name
         subtitle={headRest || undefined}
-        now={nowCard}
-        sections={ordered.map((k) => ({ key: k, label: t(SECTION_LABEL[k]), count: counts[k] || undefined }))}
+        now={look === "line" ? undefined : nowCard}
+        sections={look === "line" ? [] : ordered.map((k) => ({ key: k, label: t(SECTION_LABEL[k]), count: counts[k] || undefined }))}
         section={current}
         onSection={open}
         sectionsLabel={t("proto.job.sections")}
@@ -595,9 +601,13 @@ export default function JobScreen() {
         create={create}
         onCreate={onCreate}
       >
-        <View testID={`job-section-${current}`} style={{ gap: space[3] }}>
-          {body}
-        </View>
+        {look === "line" ? (
+          <JobLine jobId={j.id} showMoney={showMoney} main={step?.main} add={create?.items ?? []} onAdd={onCreate} />
+        ) : (
+          <View testID={`job-section-${current}`} style={{ gap: space[3] }}>
+            {body}
+          </View>
+        )}
       </ObjectScreen>
       <CallSheet preset={calling} onClose={() => setCalling(null)} />
       <MessageSheet preset={writing} onClose={() => setWriting(null)} />
