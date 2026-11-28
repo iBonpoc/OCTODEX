@@ -120,6 +120,26 @@ body.all .note{display:block}
 .tabbar div{position:relative}
 .fld{background:var(--surf);border-radius:12px;height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;font-size:16px;font-weight:700}
 .fld span{font-size:12.5px;font-weight:500;color:var(--mut)}
+
+/* варианты раскладки (28.11) и страница клиента (#3129) */
+.seg4{display:flex;background:var(--surf);border-radius:999px;padding:3px;margin:4px 0 14px}
+.seg4 span{flex:1;text-align:center;padding:9px 0;border-radius:999px;font-weight:600;color:var(--mut);font-size:14px}
+.seg4 span.on{background:var(--surf3);color:var(--ink)}
+.bigt{font-size:34px;font-weight:700;margin:2px 0 14px;letter-spacing:-.01em}
+.av{width:40px;height:40px;border-radius:50%;background:#C9C3F2;color:#1C1A12;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex:none}
+.jh{display:flex;justify-content:space-between;align-items:baseline;margin:14px 2px 8px}
+.jh b{font-size:16px} .jh span{font-size:13px;color:var(--mut)}
+.prog{font-size:12.5px;color:var(--mut)}
+.doc{position:absolute;inset:0;background:#F6F5F1;color:#17181B;padding:22px 20px;font-family:var(--font);font-size:14px}
+.doc h3{margin:0;font-size:20px}
+.doc .co{color:#585B63;font-size:12.5px;margin-bottom:16px}
+.doc .box{border:1px solid #D8D6CF;border-radius:14px;padding:12px 14px;margin:10px 0}
+.doc .l{display:flex;justify-content:space-between;padding:4px 0}
+.doc .l span:first-child{color:#585B63}
+.doc .due{display:flex;justify-content:space-between;align-items:baseline;font-weight:700;font-size:18px;border-top:1px solid #D8D6CF;padding-top:10px;margin-top:6px}
+.doc .pay{background:#1C1A12;color:#fff;border-radius:999px;height:48px;display:flex;align-items:center;justify-content:center;font-weight:700;margin-top:14px}
+.doc .sm{font-size:12px;color:#585B63;margin-top:10px}
+.doc .tag{display:inline-block;background:#ECEAE3;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;margin-bottom:6px}
 </style>
 </head>
 <body>
@@ -239,6 +259,81 @@ const S = {
       ${subrow("usd","Оплата · Карта по ссылке","RCT-0105 · 21 нояб.","$1,000")}
       ${add("Взять оплату")}
     </div></div>${tabbar}` },
+  /* ===== Вариант A: вкладка «Деньги» в работе; «Обзор» — общее ===== */
+  A1: { cap: "A. Работа — «Обзор» остаётся общим", html: `<div class="scroll">${jobTop(["$3,420","Смета","$342","Оплачено","$3,078","Остаток"])}<div class="tabs"><span class="on">Обзор</span><span>Выезды<i>2</i></span><span>Деньги<i>3</i></span><span>Расходы<i>1</i></span><span>Заказы</span></div>
+    <div class="card" style="padding:12px 16px"><div style="font-weight:600">Команда</div><div style="color:var(--mut)">Alex Petrov</div><div style="display:flex;justify-content:space-between;margin-top:10px;border-top:1px solid var(--bd);padding-top:10px"><span>Прибыль сейчас</span><b>$2,536 · 74.2%</b></div></div>
+    </div>${tabbar}` },
+  A2: { cap: "A. Работа — вкладка «Деньги»", html: `<div class="scroll" style="padding-top:0">${collapsed(3).replace("<span>Документы<i>3</i></span>","<span class=on>Деньги<i>3</i></span>").replace('<span class="on">Обзор</span>','<span>Обзор</span>')}${docsHead(3)}${demoDocs}
+    <div class="h2">Выписка по договору</div>
+    <div class="card stmt"><div class="l"><span>Договор</span><span>$3,420.00</span></div><div class="l"><span>Выставлено</span><span>$342.00</span></div><div class="l"><span>Оплачено</span><span>$342.00</span></div><div class="big"><span>Осталось получить</span><b>$3,078.00</b></div></div>
+    </div>${tabbar}` },
+
+  /* ===== Вариант B: «Деньги» в нижней панели — по работам; папка работы — свой экран ===== */
+  B1: { cap: "B. «Деньги» → «Работы»: все работы с деньгами", html: `<div class="scroll">
+    <div class="hdr"><span class="av">AP</span><span class="sp"></span>${circ("plus")}</div>
+    <div class="bigt">Деньги</div>
+    <div class="seg4"><span class="on">Работы</span><span>Сметы</span><span>Счета</span><span>Оплаты</span></div>
+    <div class="gt"><h3>Ждут денег <span class="cnt">3</span></h3></div>
+    <div class="lg">
+      ${row("inv","David Kim","Kitchen faucet · INV-0101","$1,840", st("bad","half","Просрочен 9 дн"))}
+      ${row("inv","Robert Chen","Interior painting · INV-0102","$960", st("warn","half","Ждёт оплаты"))}
+      ${row("doc","Sarah Mitchell","Bathroom remodel · оплачено $342 из $3,420","$3,078", st("info","minus","Не выставлено"))}
+    </div>
+    <div class="gt" style="margin-top:14px"><h3>Оплачено полностью <span class="cnt">2</span></h3></div>
+    <div class="lg">${row("inv","Maria Gonzalez","Deep clean · INV-0104","$780", st("ok","ok","Оплачено"))}${row("inv","Sarah Mitchell","TV mount + shelves · INV-0103","$240", st("ok","ok","Оплачено"))}</div>
+    </div>${tabbar.replace('<div class="on">','<div>').replace('<div class="">'+svg("cash"),'<div class="on">'+svg("cash"))}` },
+  B2: { cap: "B. Папка работы — отдельный экран", html: `<div class="scroll">
+    <div class="hdr">${circ("back")}<span class="who">Деньги</span><span class="sp"></span>${circ("more")}</div>
+    <div class="title" style="margin:8px 0 6px"><h1 style="font-size:26px">Bathroom remodel</h1></div>
+    <div style="color:var(--mut);font-size:13px;margin-bottom:10px">JOB-0001 · Sarah Mitchell · <span style="color:var(--acc-text);font-weight:600">Открыть работу ›</span></div>
+    <div class="tiles" style="margin-top:0"><div class="tile"><b>$3,420</b><span>Договор</span></div><div class="tile"><b>$342</b><span>Оплачено</span></div><div class="tile"><b>$3,078</b><span>Остаток</span></div></div>
+    ${docsHead(3)}${demoDocs}
+    </div>${tabbar.replace('<div class="on">','<div>').replace('<div class="">'+svg("cash"),'<div class="on">'+svg("cash"))}` },
+
+  /* ===== Вариант C: папка — у клиента; «Деньги» клиента сгруппированы по работам ===== */
+  C1: { cap: "C. Клиент — вкладка «Деньги» по работам", html: `<div class="scroll" style="padding-top:0">
+    <div class="hdr" style="margin:0 -16px;padding:6px 16px;background:var(--bg);border-bottom:1px solid var(--bd);height:56px">${circ("back")}<b style="font-size:17px">Sarah Mitchell</b><span class="sp"></span>${circ("plus")}${circ("more")}</div>
+    <div class="tabs" style="margin-top:0;padding-top:10px;padding-bottom:10px;background:var(--bg)"><span>Обзор</span><span>Работы<i>2</i></span><span class="on">Деньги<i>5</i></span><span>Выезды<i>2</i></span><span>Объекты</span></div>
+    <div class="tiles" style="margin-top:4px"><div class="tile"><b>$0</b><span>Долг</span></div><div class="tile"><b>$3,078</b><span>Ещё выставить</span></div><div class="tile"><b>$582</b><span>Оплачено</span></div></div>
+    <div class="jh"><b>Bathroom remodel</b><span>JOB-0001 · ›</span></div>
+    ${demoDocs}
+    <div class="jh"><b>TV mount + shelves</b><span>JOB-0008 · ›</span></div>
+    <div class="lg">${row("inv","Счёт INV-0103","срок 18 нояб.","$240", st("ok","ok","Оплачен"))}${subrow("usd","Оплата · Zelle","RCT-0103 · 20 нояб.","$240")}</div>
+    </div>${tabbar}` },
+
+  /* ===== #3129: что видит клиент — (а) новый счёт на каждую предоплату, (б) один общий ===== */
+  P1: { cap: "#3129 (а): клиент получает счёт «Deposit 2»", html: `<div class="doc">
+    <div class="co">Demo Contractor · (626) 555-0100</div>
+    <span class="tag">Deposit 2 of the contract</span><h3>Invoice INV-0106</h3><div class="co">Bathroom remodel · 1420 Oak Grove Ave · Sarah Mitchell</div>
+    <div class="box"><div class="l"><span>This invoice</span><b>$1,000.00</b></div><div class="l"><span>Due</span><span>Nov 25, 2026</span></div></div>
+    <div class="box"><div style="font-weight:700;margin-bottom:4px">Your contract</div><div class="l"><span>Contract total</span><span>$3,420.00</span></div><div class="l"><span>Paid so far (3 payments)</span><span>$2,000.00</span></div><div class="l"><span>This invoice</span><span>$1,000.00</span></div><div class="due"><span>Left after this</span><span>$420.00</span></div></div>
+    <div class="pay">Pay $1,000.00</div><div class="sm">Card or bank (ACH). A receipt comes by email right after you pay.</div></div>` },
+  P2: { cap: "#3129 (б): клиент получает старый счёт с новой суммой", html: `<div class="doc">
+    <div class="co">Demo Contractor · (626) 555-0100</div>
+    <h3>Invoice INV-0105</h3><div class="co">Bathroom remodel · 1420 Oak Grove Ave · Sarah Mitchell</div>
+    <div class="box"><div class="l"><span>Invoice total</span><span>$3,420.00</span></div><div class="l"><span>Paid (3 payments)</span><span>$2,000.00</span></div><div class="due"><span>Balance</span><span>$1,420.00</span></div></div>
+    <div class="box"><div class="l"><span>Requested now</span><b>$1,000.00</b></div></div>
+    <div class="pay">Pay $1,000.00</div><div class="sm">The same invoice is sent again each time; the amount requested changes.</div></div>` },
+  P3: { cap: "#3129 (а): у вас — у каждой предоплаты свой счёт", html: `<div class="scroll" style="padding-top:0">${collapsed(7).replace("<span>Документы<i>7</i></span>","<span class=on>Деньги<i>7</i></span>").replace('<span class="on">Обзор</span>','<span>Обзор</span>')}${docsHead(7)}
+    <div class="lg">
+      ${row("doc","Смета","12 нояб.","$3,420", st("ok","ok","Подписана"))}
+      ${row("inv","Предоплата 1","INV-0105 · срок 19 нояб.","$2,000", st("ok","ok","Оплачен"))}
+      ${subrow("usd","Оплата · Наличные","RCT-0102 · 13 нояб.","$500")}
+      ${subrow("usd","Оплата · Zelle","RCT-0103 · 16 нояб.","$700")}
+      ${subrow("usd","Оплата · Карта","RCT-0104 · 18 нояб.","$800")}
+      ${row("inv","Предоплата 2","INV-0106 · срок 25 нояб.","$1,000", st("warn","half","Ждёт оплаты"))}
+      ${add("Взять оплату")}
+    </div></div>${tabbar}` },
+  P4: { cap: "#3129 (б): у вас — один счёт, много оплат", html: `<div class="scroll" style="padding-top:0">${collapsed(5).replace("<span>Документы<i>5</i></span>","<span class=on>Деньги<i>5</i></span>").replace('<span class="on">Обзор</span>','<span>Обзор</span>')}${docsHead(5)}
+    <div class="lg">
+      ${row("doc","Смета","12 нояб.","$3,420", st("ok","ok","Подписана"))}
+      ${row("inv","Счёт INV-0105","запрошено сейчас $1,000","$3,420", st("warn","half","Ждёт $1,420"))}
+      ${subrow("usd","Оплата · Наличные","RCT-0102 · 13 нояб.","$500")}
+      ${subrow("usd","Оплата · Zelle","RCT-0103 · 16 нояб.","$700")}
+      ${subrow("usd","Оплата · Карта","RCT-0104 · 18 нояб.","$800")}
+      ${add("Взять оплату")}
+    </div></div>${tabbar}` },
+
 };
 
 const q = new URLSearchParams(location.search);
