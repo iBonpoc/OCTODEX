@@ -4,7 +4,7 @@
  */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { changedAfterSend, estimateView, laterIso, sentOnceAt } from "../src/features/estimateStatus";
+import { changedAfterSend, draftWentOut, estimateView, laterIso, sentOnceAt } from "../src/features/estimateStatus";
 import { normalizeDB } from "../src/data/normalize";
 import { makeSeed } from "../src/data/seed";
 
@@ -52,5 +52,24 @@ describe("an estimate that went out (#3058)", () => {
     expect(n6.lastSentAt).toBeUndefined();
     expect(sentOnceAt(n6)).toBe(n6.sentAt);
     expect(n6.status).toBe(e6.status);
+  });
+});
+
+describe("#3160: the card's step of a draft that went out", () => {
+  it("a draft sent before (lastSentAt or sentAt) went out — «Отправить изменения»; a never-sent draft did not — «Отправить»", () => {
+    expect(draftWentOut({ status: "draft", lastSentAt: SENT })).toBe(true);
+    expect(draftWentOut({ status: "draft", sentAt: SENT })).toBe(true);
+    expect(draftWentOut({ status: "draft" })).toBe(false);
+  });
+  it("only a draft: a sent one has its own step («Напомнить»), a signed one has none", () => {
+    expect(draftWentOut({ status: "sent", sentAt: SENT })).toBe(false);
+    expect(draftWentOut({ status: "approved", sentAt: SENT })).toBe(false);
+  });
+  it("both looks of the card use the rule and the editor's words: the object's step and the panel's button (1280)", () => {
+    const card = readFileSync(new URL("../src/features/EstimateCard.tsx", import.meta.url), "utf8");
+    // each `draftWentOut(e)` is followed (within its branch) by the editor's words
+    const at = [...card.matchAll(/draftWentOut\(e\)/g)].map((m) => m.index!);
+    expect(at.length).toBe(2);
+    for (const i of at) expect(card.slice(i, i + 260)).toContain('"r1.est.sendChanges"');
   });
 });
