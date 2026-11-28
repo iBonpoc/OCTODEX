@@ -19754,4 +19754,57 @@ select tst.ok(has_function_privilege('authenticated', 'public.reopen_signed_esti
 rollback;
 \echo 'T473 «don''t sign — change it» takes off only the signature the phone saw ok'
 
+-- T474 (#3161): a client's photo without a visit, as the app sends it from «Фото и файлы» of the client (cloud/ops.ts file.add:
+-- {kind photo, customer_id}): the office adds it; a tech — only to a client of his (a visit of his on the client's job,
+-- app.is_customer_assignee); never a tech to another client, never a subcontractor (app.sub_file_ok: no customer_id), even of
+-- a client he works for. The rule is 20261115170000; the app is to show «＋» by the same rule (#3161, its own PR).
+-- Its own people and clients (a tech, a subcontractor; «his» client with a job and a visit of both, «another» client).
+\set as_tech474 'reset role; set request.jwt.claim.sub = ''a4740000-0000-4000-8000-000000000001''; set role authenticated;'
+\set as_sub474 'reset role; set request.jwt.claim.sub = ''a4740000-0000-4000-8000-000000000002''; set role authenticated;'
+begin;
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a4740000-0000-4000-8000-000000000001', 'tech474@a.test', '{"full_name":"Tom Tech"}'),
+  ('a4740000-0000-4000-8000-000000000002', 'sub474@a.test', '{"full_name":"Sid Sub"}');
+insert into public.memberships (company_id, user_id, role, status) values
+  ('ca000000-0000-0000-0000-000000000000', 'a4740000-0000-4000-8000-000000000001', 'tech', 'active'),
+  ('ca000000-0000-0000-0000-000000000000', 'a4740000-0000-4000-8000-000000000002', 'subcontractor', 'active');
+insert into public.customers (id, company_id, display_name) values
+  ('c4740000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T474 his client'),
+  ('c4740000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T474 another client');
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('d4740000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c4740000-0000-4000-8000-000000000001', '74 Elm St', 'Pasadena');
+insert into public.jobs (id, company_id, title, customer_id, property_id) values
+  ('e4740000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T474 job', 'c4740000-0000-4000-8000-000000000001', 'd4740000-0000-4000-8000-000000000001');
+insert into public.visits (id, company_id, job_id, starts_at, ends_at) values
+  ('f4740000-0000-4000-8000-000000000011', 'ca000000-0000-0000-0000-000000000000', 'e4740000-0000-4000-8000-000000000001', now(), now() + interval '2 hours');
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'f4740000-0000-4000-8000-000000000011', 'a4740000-0000-4000-8000-000000000001'),
+  ('ca000000-0000-0000-0000-000000000000', 'f4740000-0000-4000-8000-000000000011', 'a4740000-0000-4000-8000-000000000002');
+:as_office_a
+insert into public.files (id, company_id, kind, customer_id) values
+  ('f4740000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'photo', 'c4740000-0000-4000-8000-000000000002');
+select tst.ok(tst.cnt($q$select 1 from public.files where id = 'f4740000-0000-4000-8000-000000000001'$q$) = 1,
+              'T474 the office adds a photo to any client');
+:as_tech474
+insert into public.files (id, company_id, kind, customer_id) values
+  ('f4740000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'photo', 'c4740000-0000-4000-8000-000000000001');
+select tst.ok(tst.cnt($q$select 1 from public.files where id = 'f4740000-0000-4000-8000-000000000002'$q$) = 1,
+              'T474 a tech adds a photo to a client of his (his visit on the client''s job)');
+select tst.fails_like($q$insert into public.files (company_id, kind, customer_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', 'c4740000-0000-4000-8000-000000000002')$q$, '%row-level security%',
+                      'T474 a tech does not add a photo to another client');
+:as_sub474
+select tst.fails_like($q$insert into public.files (company_id, kind, customer_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', 'c4740000-0000-4000-8000-000000000001')$q$, '%row-level security%',
+                      'T474 a subcontractor does not add a photo to the client, even one he works for');
+select tst.fails_like($q$insert into public.files (company_id, kind, customer_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', 'c4740000-0000-4000-8000-000000000002')$q$, '%row-level security%',
+                      'T474 nor to another client');
+-- the visit stops counting (cancelled): the client is not his any more — refused
+:as_super
+update public.visits set status = 'cancelled' where id = 'f4740000-0000-4000-8000-000000000011';
+:as_tech474
+select tst.fails_like($q$insert into public.files (company_id, kind, customer_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', 'c4740000-0000-4000-8000-000000000001')$q$, '%row-level security%',
+                      'T474 a tech whose visit is cancelled: no photo to that client');
+rollback;
+\echo 'T474 a client''s photo without a visit: the office, a tech of the client — never a subcontractor ok'
+
 \echo 'ALL TESTS PASSED'
