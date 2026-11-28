@@ -48,6 +48,8 @@ export interface ListScreenProps<T> {
   back?: () => void;
   preview?: boolean;
   testID: string;
+  /** founder 27.11 (#3017, the stand: «Клиенты», «Лиды»): each row its own card, not the rows of one card */
+  separate?: boolean;
 }
 
 export function ListScreen<T>(p: ListScreenProps<T>) {
@@ -90,7 +92,7 @@ export function ListScreen<T>(p: ListScreenProps<T>) {
   ) : (
     <GroupedList testID={`${p.testID}-groups`}>
       {groups.map((g) => (
-        <ListGroup key={g.key} title={g.title} all={g.all} testID={`${p.testID}-group-${g.key}`}>
+        <ListGroup key={g.key} title={g.title} all={g.all} separate={p.separate} testID={`${p.testID}-group-${g.key}`}>
           {g.rows.map((r) => {
             const { key, ...row } = p.row(r);
             return <GroupRow key={key} {...row} />;

@@ -28,7 +28,9 @@ describe("GroupedList / GroupRow 56 (BUILD-SPEC §1)", () => {
   it("a wide column («Просрочен 9 дн») never lies over the subtitle: the columns do not shrink (a floor, not a fixed width), the text column shrinks and cuts with «…»", () => {
     for (const f of ["groupedList.tsx", "figures.tsx"]) {
       const s = src(f);
-      const col = s.slice(s.indexOf("alignItems: \"flex-end\""), s.indexOf("alignItems: \"flex-end\"") + 200);
+      // the columns' own block (#3035 put another right-aligned column — the sum with the number under it — before it)
+      const at = s.indexOf("alignItems: \"flex-end\"", Math.max(0, s.indexOf("cols.map(")));
+      const col = s.slice(at, at + 200);
       expect(col, f).toMatch(/minWidth: i < all\.length - 1 \? [A-Za-z.]*colW : undefined/);
       expect(col, f).toMatch(/flexShrink: 0/);
       expect(col, f).not.toMatch(/\bwidth: i < all/);
@@ -40,7 +42,8 @@ describe("GroupedList / GroupRow 56 (BUILD-SPEC §1)", () => {
   it("a row with a status-word column («Просрочен 9 дн») lets the name take two lines — the name is not cut, the subtitle is cut first", () => {
     const s = src("groupedList.tsx");
     expect(s).toMatch(/const wordCol = !!cols\?\.some\(\(x\) => x\.tone\)/);
-    expect(s).toMatch(/numberOfLines=\{wrap \|\| wordCol \? 2 : 1\}[^>]*>\s*\{title\}/);
+    // #3017: a row with a fact in the name's line (titleNote) lets the name take two lines too
+    expect(s).toMatch(/numberOfLines=\{wrap \|\| wordCol \|\| titleNote \? 2 : 1\}[^>]*>\s*\{title\}/);
     expect(s).toMatch(/numberOfLines=\{wrap \? 2 : 1\}[^>]*>\s*\{subtitle\}/);
   });
   it("no button inside a button (web «<button> cannot contain a nested <button>», wave 3): the row's actions stand beside its Press", () => {
@@ -76,5 +79,29 @@ describe("StatusPill (visual v2 «Плашка статуса», 21.11)", () => 
     expect(s).toMatch(/component\.chip\.h/);
     expect(s).toMatch(/component\.statusPill\.padL/);
     expect(s).toMatch(/st\.fill/);
+  });
+  it("#2992 lists B: a sum and its status are ONE column on the right — the sum, the status under it (never side by side)", () => {
+    const s = src("groupedList.tsx");
+    expect(s).toMatch(/value && status \? \(/);
+    expect(s).toMatch(/alignItems: "flex-end", flexShrink: 0, gap: spaceHalf\.hair/);
+    // the side pill is drawn only when there is no bare sum to stand under
+    // (#3017/#3033: not when the status goes to line 3 with titleNote, nor when it is an icon only)
+    expect(s).toMatch(/status && !status\.iconOnly && !\(value && !cols\?\.length\) && !titleNote \? <StatusPill/);
+  });
+  it("#3033: an icon-only status — the icon without a word, said to VoiceOver; the sum in the name's line", () => {
+    const s = src("groupedList.tsx");
+    expect(s).toMatch(/accessible accessibilityLabel=\{status\.label\} testID="row-status-icon"/);
+    expect(s).toMatch(/const top = !!value && !titleNote && \(!!status\?\.iconOnly \|\| !!valueTop\)/);
+    // with the sum in the name's line ANY status is its icon there — a status without iconOnly was dropped (jobs on «Все», 27.11)
+    expect(s).toMatch(/\{status \? \(\s*<View accessible accessibilityLabel=\{status\.label\} testID="row-status-icon">/);
+  });
+  it("#2993: a part of «Деньги» has ONE line of its sums, not the tiles (the tiles stay on the overview)", () => {
+    const read = (f: string) => readFileSync(join(__dirname, "..", "src", f), "utf8");
+    for (const f of ["app/estimates.tsx", "app/invoice/index.tsx", "app/payments/index.tsx"]) {
+      expect(read(f)).toMatch(/<MoneyTotal tab=/);
+      expect(read(f)).not.toMatch(/<MoneyTiles/);
+      expect(read(f)).not.toMatch(/w2m\.col\.sum/);
+    }
+    expect(read("features/moneyTabs.tsx")).toMatch(/<SummaryLine testID="money-tiles"/);
   });
 });

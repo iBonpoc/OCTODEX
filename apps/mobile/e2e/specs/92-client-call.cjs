@@ -21,7 +21,10 @@ exports.run = async (h) => {
   const a = db.activities.find((x) => x.kind === "call" && x.subjectType === "customer" && x.subjectId === "c1");
   h.expect(a && a.meta.outcome === "answered" && a.body === "Booked for Monday" && !!a.contactId, "the call is on the client, with the person and the note");
   await h.go("/calls");
-  await h.expectText(/Sarah Mitchell.*Поговорили/, "it is in «Звонки»");
+  // #3033: the outcome is the row's icon, its word is the icon's label
+  const callRow = p.locator('[data-testid^="comms-"]').locator("visible=true").filter({ hasText: "Sarah Mitchell" }).filter({ has: p.locator('[data-testid="row-status-icon"][aria-label="Поговорили"]') }).first();
+  await callRow.waitFor({ timeout: 8000 });
+  h.expect((await callRow.count()) === 1, "it is in «Звонки», «Поговорили»");
   await h.expectText(/Booked for Monday/, "with its note");
 
   // a client without people (an old one): the app makes up a «main» person — it is never sent as the call's person

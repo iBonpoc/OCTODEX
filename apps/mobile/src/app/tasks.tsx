@@ -56,13 +56,22 @@ export default function Tasks() {
     const g = by.today.includes(x) || by.tomorrow.includes(x) ? "near" : "far";
     // «10:00 · лид Tom Becker · Alex»: the hour when the group already says the day, else the day
     const at = when ? (x.allDay && x.startsAt ? day(x.startsAt) : g === "near" ? time(when) : `${day(when)} ${time(when)}`) : undefined;
+    const hourRight = !!at && g === "near" && !(x.allDay && x.startsAt);
     const subject = s.label ? `${t(SUBJECT_KIND[s.kind]).toLowerCase()} ${s.label}` : undefined;
     const who = memberName(db, x.assigneeId, t);
     return {
       key: x.id,
       testID: `task-${x.id}`,
       title: x.title,
-      subtitle: [at, subject, who].filter(Boolean).join(" · ") || undefined,
+      // lists B (#2992): today's and tomorrow's hour on the right (the group says the day); a far one keeps «день время» in the line
+      // #3018 (founder #3017): 2 — what it is tied to; 3 — when (if not on the right) · who
+      subtitle: subject,
+      extra: [hourRight ? undefined : at, who].filter(Boolean).join(" · ") || undefined,
+      value: hourRight ? at : undefined,
+      valueMark: hourRight,
+      valueTop: true,
+      // a task's name may take two lines (review: «Call Daniel about the estim…»)
+      wrap: true,
       // the DoneCircle on the left (the row's neighbour, not inside its press): a tap marks it done or brings it back, with «Отменить»
       lead: { done: !!x.doneAt, onToggle: () => toggle(x), label: `${t(x.doneAt ? "task.undo" : "w6.task.doneBtn")}: ${x.title}`, testID: `task-done-${x.id}` },
       // #2350: a swipe right marks it done (or brings a done one back) — the same toggle as the button, with «Отменить»
@@ -73,6 +82,8 @@ export default function Tasks() {
   return (
     <>
       <ListScreen<Task>
+        // #3018 (founder #3017): each task its own card
+        separate
         testID="tasks"
         title={t("task.title")}
         // DS §12.13 «Шапка» (#2841, ревью design/crm): no number in the title, no chips — the count is the line under it

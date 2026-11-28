@@ -20,6 +20,7 @@ import {
 } from "@/features/leads";
 import { SourceSheet, sourceKindLabel } from "./SourcePicker";
 import { InterestPicker, MissingBlock } from "./LeadSheets";
+import { SelectField } from "@/ui/selectField";
 import { Avatar, Button, ChoiceChips, IconButton, Segmented, StatusChip, TextField } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
@@ -306,13 +307,18 @@ function RequestSheet({ l, visible, onClose }: { l: Lead; visible: boolean; onCl
       <Labeled label={t("lead.serviceText")}>
         <TextField type="text" value={d.service} onChangeText={(v) => set({ service: v })} placeholder={t("lead.servicePh")} />
       </Labeled>
-      <Labeled label={t("lead.when")}>
-        <ChoiceChips<Timeframe | "">
-          value={d.timeframe ?? ""}
-          onChange={(v) => set({ timeframe: v || undefined })}
-          items={[{ key: "", label: t("lead.any") }, ...TIMEFRAMES.map((k) => ({ key: k, label: t(`lead.tf.${k}` as DictKey) }))]}
+      {/* #2991 (founder 27.11: «полотна из чипов мне не нравится»; design-review): one row-menu with the label over it, as the
+          other fields of the sheet — «В этом месяце ⌄»; «К дате» opens the date field under it */}
+      <View testID="lead-when">
+        <SelectField<Timeframe | "any">
+          label={t("lead.when")}
+          labelAbove
+          value={d.timeframe ?? "any"}
+          onChange={(v) => set({ timeframe: v === "any" ? undefined : v })}
+          items={[{ key: "any", label: t("lead.any") }, ...TIMEFRAMES.map((k) => ({ key: k, label: t(`lead.tf.${k}` as DictKey) }))]}
+          testID="lead-when-field"
         />
-      </Labeled>
+      </View>
       {d.timeframe === "date" ? (
         <TextField type="date" value={d.timeframeDate} onChangeText={(v) => set({ timeframeDate: v })} placeholder="MM/DD/YYYY" label={t("lead.date")} icon="calendar" />
       ) : null}

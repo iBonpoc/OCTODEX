@@ -1,6 +1,6 @@
 import { Fragment, useRef, useState } from "react";
 import { View, type LayoutChangeEvent } from "react-native";
-import { size, space, statusIcon, type StatusName } from "@octo/design-tokens";
+import { radius, size, space, statusIcon, type StatusName } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Icon, Press, T } from "./primitives";
 import { summaryFit } from "./summaryLineFit";
@@ -11,6 +11,9 @@ export interface SummaryItem {
   /** a status fact («долг $1,840»): its icon and colour (rule 2 — never the colour alone) */
   status?: StatusName;
   onPress?: () => void;
+  /** a pressable item that narrows a list and is on now (map-keeper 27.11, #2993): the «Заливка» `surf2` as every chosen thing
+   *  (DS §3.1 «Выбранное — не жёлтое»), said to VoiceOver; pressed again — off */
+  selected?: boolean;
   testID?: string;
 }
 
@@ -64,7 +67,7 @@ export function SummaryLine({ items, testID }: { items: SummaryItem[]; testID?: 
       </View>
       {items.slice(0, fit.shown).map((x, i) => {
         const body = (
-          <View onLayout={keep(i)} style={{ flexDirection: "row", alignItems: "center", gap: space[1], flexShrink: fit.shown === 1 ? 1 : 0 }}>
+          <View onLayout={keep(i)} style={{ flexDirection: "row", alignItems: "center", gap: space[1], flexShrink: fit.shown === 1 ? 1 : 0, ...(x.onPress ? { paddingHorizontal: space[1], borderRadius: radius.pill, backgroundColor: x.selected ? c.surf2 : undefined } : null) }}>
             {x.status ? <Icon name={statusIcon[x.status]} s={size.iconXs} color={c.status[x.status].text} /> : null}
             <T v="caption" tone="mut" numberOfLines={1}>
               {x.label}
@@ -78,7 +81,7 @@ export function SummaryLine({ items, testID }: { items: SummaryItem[]; testID?: 
           <Fragment key={`${i}-${x.label}`}>
             {i > 0 ? sep : null}
             {x.onPress ? (
-              <Press testID={x.testID} onPress={x.onPress} accessibilityRole="button" accessibilityLabel={`${x.label} ${x.value}`} visibleHeight={size.iconMd}>
+              <Press testID={x.testID} onPress={x.onPress} accessibilityRole="button" accessibilityLabel={`${x.label} ${x.value}`.trim()} accessibilityState={{ selected: !!x.selected }} visibleHeight={size.iconMd} {...({ "aria-selected": x.selected ? "true" : "false" } as object)}>
                 {body}
               </Press>
             ) : (
