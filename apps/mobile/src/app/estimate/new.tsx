@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import { canSeeClientLink } from "@/features/estimateSign";
 import { Platform, View, type ViewStyle } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useIsFocused, useLocalSearchParams } from "expo-router";
 import { haptics } from "@/ui/haptics";
 import { component, motion, radius, rhythm, space, spaceHalf, size } from "@octo/design-tokens";
 import { LINE_GROUPS, activeLines, countedSections, discountBps, ppmToPctText, sectionSubtotals, taxRatePpm, type TaxSettings, type EstimateSection, type CustomLine, type CustomOption, type DepositSetting, type LineGroup } from "@octo/estimating-engine";
@@ -13,6 +13,7 @@ import { useI18n, type DictKey } from "@/i18n";
 import { MAX_OPTIONS, linesFromCatalog, newLine, cloneOption, nextOptionName, recommend, withoutOption, costComplete, estimateTitle, exemptDoc, hasContent, lineMarks, newDoc, optionTotals, shownQty, uid } from "@/features/estimateDoc";
 import { LineMarks } from "@/features/LineMarks";
 import { ClientPicker, itemPrice, kindLabel } from "@/features/estimatePickers";
+import { handoffKey, takeNewClient } from "@/features/estimate/newClientHandoff";
 import { LineRow, rowFieldId, type RowAction, type RowApi } from "@/features/estimate/LineRow";
 import { useRowView } from "@/features/estimate/rowView";
 import { docMoney, rowSum } from "@/features/estimate/rowLine";
@@ -43,7 +44,7 @@ import { MONEY_MODES, TAX_MODES, depositFor, depositMode, discountFor, discountM
 import { useKeyboardHeight } from "@/ui/keyboard";
 import { ModeRow } from "@/ui/modeRow";
 import { isPartialTax, lastTaxRatePpm, prefillTaxRatePpm, taxChange, wholeTax, type TaxDiff } from "@/features/estimateTax";
-import { Button, IconButton, StatusChip, TextField } from "@/ui/controls";
+import { Button, StatusChip, TextField } from "@/ui/controls";
 import { CountPill, FigureRow } from "@/ui/figures";
 import type { IconKey } from "@/ui/primitives";
 import { dayKeyIn } from "@/features/zone";
@@ -57,7 +58,7 @@ import { HelpButton, Menu, Sheet, useToast, type MenuItem } from "@/ui/overlays"
 import { Card, Divider, Empty, Grid, ListRow, RowView, Screen, SectionTitle, useFooterShown } from "@/ui/surfaces";
 import { draftCtx, draftSnapshot, draftsKey, findDraft, isEditCtx, nextDrafts, removeDraft, restoreDraftOnDevice, useDraftEditorOpen, useEstimateDrafts, type EstimateDraft } from "@/features/estimateDraft";
 import { useConfirm } from "@/ui/confirmDialog";
-import { doneAction, gateAtOpen, gateBeforeSave, markOf, takeMine } from "@/features/estimate/editSession";
+import { barSteps, doneAction, gateAtOpen, gateBeforeSave, markOf, takeMine } from "@/features/estimate/editSession";
 import { useAuth } from "@/cloud/auth";
 import { NO_UNDO, localUndo, withAfter } from "@/data/undo";
 import { StatusNote } from "@/ui/statusNote";
@@ -140,6 +141,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const startInEditor = useRef(askedTemplates && !!draft);
   /** …or once the client is chosen, when the template was picked before the client («Сметы → ＋ → Из шаблона…») */
   const afterClient = useRef<(() => void) | null>(null);
+  // #2887: what was to follow the pick, kept while the new client's form is open
+  const pendingAfterNew = useRef<(() => void) | null>(null);
   /** #1304: a new estimate starts with the company's Terms in its client's language (a template never carries them, spec 40 §7);
    *  an estimate already saved keeps what it has — an old one without the key goes on showing the default (no key added) */
   /** the lead the estimate is for: its own (opened by id), or the one it is made from — /p/, the PDF and the card read the same */
@@ -191,6 +194,33 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // number fields of the open row that hold text which is not a number (the line keeps the last right value): "<line>:<field>"
   const badFields = useRef(new Set<string>());
   const [clientPicker, setClientPicker] = useState(!customerId && !startOpen && !tplEdit && !draft);
+  /** the client of the estimate is picked (the sheet's row, or a new client made from it — #2887) */
+  const pickClient = (cid: string, pid: string) => {
+    // a new estimate: Terms nobody touched follow the new client's language; an edited text stays (spec 40 §4)
+    // (a draft saved before too — spec 40 §2.5, map S5: Terms of a draft follow its client; a sent one keeps its text)
+    if ((!existing || existing.status === "draft") && !tplEdit && cid !== customerId && doc.terms !== undefined)
+      setDoc((d) => ({ ...d, terms: store.estimateTermsOnClientChange(d.terms, { from: { customerId, leadId: leadOf }, to: { customerId: cid, leadId: leadOf } }) }));
+    setCustomerId(cid);
+    setPropertyId(pid);
+    setClientPicker(false);
+  };
+  // #2887: back from «Новый клиент» opened in the client sheet — the client made for THIS estimate is its client at once
+  const focused = useIsFocused();
+  useEffect(() => {
+    if (!focused) return;
+    const made = takeNewClient(handoffKey(estimateId));
+    if (!made) {
+      // back from the form without a client: nothing is to follow
+      pendingAfterNew.current = null;
+      return;
+    }
+    pickClient(made.customerId, made.propertyId);
+    const next = pendingAfterNew.current;
+    pendingAfterNew.current = null;
+    // two frames on, as after the sheet: the focus is back on this screen first
+    if (next) requestAnimationFrame(() => requestAnimationFrame(next));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focused, estimateId]);
   // every CHANGE of a new estimate is kept on the phone; opening it (a template's lines and name) is not a change
   // (#859 №1); nothing worth keeping — no draft (#760)
   const keyOfDrafts = drafts.key;
@@ -1024,7 +1054,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const hasGroups = (layoutOpt.sections ?? []).length > 0;
   const totalById = new Map(act.map((l, i) => [l.id, totals.lineTotals[i] ?? 0] as const));
 
-  /** sending is the office's (#1113): «Сохранить и отправить» is in «⋯» — the bar's one step is «Готово» (BUILD-SPEC §2.7, LAYOUT-RULES П3) */
+  /** sending is the office's (#1113): the tech's bar keeps «Готово» only; the office's — «Готово · Отправить» (#2935) */
   const canSend = canSeeClientLink(store.role);
   // «сохранено 8:19» (visual v2 №5): the version's own save mark; another day — the day
   // (an estimate saved before the mark existed: the time it was sent — the type's own fallback)
@@ -1044,7 +1074,20 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const firstLine = !signed && !hasContent(doc);
   const addFirst = () => (db.catalog.length ? openCatalog() : addNew());
   // #2387 (CRM review: «одни слова — два разных действия»): the empty estimate's step says what it does — «Из каталога» when there is one
-  const step: MainAction = firstLine ? { label: db.catalog.length ? t("px3.est.fromCatalog") : t("px3.est.newLine"), onPress: addFirst, testID: "est-bar-add" } : { label: t("proto.est.done"), onPress: () => void save(false), testID: "ue-save" };
+  // #2935 п.1 (founder 27.11: «Давай кнопку отправить вниз, как у Джобер»): where the estimate can be sent, the main yellow one at the
+  // bottom is «Отправить» (the same press the header's ➤ had: save, then the send of the estimate — the way and the queue offline as
+  // before) and «Готово» is the second, unfilled, beside it; «Отменить» then goes into «⋯» (editSession.barSteps)
+  // CRM review 27.11: an estimate the client already has — «Отправить изменения» (as the header's ➤ said), a draft — «Отправить»
+  // #3058: «Отправить изменения» for an estimate that ever went out (sentOnceAt) — also one back in draft after a send
+  const sentBefore = !!existing && (existing.status !== "draft" || !!sentOnceAt(existing));
+  const bar = barSteps({ mayShare: canSend && !tplEdit, signed, hasLines: hasContent(doc), dirty, sent: sentBefore });
+  const doneStep: MainAction = { label: t("proto.est.done"), onPress: () => void save(false), testID: "ue-save" };
+  const step: MainAction =
+    bar.main === "add" ? { label: db.catalog.length ? t("px3.est.fromCatalog") : t("px3.est.newLine"), onPress: addFirst, testID: "est-bar-add" }
+    // the header ➤'s words for VoiceOver (it said «Сохранить и отправить» / «Отправить изменения») stay with the press that took its place
+    : bar.main === "send" ? { label: t("est.bar.send"), a11y: t("proto.est.saveSend"), onPress: () => void save(true), testID: "est-bar-send" }
+    : bar.main === "sendChanges" ? { label: t("r1.est.sendChanges"), a11y: t("r1.est.sendChanges"), onPress: () => void save(true), testID: "est-bar-send" }
+    : doneStep;
   // «Итого ˅ $…» (DS §8.9, #1362): a press opens what the total is made of (a sheet over the bar, not a plate growing under the thumb)
   // visual v2 №5: «Итого ⌄ $772.36 налог $14.52» — the sum with cents (the engine's fmtUsd), the tax after it when there is one
   // founder 21.11 (С5: «шторку убрать, разбор суммы только в карточке внизу», #2387): the bar's «Итого» is a figure, not a button —
@@ -1064,8 +1107,9 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // #2363 q72 (founder 21.11, вариант А): scrolled down, the «Итого» card folds into the capsule on the right; up 8 pt, the top, or a
   // tap opens it (ui/totalFold.ts). An open total panel («Итого ˅») never folds under the finger
   // #2381 (founder 21.11: «внизу „Готово“. И „Отменить“» · «Отменить видно, только когда есть правки — да»)
-  const cancelStep: MainAction | null = dirty && !signed && !firstLine ? { label: t("k1.cancel"), onPress: () => void cancelEdits(), testID: "k1-cancel" } : null;
-  const stepRow = tplEdit ? null : <MainStep placement="bar" main={step} aside={cancelStep} total={barShown ? total : null} folded={fold.folded && option.lines.length > 0} onUnfold={() => setFold({ folded: false, anchor: Number.MAX_SAFE_INTEGER })} foldAdd={signed ? undefined : { a11y: t("px3.est.newLine"), onPress: () => addNew(), testID: "est-fold-add" }} />;
+  const cancelStep: MainAction | null = bar.cancel === "bar" ? { label: t("k1.cancel"), onPress: () => void cancelEdits(), testID: "k1-cancel" } : null;
+  const aside: MainAction | null = bar.second === "done" ? { ...doneStep, outline: true } : cancelStep;
+  const stepRow = tplEdit ? null : <MainStep placement="bar" testIDBase={bar.main === "add" ? undefined : "ue-save"} main={step} aside={aside} total={barShown ? total : null} folded={fold.folded && option.lines.length > 0} onUnfold={() => setFold({ folded: false, anchor: Number.MAX_SAFE_INTEGER })} foldAdd={signed ? undefined : { a11y: t("px3.est.newLine"), onPress: () => addNew(), testID: "est-fold-add" }} />;
   const onAdd = (k: string) => {
     if (k === "new") addNew();
     else if (k === "catalog") openCatalog();
@@ -1090,16 +1134,20 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       />
     </View>
   );
-  /** «⋯» of the editor: rare things — the layout of the list, how the rows read, the client's screen */
+  /** «⋯» of the editor: rare things — the layout of the list, how the rows read, the client's screen; one meaning — one icon
+   *  (Д-значок-3, review 27.11: «Разложить по типам» — `sections`, «Позиции подробно» — `list`, were both `menu`) */
   const moreList = [
-    ...(!signed && option.lines.length ? [{ key: "layout", label: t("est.sec.layout"), icon: "menu" as const, testID: "est-group-by-kind" }] : []),
+    ...(!signed && option.lines.length ? [{ key: "layout", label: t("est.sec.layout"), icon: "sections" as const, testID: "est-group-by-kind" }] : []),
     // «＋ Вариант» (Good / Better / Best) — a rare way to add, in «⋯» (the four buttons over the lines are the common ones)
     ...(!signed && !tplEdit && doc.options.length < MAX_OPTIONS ? [{ key: "option", label: t("est.var.add"), icon: "copy" as const, testID: "est-add-option" }] : []),
-    ...(option.lines.length ? [{ key: "rows", label: t("proto.est.rowsFull"), icon: "menu" as const, selected: rowLook === "full", testID: "est-row-view" }] : []),
+    ...(option.lines.length ? [{ key: "rows", label: t("proto.est.rowsFull"), icon: "list" as const, selected: rowLook === "full", testID: "est-row-view" }] : []),
     { key: "client", label: t("est.client.on"), icon: "eye" as const, selected: clientScreen, testID: "est-menu-client" },
+    // #2935: the bar holds «Итого · Готово · Отправить» — «Отменить» (only with edits, #2381) is the last item here, after a line (round 2 Ж3; not red: it asks, nothing is lost without the answer)
+    ...(bar.cancel === "more" ? [{ key: "cancel", label: t("k1.cancel"), icon: "undo" as const, group: true, testID: "k1-cancel" }] : []),
   ];
   const onMore = (k: string) => {
-    if (k === "layout") layoutBtn();
+    if (k === "cancel") void cancelEdits();
+    else if (k === "layout") layoutBtn();
     else if (k === "rows") setRowLook(rowLook === "full" ? "brief" : "full");
     else if (k === "option") addOption();
     else toggleClientScreen(!clientScreen);
@@ -1125,18 +1173,9 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       back={back}
       onLeave={(proceed) => void close(proceed)}
       hintKey="estimate-builder"
-      // founder 21.11 («5 открытых»: «Отправить — не внизу редактора, а вверху сметы… здесь работаем с позициями», #2379): the send is a
-      // round 40 of the header before «⋯» (as «＋ · ⋯» of every header); the bottom keeps the lines' buttons and «Итого / Готово»
-      right={tplEdit ? undefined : (
-        <RowView gap={space[2]}>
-          {canSend && !signed && option.lines.length > 0 ? (
-            <View testID="est-send-top">
-              <IconButton icon="send" label={existing && (existing.status !== "draft" || !!sentOnceAt(existing)) ? t("r1.est.sendChanges") : t("proto.est.saveSend")} onPress={() => void save(true)} />
-            </View>
-          ) : null}
-          <MoreButton items={moreList} onMore={onMore} a11y={t("est.actions")} testID="est-menu" />
-        </RowView>
-      )}
+      // #2935 п.1 (founder 27.11, «как у Джобер»; replaces #2379 «Отправить — вверху» in this part): the send is the main one of the
+      // bottom bar — the header keeps only «⋯» (one place for one action)
+      right={tplEdit ? undefined : <MoreButton items={moreList} onMore={onMore} a11y={t("est.actions")} testID="est-menu" />}
       footer={barShown && stepRow ? stepRow : undefined}
     >
       <RevealOnTick tick={revealTick} target={missing === "client" ? clientRef : linesRef} />
@@ -1611,13 +1650,14 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       <ClientPicker
         visible={clientPicker}
         onClose={() => setClientPicker(false)}
-        onPick={(cid, pid) => {
-          // a new estimate: Terms nobody touched follow the new client's language; an edited text stays (spec 40 §4)
-          // (a draft saved before too — spec 40 §2.5, map S5: Terms of a draft follow its client; a sent one keeps its text)
-          if ((!existing || existing.status === "draft") && !tplEdit && cid !== customerId && doc.terms !== undefined)
-            setDoc((d) => ({ ...d, terms: store.estimateTermsOnClientChange(d.terms, { from: { customerId, leadId: leadOf }, to: { customerId: cid, leadId: leadOf } }) }));
-          setCustomerId(cid);
-          setPropertyId(pid);
+        onPick={pickClient}
+        // #2887: «⊕ Новый клиент» — the form over this screen (it stays mounted: nothing typed is lost); the sheet goes first
+        // not for the tech (no client form), not for an estimate of a lead (its client is made from the lead — crm-reviewer №6)
+        onNew={store.role === "tech" || leadOf ? undefined : (typed) => {
+          // what was to follow the pick (the cursor to the first quantity, «Из шаблона…») follows the new client instead (№3)
+          pendingAfterNew.current = afterClient.current;
+          const q = typed ? `&name=${encodeURIComponent(typed)}` : "";
+          afterClient.current = () => router.push(`/client/edit?for=${encodeURIComponent(handoffKey(estimateId))}${q}`);
           setClientPicker(false);
         }}
         onExited={() => {

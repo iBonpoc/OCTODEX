@@ -2,6 +2,7 @@
  * «Ещё → Поставщики» (docs/specs/36 §7): the company's suppliers as cards. Owner, admin, office only (nav/roles.ts;
  * the server reads none for the tech and sales). Active ones by default, the archive one tap away.
  */
+import { HeaderButton } from "@/ui/headerIcon";
 import { useMemo, useState } from "react";
 import { router } from "expo-router";
 import { useStore } from "@/data/store";
@@ -61,7 +62,7 @@ export default function Suppliers() {
       title={t("sup.title")}
       back={back}
       help={t("sup.help")}
-      right={<Button label={t("sup.new")} icon="plus" size="sm" variant="secondary" onPress={() => router.push("/suppliers/new")} />}
+      right={<HeaderButton icon="plus" label={t("sup.new")} testID="sup-new" onPress={() => router.push("/suppliers/new")} />}
     >
       <FilterBar<Lane>
         search={{ value: q, onChange: setQ, placeholder: t("sup.search") }}

@@ -10,7 +10,7 @@ const { listSearch, listSearchClear } = require("../listSearch.cjs");
 exports.run = async (h) => {
   const p = h.page;
   const vis = (loc) => loc.locator("visible=true");
-  const card = '[data-testid="list-card"]';
+  const card = '[data-testid^="expense-row-"]'; // lists B (#2992): an expense is a row
   const db = await (async () => { await h.go("/today"); return h.db(); })();
 
   // «Расходы»

@@ -27,7 +27,8 @@ const NO_HEADER = [
  * rows (e2e/cardsAlignment.cjs). Every PR that moves a list to ListCard adds its screen here.
  */
 // v2 (rule 12): /clients, /leads, /estimates, /invoice are grouped rows (ListGroup / GroupRow) now — no list cards to align
-const CARD_SCREENS = [{ path: "/money", reference: (p) => p.locator('[data-testid="list-card"]').first(), min: 1 }, { path: "/catalog", reference: (p) => p.getByTestId("filter-bar").locator("visible=true").first() }, { path: "/jobs", reference: (p) => p.getByTestId("filter-bar").locator("visible=true").first(), min: 1 }, { path: "/figures/leads?period=month", reference: (p) => p.locator('[data-testid="list-card"]').first(), min: 1 }];
+// lists B (#2992): /money (expenses), /catalog, /jobs are grouped rows now too
+const CARD_SCREENS = [{ path: "/figures/leads?period=month", reference: (p) => p.locator('[data-testid="list-card"]').first(), min: 1 }];
 const { checkCardAlignment } = require("../cardsAlignment.cjs");
 /** loops over all requested layouts itself (one browser context per layout) */
 exports.ownLayouts = true;

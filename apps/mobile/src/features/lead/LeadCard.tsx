@@ -256,6 +256,9 @@ export function LeadObject({ l, section, onSection, back, frame }: { l: Lead; se
     ) : (
       <View style={{ gap: space[6] }}>
         <LeadDups l={l} />
+        {/* add-on modules' place (docs/specs/33 П15): nothing unless a module is switched on. On top of «Обзор» (#2990, founder 27.11: a linked
+            measurement was two buttons under every event — not seen without scrolling) */}
+        <ModulePlaces place="lead" ctx={{ leadId: l.id, customerId: l.customerId, propertyId: l.propertyId }} />
         <LeadOverview l={l} />
         <ServiceCategoryRow value={l.serviceCategoryId} onChange={(id) => toast.show(t("dir.changed"), store.updateLead(l.id, { serviceCategoryId: id }))} />
         <ListGroup title={t("lead.recent")} all={events.length > 3 ? { label: t("lead.recent.all"), onPress: () => onSection("history"), testID: "lead-recent-all" } : undefined} testID="lead-recent">
@@ -263,8 +266,6 @@ export function LeadObject({ l, section, onSection, back, frame }: { l: Lead; se
             <GroupRow key={e.id} compact lead={{ icon: e.icon }} title={timelineText(e, t)} subtitle={`${day(e.at)} ${time(e.at)}`} testID={`lead-event-${e.id}`} />
           ))}
         </ListGroup>
-        {/* add-on modules' place (docs/specs/33 П15): nothing unless a module is switched on */}
-        <ModulePlaces place="lead" ctx={{ leadId: l.id, customerId: l.customerId, propertyId: l.propertyId }} />
       </View>
     );
 

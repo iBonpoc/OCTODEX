@@ -75,14 +75,14 @@ export const SECTIONS: ShowcaseSection[] = [
   { id: "haptics", screen: "haptics", ds: "§15.6", title: "ds.scr.haptics", tokenGroups: [], components: [] },
   { id: "brand", screen: "brand", ds: "§18.2", title: "ds.brand.title", tokenGroups: [], components: ["BrandMark", "BrandLogo", "BrandLaunch", "BrandWait", "BrandIntro"] },
   { id: "icons", screen: "icons", ds: "§18.1", title: "ds.scr.icons", tokenGroups: ["statusIcon"], components: ["Icon"] },
-  { id: "tokens-color", screen: "base", ds: "§3", title: "ds.sec.color", tokenGroups: ["themes", "statusIcon", "drawing"], components: [] },
+  { id: "tokens-color", screen: "base", ds: "§3", title: "ds.sec.color", tokenGroups: ["themes", "highContrast", "statusIcon", "drawing"], components: [] },
   { id: "tokens-text", screen: "base", ds: "§4", title: "ds.sec.text", tokenGroups: ["font"], components: [] },
   { id: "tokens-layout", screen: "spacing", ds: "§5", title: "ds.sec.layout", tokenGroups: ["space", "spaceHalf", "radius", "size", "breakpoint", "layout", "z", "component"], components: [] },
   { id: "tokens-motion", screen: "motion", ds: "§14", title: "ds.sec.motion", tokenGroups: ["motion", "timing"], components: [] },
   { id: "proto-object", screen: "proto", ds: "§12.11", title: "ds.sec.protoObject", tokenGroups: [], components: ["ObjectHeader", "ObjectHeaderBar", "IconRow", "MainStep", "SummaryLine", "Collapsible", "AccessNote", "ViewSteps", "StepLine"] },
   // visual language v2 (docs/design/visual-v2.html, founder 21.11): the new parts and the v2 look of the old ones
   { id: "proto-v2", screen: "proto", ds: "§12.12", title: "ds.sec.protoV2", tokenGroups: ["rhythm"], components: ["CheckList", "NumberTrio", "ProgressWords", "TonePill", "FigureRow", "CountPill", "TimerLine", "IntervalPlate", "TimeSlot", "HatchPlate", "ProgressBar", "Segmented"] },
-  { id: "proto-lists", screen: "proto", ds: "§12.11", title: "ds.sec.protoLists", tokenGroups: [], components: ["DayCell", "WeekStrip", "MonthHead", "MonthArrows", "MonthPick", "DayStrip", "GroupedList", "ListGroup", "GroupRow", "GroupHead", "GroupRowBody", "GroupHairline", "ButtonMenu", "StatTile", "StatGrid", "StatusPill", "NowCard", "ModeRow"] },
+  { id: "proto-lists", screen: "proto", ds: "§12.11", title: "ds.sec.protoLists", tokenGroups: [], components: ["DayCell", "WeekStrip", "MonthHead", "MonthArrows", "MonthPick", "DayStrip", "GroupedList", "ListGroup", "GroupRow", "GroupHead", "GroupRowBody", "GroupHairline", "ButtonMenu", "StatTile", "StatGrid", "StatusPill", "NowCard", "ModeRow", "ModeToggle"] },
   // поток Г: the five screen templates (src/ui/templates/*) and their shared parts, in their showcase frame
   { id: "proto-templates", screen: "proto", ds: "§12.11", title: "ds.sec.protoTemplates", tokenGroups: [], components: ["OverviewScreen", "ListScreen", "ObjectScreen", "EditorScreen", "CalendarScreen", "CreateButton", "MoreButton", "ConfirmSheet", "HeaderIcons", "HeaderIcon", "HeaderButton", "HeaderBar", "HeaderBig", "HeaderAvatar", "HeaderBack", "HeaderClose", "HeaderPlate", "HeaderFade", "HeaderScroll", "HeaderStill", "FitTitle", "HeadStatus", "SheetHead", "DemoPlate", "DemoDot", "TemplateFrame"] },
   { id: "graphite", screen: "graphite", ds: "§25", title: "ds.gr.title", tokenGroups: [], components: [] },

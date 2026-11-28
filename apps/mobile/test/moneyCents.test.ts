@@ -52,8 +52,11 @@ describe("money — always with cents (#2888, #2672)", () => {
     expect(bad).toEqual([]);
   });
 
-  it("the guard: the tiles' moneyWhole is the app's money (no rounding of its own)", () => {
+  // #3029/#3030 (founder 27.11: «центы — только внутри документов»): an overview's `moneyWhole` is whole dollars (moneyWhole.test.ts);
+  // `money` — the documents, the editor, the fields, the PDF — keeps the cents (above)
+  it("the guard: the overviews' moneyWhole is moneyWholeText; money stays moneyText (with cents)", () => {
     const i18n = readFileSync(join(src, "i18n", "index.tsx"), "utf8");
-    expect(i18n).toMatch(/moneyWhole:\s*moneyText,/);
+    expect(i18n).toMatch(/moneyWhole:\s*moneyWholeText,/);
+    expect(i18n).toMatch(/money:\s*moneyText,/);
   });
 });

@@ -141,10 +141,13 @@ exports.addSection = async (h) => {
 exports.addOption = async (h) => exports.editorMenu(h, "est-add-option");
 
 /**
- * «Отправить» of the builder (#2403, the button map): the bar's one step is «Готово»; sending is the round ➤ of the header
- * (`est-send-top`, drawn once the estimate has a line; «⋯» no longer holds it), by testID (rule 19).
+ * «Отправить» of the builder (#2935, «как у Джобер»): the main one of the bottom bar (`est-bar-send`, once the estimate has a line;
+ * «Готово» is the second beside it; the header and «⋯» hold no send), by testID (rule 19). The bar whole first (not the capsule).
  */
-exports.saveSend = async (h) => h.page.getByTestId("est-send-top").locator("visible=true").first().getByRole("button").click();
+exports.saveSend = async (h) => {
+  await exports.wholeBar(h);
+  await vis(h, '[data-testid="est-bar-send"]').first().click();
+};
 
 /**
  * An item of the builder header's «⋯» (`est-menu`, v2 #2350) by its testID: «Разложить по типам»

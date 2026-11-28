@@ -21,14 +21,16 @@ exports.run = async (h) => {
   await h.shot("awaiting");
   // «Счета» is the one invoices list (spec 31 §7а). v2 (#2350): «Деньги» lists rows (GroupRow `invoice-row-*`), the figure screens
   // keep their cards (LISTCARD_LEFT) — the same invoice is there with the same client, number and amount, and nothing more or less
-  const key = (c) => ({ name: firstLine(c), amount: (c.match(/\$[\d,.]+/) || [""])[0], number: (c.match(/INV-\d+/) || [""])[0] });
+  // #3029/#3030: the lists show whole dollars, a figures page may keep cents — compare the amounts as whole dollars
+  const dollars = (a) => (a ? `$${Math.floor((Math.round(Number(a.replace(/[$,]/g, "")) * 100) + 50) / 100).toLocaleString("en-US")}` : "");
+  const key = (c) => ({ name: firstLine(c), amount: dollars((c.match(/\$[\d,.]+/) || [""])[0]), number: (c.match(/INV-\d+/) || [""])[0] });
   await h.go("/invoice?f=owed");
   await p.locator('[data-testid="invoice-list-groups"]').locator("visible=true").first().waitFor({ timeout: 8000 });
   const owedRows = (await p.locator('[data-testid="invoice-list-group-overdue"] [data-testid^="invoice-row-"], [data-testid="invoice-list-group-waiting"] [data-testid^="invoice-row-"]').locator("visible=true").allInnerTexts()).map((x) => x.replace(/\n/g, " "));
   h.expect(owedRows.length === fig.length, `as many open invoices in «Счета» as in «Ждёт оплаты» (${owedRows.length} / ${fig.length})`);
   for (const c of fig) {
     const k = key(c);
-    h.expect(owedRows.some((r) => r.includes(k.name) && r.includes(k.number) && r.includes(k.amount)), `invoice ${k.number} is the same in «Счета»: ${JSON.stringify(k)}`);
+    h.expect(owedRows.some((r) => r.includes(k.name) && r.includes(k.number.replace(/^INV-/, "")) /* #3046: short form under the lead */ && r.includes(k.amount)), `invoice ${k.number} is the same in «Счета»: ${JSON.stringify(k)}`);
   }
 
   // «Подписано» (month) = the same estimates as in «Сметы» (all of its groups)
