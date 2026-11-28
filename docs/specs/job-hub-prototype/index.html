@@ -1,0 +1,764 @@
+<!doctype html>
+<html lang="ru" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Работа — одна папка</title>
+<!-- Прототип спеки 71 (#3124). Только для показа основателю: в приложение не входит.
+     Вид — токены «Наряда»: значения скопированы из design/naryad-ds/tokens/theme.css и status.css (26.11.2026).
+     Открыть кадр: index.html?s=hub&t=dark  (s = hub | estimate | invoice | s1 | s2 | s3; t = dark | light). Без ?s — все кадры столбиком. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap">
+<style>
+:root{--acc:#E2C15E;--on-acc:#1C1A12;--font:'Manrope',system-ui,sans-serif;--r:22px;--ri:14px}
+[data-theme="dark"]{--acc-text:#E2C15E;--tint:rgba(226,193,94,.16);--surf3:#44464D;--tab:#1F2024;--page:#1F2024;--bg:#26282C;--ink:#EEEFF1;--mut:#B3B6BE;--surf:#303237;--surf2:#3A3C42;--bd:rgba(255,255,255,.07);--bd-field:#80838C;--sh:0 10px 30px rgba(0,0,0,.3);--ov-solid:#2C2E33;
+  --ground:linear-gradient(170deg,#43392F 0%,#26282C 55%,#191A1D 100%);
+  --st-ok:#1C2E23;--st-ok-text:#86D3A0;--st-info:#182A2E;--st-info-text:#86C9D4;--st-warn:#33281C;--st-warn-text:#E8B67F;--st-bad:#3A2122;--st-bad-text:#F09A90;--st-neutral:#3A3C42;--st-neutral-text:#C9CCD2;--scrim:rgba(0,0,0,.45)}
+[data-theme="light"]{--acc-text:#5E4C0C;--tint:rgba(226,193,94,.30);--surf3:#C4C5BF;--tab:#E3E4DE;--page:#CBCCC6;--bg:#D6D7D1;--ink:#17181B;--mut:#42454B;--surf:#E3E4DE;--surf2:#CDCEC8;--bd:rgba(20,21,24,.08);--bd-field:#6F7279;--sh:0 10px 28px rgba(60,50,40,.12);--ov-solid:#DEDFD9;
+  --ground:linear-gradient(170deg,#E1D9CA 0%,#D6D7D1 55%,#BBBCB6 100%);
+  --st-ok:#DCEBDF;--st-ok-text:#1B6034;--st-info:#D8EAED;--st-info-text:#0E5866;--st-warn:#F2E2CC;--st-warn-text:#824306;--st-bad:#F4DAD6;--st-bad-text:#9A2C22;--st-neutral:#CDCEC8;--st-neutral-text:#3E4147;--scrim:rgba(20,21,24,.35)}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--page);color:var(--ink);font-family:var(--font)}
+body.all{display:flex;flex-wrap:wrap;gap:24px;padding:24px}
+.ph{width:390px;height:844px;position:relative;overflow:hidden;background:var(--ground);font-size:15px;line-height:1.35;flex:none}
+.scroll{position:absolute;inset:0 0 72px 0;overflow:hidden;padding:6px 16px 24px}
+.hdr{display:flex;align-items:center;gap:10px;height:52px}
+.circ{width:40px;height:40px;border-radius:50%;background:var(--surf);display:inline-flex;align-items:center;justify-content:center;color:var(--ink);flex:none}
+.circ svg{width:20px;height:20px}
+.hdr .who{font-size:15px;color:var(--mut);font-weight:500}
+.demo{font-size:12px;color:var(--st-warn-text);background:var(--st-warn);border-radius:999px;padding:3px 9px;font-weight:600}
+.sp{flex:1}
+.title{display:flex;align-items:center;gap:12px;margin:14px 0 18px}
+.title h1{font-size:30px;line-height:1.1;margin:0;font-weight:700;letter-spacing:-.01em;white-space:nowrap}
+.title .rule{width:1px;align-self:stretch;background:var(--bd-field);opacity:.5}
+.title .rest{font-size:15px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.title .side{display:flex;flex-direction:column;gap:2px;font-size:15px}
+.link{color:var(--acc-text);font-size:14px;font-weight:600;margin:0 0 22px;display:flex;gap:6px;align-items:center}
+.link.mark{background:var(--tint);border-radius:12px;padding:10px 12px;margin:-4px -4px 18px}
+.qa{display:flex;justify-content:space-around;margin:4px 0 18px}
+.qa div{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12px;color:var(--mut)}
+.qa .circ{width:44px;height:44px}
+.card{background:var(--surf);border-radius:var(--r);padding:16px;box-shadow:var(--sh)}
+.kick{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--mut);font-weight:600;display:flex;justify-content:space-between}
+.kick span:last-child{text-transform:none;letter-spacing:0;font-size:13px;display:inline-flex;gap:5px;align-items:center;color:var(--ink)}
+.when{font-size:15px;font-weight:700;margin-top:8px}
+.addr{font-size:13px;color:var(--mut);margin-top:2px}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
+.tile{background:var(--surf2);border-radius:var(--ri);padding:10px 6px;text-align:center}
+.tile b{display:block;font-size:16px;font-variant-numeric:tabular-nums}
+.tile span{font-size:12px;color:var(--mut)}
+.btns{display:flex;gap:8px}
+.b{height:40px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;gap:6px;font-weight:700;font-size:15px;flex:1;padding:0 14px;white-space:nowrap}
+.b.acc{background:var(--acc);color:var(--on-acc)}
+.b.sec{background:var(--surf2);color:var(--acc-text)}
+.b svg{width:18px;height:18px}
+.tabs{display:flex;gap:6px;margin:20px -16px 14px;padding:0 16px;white-space:nowrap;overflow:hidden}
+.tabs span{font-size:15px;font-weight:600;color:var(--mut);padding:7px 12px;border-radius:999px}
+.tabs span.on{background:var(--surf);color:var(--ink);box-shadow:var(--sh)}
+.tabs span i{font-style:normal;font-weight:500;opacity:.8;margin-left:4px}
+.tabs span.new{outline:2px dashed var(--acc);outline-offset:-2px}
+.gt{display:flex;align-items:center;justify-content:space-between;margin:6px 2px 8px}
+.gt h3{font-size:17px;margin:0;font-weight:700;display:flex;gap:8px;align-items:center}
+.cnt{font-size:12px;font-weight:600;background:var(--surf2);color:var(--mut);border-radius:999px;padding:1px 8px}
+.grp{display:flex;flex-direction:column;gap:6px}
+.row{background:var(--surf);border-radius:16px;padding:10px 12px;display:flex;gap:10px;align-items:center;min-height:52px}
+.row.sub{margin-left:26px;background:var(--surf2);min-height:44px;padding:8px 12px;border-radius:14px}
+.row .ic{width:30px;height:30px;border-radius:50%;background:var(--surf2);display:inline-flex;align-items:center;justify-content:center;flex:none;color:var(--mut)}
+.row.sub .ic{background:var(--surf);width:26px;height:26px}
+.row .ic svg{width:16px;height:16px}
+.row .mid{flex:1;min-width:0}
+.row .nm{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .ds{font-size:12.5px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .val{text-align:right;font-variant-numeric:tabular-nums;font-weight:700;font-size:15px;white-space:nowrap}
+.row .val small{display:block;font-weight:600;font-size:12px}
+.row .chev{color:var(--mut);width:14px;flex:none}
+.row.act{background:transparent;border:1px dashed var(--bd-field);color:var(--acc-text);font-weight:700;min-height:44px;justify-content:flex-start}
+.row.act .ic{background:var(--tint);color:var(--acc-text)}
+.row.sum{background:transparent;padding:4px 12px;min-height:auto;color:var(--mut);font-size:13px}
+.ok{color:var(--st-ok-text)} .warn{color:var(--st-warn-text)} .info{color:var(--st-info-text)} .bad{color:var(--st-bad-text)}
+.st{display:inline-flex;gap:4px;align-items:center;font-size:12px;font-weight:600}
+.st svg{width:12px;height:12px}
+.pill{display:inline-flex;gap:5px;align-items:center;border-radius:999px;padding:4px 10px;font-size:13px;font-weight:600}
+.pill.ok{background:var(--st-ok)} .pill svg{width:14px;height:14px}
+.stmt{display:flex;flex-direction:column;gap:10px}
+.stmt .l{display:flex;justify-content:space-between;font-size:15px}
+.stmt .l span:first-child{color:var(--mut)}
+.stmt .big{display:flex;justify-content:space-between;align-items:baseline;border-top:1px solid var(--bd);padding-top:12px;font-weight:700;font-size:17px}
+.stmt .big b{font-size:24px}
+.h2{font-size:17px;font-weight:700;margin:20px 2px 10px}
+.money{display:flex;align-items:center;gap:8px;background:var(--surf);border-radius:16px;padding:10px 12px;margin-bottom:8px;font-size:13px;color:var(--mut);flex-wrap:wrap}
+.money b{color:var(--ink);font-variant-numeric:tabular-nums}
+.bar{height:6px;border-radius:999px;background:var(--surf2);overflow:hidden;display:flex;width:100%}
+.bar i{display:block;background:var(--st-ok-text)} .bar u{display:block;background:var(--mut);opacity:.5}
+.tabbar{position:absolute;left:0;right:0;bottom:0;height:72px;background:var(--tab);display:flex;justify-content:space-around;padding-top:8px;font-size:11px;color:var(--mut)}
+.tabbar div{display:flex;flex-direction:column;align-items:center;gap:3px}
+.tabbar svg{width:22px;height:22px}
+.tabbar .on{color:var(--acc-text)}
+.sheet{position:absolute;inset:0;background:var(--scrim);display:flex;align-items:flex-end;z-index:6}
+.sheet .in{background:var(--ov-solid);width:100%;border-radius:28px 28px 0 0;padding:10px 16px 28px;display:flex;flex-direction:column;gap:10px}
+.grab{width:36px;height:5px;border-radius:999px;background:var(--bd-field);opacity:.6;align-self:center}
+.sheet h2{font-size:19px;margin:6px 0 0}
+.sheet p{margin:0;color:var(--mut);font-size:13px}
+.opt{background:var(--surf);border-radius:16px;padding:12px;display:flex;gap:10px;align-items:center;min-height:56px}
+.opt .rad{width:22px;height:22px;border-radius:50%;border:2px solid var(--bd-field);flex:none}
+.opt.sel{box-shadow:inset 0 0 0 2px var(--acc)} .opt.sel .rad{border:7px solid var(--acc)}
+.opt .mid{flex:1} .opt .nm{font-weight:700} .opt .ds{font-size:12.5px;color:var(--mut)}
+.seg{display:flex;background:var(--surf);border-radius:999px;padding:3px}
+.seg span{flex:1;text-align:center;padding:8px 0;border-radius:999px;font-weight:600;color:var(--mut);font-size:14px}
+.seg span.on{background:var(--surf3);color:var(--ink)}
+.note{position:absolute;left:12px;right:12px;bottom:84px;z-index:9;background:var(--acc);color:var(--on-acc);border-radius:14px;padding:8px 12px;font-size:12.5px;font-weight:600;display:none}
+body.all .note{display:block}
+
+/* одна группа строк (ListGroup + GroupRow, DS §5.5): строки внутри одной карточки, разделитель — волосок */
+.lg{background:var(--surf);border-radius:var(--r);overflow:hidden}
+.lg .row{background:transparent;border-radius:0;border-top:1px solid var(--bd)}
+.lg .row:first-child{border-top:0}
+.lg .row.sub{margin-left:0;padding-left:52px;background:transparent;border-radius:0}
+.lg .row.sub .ic{background:transparent;width:22px;height:22px}
+.lg .row.add{color:var(--ink);font-weight:600;min-height:48px}
+.lg .row.add .ic{background:transparent;color:var(--ink)}
+.badge{position:absolute;top:-6px;right:-10px;background:#E5484D;color:#fff;border-radius:999px;font-size:10px;font-weight:700;min-width:17px;height:17px;display:inline-flex;align-items:center;justify-content:center}
+.tabbar div{position:relative}
+.fld{background:var(--surf);border-radius:12px;height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;font-size:16px;font-weight:700}
+.fld span{font-size:12.5px;font-weight:500;color:var(--mut)}
+
+/* варианты раскладки (28.11) и страница клиента (#3129) */
+.seg4{display:flex;background:var(--surf);border-radius:999px;padding:3px;margin:4px 0 14px}
+.seg4 span{flex:1;text-align:center;padding:9px 0;border-radius:999px;font-weight:600;color:var(--mut);font-size:14px}
+.seg4 span.on{background:var(--surf3);color:var(--ink)}
+.bigt{font-size:34px;font-weight:700;margin:2px 0 14px;letter-spacing:-.01em}
+.av{width:40px;height:40px;border-radius:50%;background:#C9C3F2;color:#1C1A12;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex:none}
+.jh{display:flex;justify-content:space-between;align-items:baseline;margin:14px 2px 8px}
+.jh b{font-size:16px} .jh span{font-size:13px;color:var(--mut)}
+.prog{font-size:12.5px;color:var(--mut)}
+.doc{position:absolute;inset:0;background:#F6F5F1;color:#17181B;padding:22px 20px;font-family:var(--font);font-size:14px}
+.doc h3{margin:0;font-size:20px}
+.doc .co{color:#585B63;font-size:12.5px;margin-bottom:16px}
+.doc .box{border:1px solid #D8D6CF;border-radius:14px;padding:12px 14px;margin:10px 0}
+.doc .l{display:flex;justify-content:space-between;padding:4px 0}
+.doc .l span:first-child{color:#585B63}
+.doc .due{display:flex;justify-content:space-between;align-items:baseline;font-weight:700;font-size:18px;border-top:1px solid #D8D6CF;padding-top:10px;margin-top:6px}
+.doc .pay{background:#1C1A12;color:#fff;border-radius:999px;height:48px;display:flex;align-items:center;justify-content:center;font-weight:700;margin-top:14px}
+.doc .sm{font-size:12px;color:#585B63;margin-top:10px}
+.doc .tag{display:inline-block;background:#ECEAE3;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;margin-bottom:6px}
+
+/* перестройка (28.11): схема разделов, лента денег, список работ */
+.sch{padding:14px 16px;font-size:13.5px}
+.sch h2{font-size:22px;margin:4px 0 12px}
+.sch .blk{background:var(--surf);border-radius:16px;padding:10px 12px;margin-bottom:8px}
+.sch .blk b{display:block;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--mut);margin-bottom:4px}
+.sch .tb{display:flex;gap:4px;flex-wrap:wrap}
+.sch .tb span{background:var(--surf2);border-radius:8px;padding:4px 8px;font-weight:600;font-size:12.5px}
+.sch .tb span.x{text-decoration:line-through;opacity:.55}
+.sch .tb span.n{outline:1.5px solid var(--acc);outline-offset:-1.5px}
+.ladder .big{font-size:26px;font-weight:700}
+.bar2{height:8px;border-radius:999px;background:var(--surf2);overflow:hidden;margin:8px 0 2px}.bar2 i{display:block;height:100%;background:var(--ink);opacity:.75}
+.chips{display:flex;gap:6px;overflow:hidden;margin:2px -16px 12px;padding:0 16px}
+.chips span{background:var(--surf);border-radius:999px;padding:7px 12px;font-size:13.5px;font-weight:600;white-space:nowrap;color:var(--mut)}
+.chips span.on{background:var(--ink);color:var(--bg)}
+.phrase{font-size:14.5px;margin:2px 0 12px;color:var(--ink)}
+.tabbar .plus{width:44px;height:44px;border-radius:50%;background:var(--acc);color:var(--on-acc);display:flex;align-items:center;justify-content:center;margin-top:-6px}
+
+/* клиент — центр (28.11) */
+.money1{display:flex;gap:6px;flex-wrap:wrap;font-size:14px;margin:0 2px 14px;color:var(--mut)}
+.money1 b{color:var(--ink)}
+.jobc{background:var(--surf);border-radius:var(--r);padding:14px 14px 6px;box-shadow:var(--sh)}
+.jobc .h{display:flex;justify-content:space-between;align-items:center}
+.jobc .h b{font-size:17px}
+.jobc .lg{background:transparent;margin:10px -14px 0;border-top:1px solid var(--bd);border-radius:0}
+.jobc.closed{padding:12px 14px;box-shadow:none;margin-top:8px}
+.over{position:absolute;inset:24px 0 0 0;background:var(--ov-solid);border-radius:22px 22px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.35);padding:10px 16px;z-index:6}
+.dim{position:absolute;inset:0;background:var(--scrim);z-index:5}
+.pdf{background:#F6F5F1;color:#17181B;border-radius:12px;padding:14px;font-size:12.5px;margin-top:10px}
+.pdf h4{margin:0 0 6px;font-size:15px}
+.pdf .l{display:flex;justify-content:space-between;padding:3px 0}
+
+/* линия работы (28.11, идея основателя) */
+.mbar{background:var(--surf);border-radius:16px;padding:10px 12px;margin-bottom:10px}
+.mbar .t{display:flex;justify-content:space-between;font-size:14px}
+.segbar{display:flex;gap:3px;margin-top:8px}.segbar i{height:8px;border-radius:4px;background:var(--surf2);display:block}.segbar i.p{background:var(--ink);opacity:.75}
+.line{position:relative;padding-left:26px;margin-top:6px}
+.line:before{content:"";position:absolute;left:9px;top:6px;bottom:6px;width:2px;background:var(--bd-field);opacity:.5}
+.nd{position:relative;display:flex;justify-content:space-between;align-items:center;min-height:40px;font-size:14px}
+.nd:before{content:"";position:absolute;left:-22px;top:50%;margin-top:-7px;width:14px;height:14px;border-radius:50%;background:var(--surf);border:2px solid var(--bd-field)}
+.nd.done:before{background:var(--st-ok-text);border-color:var(--st-ok-text)}
+.nd.fut{color:var(--mut)}.nd.fut:before{background:transparent}
+.nd .d{color:var(--mut);font-size:12.5px}.nd .r{display:flex;flex-direction:column;align-items:flex-end;gap:1px}.nd .chev{width:14px;color:var(--mut);margin-left:6px}
+.cur{position:relative;background:var(--surf);border-radius:18px;padding:12px 14px;margin:6px 0;box-shadow:var(--sh)}
+.cur:before{content:"";position:absolute;left:-23px;top:18px;width:16px;height:16px;border-radius:50%;background:var(--acc);border:3px solid var(--bg)}
+.scroll > .cur:before{display:none}
+.thumbs{display:flex;gap:4px}.thumbs i{width:26px;height:26px;border-radius:6px;background:linear-gradient(135deg,#8a7a5c,#4c5560);display:block}
+.pinbar{position:absolute;left:0;right:0;bottom:0;padding-bottom:28px!important;background:var(--ov-solid);border-top:1px solid var(--bd);padding:8px 12px;display:flex;gap:8px;align-items:center;z-index:4}
+.pinbar .circ{width:44px;height:44px}
+.lock{position:absolute;inset:0;background:linear-gradient(160deg,#2b3444,#14161b);color:#fff;padding:20px 14px;font-family:var(--font)}
+.lock .tm{text-align:center;font-size:64px;font-weight:600;margin-top:24px}
+.la{background:rgba(30,32,38,.92);border-radius:22px;padding:12px 14px;margin-top:60px}
+.la .btn3{display:flex;gap:8px;margin-top:10px}.la .btn3 span{flex:1;background:rgba(255,255,255,.12);border-radius:999px;height:40px;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:14px}
+
+.mini{display:flex;gap:2px;margin-top:5px;width:120px}.mini i{flex:1;height:5px;border-radius:3px;background:var(--surf2);display:block}.mini i.p{background:var(--ink);opacity:.75}.mini i.c{background:var(--ink)}
+.jr{display:flex;gap:10px;align-items:center;padding:12px;border-top:1px solid var(--bd)}.jr:first-child{border-top:0}
+.jr .mid{flex:1;min-width:0}.jr .nm{font-weight:600;font-size:15px}.jr .ds{font-size:12.5px;color:var(--mut)}
+
+.di{background:#000;color:#fff;border-radius:999px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;height:37px;width:250px;margin:0 auto;font-size:13px;font-weight:600}
+.die{background:#000;color:#fff;border-radius:40px;padding:14px 16px;margin:0 6px}
+.cap2{font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;opacity:.6;margin:14px 6px 6px}
+</style>
+</head>
+<body>
+<script>
+const I = {
+  mic:'<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/>', pen:'<path d="M4 20l4-1 11-11-3-3L5 16z"/>',
+  mail:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>', search:'<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>',
+  back:'<path d="M15 5l-7 7 7 7"/>', plus:'<path d="M12 5v14M5 12h14"/>', more:'<circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/>',
+  phone:'<path d="M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a1 1 0 01-1 1A16 16 0 014 5a1 1 0 011-1z"/>', sms:'<path d="M5 18l-1 3 4-2a9 8 0 10-3-1z"/><path d="M8.5 11h.01M12 11h.01M15.5 11h.01" stroke-width="2.4"/>',
+  route:'<path d="M3 11l18-8-8 18-2-8z"/>', camera:'<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+  doc:'<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/>', inv:'<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M12 7v8M10 9.5c0-1 1-1.5 2-1.5s2 .5 2 1.5-1 1.3-2 1.5-2 .6-2 1.6.9 1.4 2 1.4 2-.4 2-1.4"/>',
+  usd:'<path d="M12 3v18M16 7c0-1.7-1.8-3-4-3s-4 1.3-4 3 1.8 2.6 4 3 4 1.4 4 3.2-1.8 3-4 3-4-1.3-4-3"/>', co:'<path d="M12 8v8M8 12h8"/><rect x="3" y="3" width="18" height="18" rx="5"/>',
+  chev:'<path d="M9 5l7 7-7 7"/>', ok:'<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/>', half:'<circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 010 18z" fill="currentColor"/>',
+  x:'<circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/>', minus:'<circle cx="12" cy="12" r="9"/><path d="M8 12h8"/>', send:'<path d="M4 12l16-8-6 16-2-6z"/>',
+  home:'<path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/>', cal:'<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>', people:'<circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6M16 4.5a3.5 3.5 0 010 7M18 14c2 .8 3 3 3 6"/>',
+  cash:'<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M12 9v6M10.5 10.5h2.2a1 1 0 010 2h-1.4a1 1 0 000 2h2.2"/><path d="M6 12h.01M18 12h.01" stroke-width="2.4"/>', target:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>',
+};
+const svg = (k, sw = 1.75) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${I[k]}</svg>`;
+const circ = (k) => `<span class="circ">${svg(k)}</span>`;
+/* нижняя панель — как в приложении: красный кружок «2» на «Лидах» (исключение 4 правила 2) */
+const tabbar = `<div class="tabbar">${[["home","Главная"],["cal","План"],["people","Клиенты",1],["cash","Деньги"],["target","Лиды",0,2]].map(([k,l,on,n])=>`<div class="${on?"on":""}">${svg(k)}${n?`<span class="badge">${n}</span>`:""}<span>${l}</span></div>`).join("")}</div>`;
+const st = (cls, ic, word) => `<span class="st ${cls}">${svg(ic,2)}${word}</span>`;
+const row = (ic, nm, ds, val, sub) => `<div class="row"><span class="ic">${svg(ic)}</span><div class="mid"><div class="nm">${nm}</div>${ds?`<div class="ds">${ds}</div>`:""}</div><div class="val">${val}${sub?`<small>${sub}</small>`:""}</div><span class="chev">${svg("chev")}</span></div>`;
+const subrow = (ic, nm, ds, val) => `<div class="row sub"><span class="ic">${svg(ic)}</span><div class="mid"><div class="nm" style="font-size:14px;font-weight:500">${nm}</div><div class="ds">${ds}</div></div><div class="val" style="font-size:14px;font-weight:600">${val}</div><span class="chev">${svg("chev")}</span></div>`;
+const add = (nm) => `<div class="row add"><span class="ic">${svg("plus")}</span><span>${nm}</span></div>`;
+const tabbarK = (on = "Клиенты") => `<div class="tabbar">${[["home","Главная"],["cal","План"],["people","Клиенты"],["cash","Деньги"],["target","Лиды",2]].map(([k,l,n])=>`<div class="${l===on?"on":""}">${svg(k)}${n?`<span class="badge">${n}</span>`:""}<span>${l}</span></div>`).join("")}</div>`;
+const docsHead = (n) => `<div class="gt"><h3>Документы <span class="cnt">${n}</span></h3></div>`;
+
+/* Шапка и «Сейчас» работы JOB-0001 — как в приложении (снимок /job/j1); суммы на обзоре — целыми долларами (#3029) */
+const jobTop = (fig = ["$3,420","Смета","$342","Оплачено","$3,078","Остаток"], main = ["Начать выезд","В пути"]) => `
+  <div class="hdr">${circ("back")}<span class="who">Sarah Mitchell</span><span class="demo">• Демо</span><span class="sp"></span>${circ("plus")}${circ("more")}</div>
+  <div class="title"><h1>Bathroom remodel</h1><span class="rule"></span><span class="rest">vanity, toile…</span></div>
+  <div class="qa">${[["phone","Позвонить"],["sms","SMS"],["route","Маршрут"],["camera","Фото"]].map(([k,l])=>`<div>${circ(k)}${l}</div>`).join("")}</div>
+  <div class="card"><div class="kick"><span>Ближайший выезд</span><span>${svg("minus",2).replace("<svg","<svg width=14 height=14")} Запланирована</span></div>
+    <div class="when">пт, 20 нояб. 8:30 AM · Alex Petrov</div><div class="addr">1420 Oak Grove Ave, Pasadena, CA 91103</div>
+    <div class="tiles"><div class="tile"><b>${fig[0]}</b><span>${fig[1]}</span></div><div class="tile"><b>${fig[2]}</b><span>${fig[3]}</span></div><div class="tile"><b>${fig[4]}</b><span>${fig[5]}</span></div></div>
+    <div class="btns"><span class="b acc">${main[0]}</span>${main[1]?`<span class="b sec">${main[1]}</span>`:""}</div></div>`;
+const tabsRow = (docs, extra = "") => `<div class="tabs" ${extra}><span class="on">Обзор</span><span>Выезды<i>2</i></span><span>Документы<i>${docs}</i></span><span>Расходы<i>1</i></span><span>Заказы</span></div>`;
+const collapsed = (docs) => `<div class="hdr" style="margin:0 -16px;padding:6px 16px;background:var(--bg);border-bottom:1px solid var(--bd);height:56px">${circ("back")}<b style="font-size:17px">Bathroom remodel</b><span class="sp"></span>${circ("plus")}${circ("more")}</div>${tabsRow(docs,'style="margin-top:0;padding-top:10px;padding-bottom:10px;background:var(--bg)"')}`;
+
+/* демо-данные как есть: смета подписана, депозит INV-0105 оплачен картой */
+const demoDocs = `<div class="lg">
+      ${row("doc","Смета","12 нояб.","$3,420", st("ok","ok","Подписана"))}
+      ${row("inv","Депозит INV-0105","срок 12 нояб.","$342", st("ok","ok","Оплачен"))}
+      ${subrow("usd","Оплата · Карта","RCT-0102 · 12 нояб.","$342")}
+      ${add("Взять оплату")}
+    </div>`;
+
+const S = {
+  hub: { cap: "Работа — Обзор", html: `<div class="scroll">${jobTop()}${tabsRow(3)}${docsHead(3)}${demoDocs}</div>${tabbar}` },
+  hub2: { cap: "Работа — Обзор ниже", html: `<div class="scroll" style="padding-top:0">${collapsed(3)}${docsHead(3)}${demoDocs}
+    <div class="h2">Команда</div>
+    <div class="card" style="padding:12px 16px"><div style="font-weight:600">Alex Petrov</div><div style="display:flex;justify-content:space-between;margin-top:10px;border-top:1px solid var(--bd);padding-top:10px"><span>Прибыль сейчас</span><b>$2,536 · 74.2%</b></div></div>
+    </div>${tabbar}` },
+
+  /* смета и счёт — меняется только строка-путь под названием */
+  estimate: { cap: "Смета", html: `<div class="scroll">
+    <div class="hdr">${circ("back")}<span class="who">Sarah Mitchell</span><span class="demo">• Демо</span></div>
+    <div class="title"><h1 style="font-size:24px">Bathroom remodel</h1><span class="circ" style="width:30px;height:30px">${svg("chev").replace('d="M9 5l7 7-7 7"','d="M6 9l6 6 6-6"')}</span><span class="rule"></span><span class="side" style="font-size:14px"><b style="font-weight:600">$3,420.00</b><span style="color:var(--mut);display:inline-flex;gap:5px;align-items:center">${svg("ok",2).replace("<svg","<svg width=15 height=15")} Одобрена</span></span></div>
+    <div class="link">Работа JOB-0001 <span style="width:14px;display:inline-flex">${svg("chev",2.2)}</span></div>
+    <div class="h2" style="margin-top:6px">Позиции</div>
+    <div class="card" style="color:var(--mut)">Позиции не сохранены в этой смете</div>
+    <div class="h2">Выписка по договору</div>
+    <div class="card stmt"><div class="l"><span>Договор</span><span>$3,420.00</span></div><div class="l"><span>Выставлено</span><span>$342.00</span></div><div class="l"><span>Оплачено</span><span>$342.00</span></div>
+      <div class="big"><span>Осталось получить</span><b>$3,078.00</b></div><div style="font-size:13px;color:var(--mut)">Ещё не выставлено: $3,078.00</div></div>
+    <div class="grp" style="margin-top:8px">${row("inv","Депозит","INV-0105 · Срок чт, 12 нояб.","$342.00", st("ok","ok","Оплачено"))}</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px"><span class="b acc" style="flex:none">Выставить остаток $3,078.00</span><span class="b sec" style="flex:none">＋ Счёт на этап</span></div>
+    </div>` },
+  invoice: { cap: "Счёт INV-0105", html: `<div class="scroll">
+    <div class="hdr">${circ("back")}<span class="who">Смета</span><span class="demo">• Демо</span><span class="sp"></span>${circ("more")}</div>
+    <div class="title"><h1>Sarah Mitchell</h1><span class="circ" style="width:30px;height:30px">${svg("chev").replace('d="M9 5l7 7-7 7"','d="M6 9l6 6 6-6"')}</span><span class="rule"></span><span style="color:var(--mut);display:inline-flex;gap:5px;align-items:center">${svg("ok",2).replace("<svg","<svg width=15 height=15")} Оплачено</span></div>
+    <div class="link">Работа JOB-0001 <span style="width:14px;display:inline-flex">${svg("chev",2.2)}</span></div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin-bottom:16px;font-size:13px;color:var(--mut)">${circ("inv")}PDF</div>
+    <div class="card"><div style="color:var(--mut);font-size:14px">Оплачено полностью</div><div style="font-size:34px;font-weight:700;margin:4px 0">$342.00</div><div style="color:var(--mut)">Депозит</div></div>
+    <div class="h2">Оплаты · 1</div>
+    <div class="grp">${row("usd","Карта","RCT-0102 · чт, 12 нояб.","$342.00")}</div>
+    </div>` },
+
+  /* сценарий основателя на той же работе */
+  s1: { cap: "1. Счёт выставлен, пришли 2 предоплаты", html: `<div class="scroll">${jobTop(["$3,420","Смета","$1,200","Оплачено","$2,220","Остаток"])}${tabsRow(4)}${docsHead(4)}
+    <div class="lg">
+      ${row("doc","Смета","12 нояб.","$3,420", st("ok","ok","Подписана"))}
+      ${row("inv","Предоплата INV-0105","срок 19 нояб.","$2,000", st("warn","half","Ждёт $800"))}
+      ${subrow("usd","Оплата · Наличные","RCT-0102 · 13 нояб.","$500")}
+      ${subrow("usd","Оплата · Zelle","RCT-0103 · 16 нояб.","$700")}
+      ${add("Взять оплату")}
+    </div></div>${tabbar}` },
+
+  s2: { cap: "2. «Скинь ещё одну предоплату»", html: `<div class="scroll">${jobTop(["$3,420","Смета","$1,200","Оплачено","$2,220","Остаток"])}</div>${tabbar}
+    <div class="sheet"><div class="in"><span class="grab"></span>
+      <h2>Взять оплату</h2><p>Работа JOB-0001 · Sarah Mitchell</p>
+      <div class="opt sel"><span class="rad"></span><div class="mid"><div class="nm">Остаток по INV-0105</div><div class="ds">из $2,000.00 оплачено $1,200.00</div></div><b>$800.00</b></div>
+      <div class="opt"><span class="rad"></span><div class="mid"><div class="nm">Новая сумма</div><div class="ds">новый счёт: предоплата, этап или весь остаток</div></div></div>
+      <div class="seg"><span class="on">Отправить ссылку</span><span>Записать оплату</span></div>
+      <p>SMS и письмо Sarah Mitchell на её языке (English): карта или ACH, квитанция придёт сама.</p>
+      <span class="b acc" style="flex:none;height:44px">${svg("send")} Отправить ссылку на $800.00</span>
+    </div></div>` },
+
+  s2b: { cap: "2б. Новая сумма", html: `<div class="scroll">${jobTop(["$3,420","Смета","$2,000","Оплачено","$1,420","Остаток"])}</div>${tabbar}
+    <div class="sheet"><div class="in"><span class="grab"></span>
+      <h2>Взять оплату</h2><p>Работа JOB-0001 · Sarah Mitchell</p>
+      <div class="opt sel"><span class="rad"></span><div class="mid"><div class="nm">Новая сумма</div><div class="ds">новый счёт · ещё не выставлено $1,420.00</div></div></div>
+      <div class="seg" style="width:120px;align-self:flex-end"><span>%</span><span class="on">$</span></div>
+      <div class="fld">$1,000.00<span>не больше $1,420.00</span></div>
+      <div class="seg"><span class="on">Отправить ссылку</span><span>Записать оплату</span></div>
+      <span class="b acc" style="flex:none;height:44px">${svg("send")} Выставить и отправить $1,000.00</span>
+    </div></div>` },
+
+  s3: { cap: "3. Доп. работы и итог", html: `<div class="scroll" style="padding-top:0">${collapsed(8)}
+    <div class="tiles" style="margin-top:4px"><div class="tile"><b>$3,900</b><span>Договор</span></div><div class="tile"><b>$3,000</b><span>Оплачено</span></div><div class="tile"><b>$900</b><span>Остаток</span></div></div>
+    ${docsHead(8)}
+    <div class="lg">
+      ${row("doc","Смета","12 нояб.","$3,420", st("ok","ok","Подписана"))}
+      ${subrow("co","Доп. работы CO-0001","Подписано 20 нояб. · Replace subfloor","+$480")}
+      ${row("inv","Предоплата INV-0105","срок 19 нояб.","$2,000", st("ok","ok","Оплачен"))}
+      ${subrow("usd","Оплата · Наличные","RCT-0102 · 13 нояб.","$500")}
+      ${subrow("usd","Оплата · Zelle","RCT-0103 · 16 нояб.","$700")}
+      ${subrow("usd","Оплата · Карта по ссылке","RCT-0104 · 18 нояб.","$800")}
+      ${row("inv","Предоплата INV-0106","срок 25 нояб.","$1,000", st("ok","ok","Оплачен"))}
+      ${subrow("usd","Оплата · Карта по ссылке","RCT-0105 · 21 нояб.","$1,000")}
+      ${add("Взять оплату")}
+    </div></div>${tabbar}` },
+  /* ===== Вариант A: вкладка «Документы» в работе; «Обзор» — общее, без денег ===== */
+  A1: { cap: "A. Работа — «Обзор» общий, без денег", html: `<div class="scroll">
+  <div class="hdr">${circ("back")}<span class="who">Sarah Mitchell</span><span class="demo">• Демо</span><span class="sp"></span>${circ("plus")}${circ("more")}</div>
+  <div class="title"><h1>Bathroom remodel</h1><span class="rule"></span><span class="rest">vanity, toile…</span></div>
+  <div class="qa">${[["phone","Позвонить"],["sms","SMS"],["route","Маршрут"],["camera","Фото"]].map(([k,l])=>`<div>${circ(k)}${l}</div>`).join("")}</div>
+  <div class="card"><div class="kick"><span>Ближайший выезд</span><span>${svg("minus",2).replace("<svg","<svg width=14 height=14")} Запланирована</span></div>
+    <div class="when">пт, 20 нояб. 8:30 AM · Alex Petrov</div><div class="addr" style="margin-bottom:12px">1420 Oak Grove Ave, Pasadena, CA 91103</div>
+    <div class="btns"><span class="b acc">Начать выезд</span><span class="b sec">В пути</span></div></div>
+  <div class="tabs"><span class="on">Обзор</span><span>Выезды<i>2</i></span><span>Документы<i>3</i></span><span>Расходы<i>1</i></span><span>Заказы</span></div>
+  <div class="card" style="padding:12px 16px"><div style="font-weight:600">Команда</div><div style="color:var(--mut)">Alex Petrov</div></div>
+  <div class="lg" style="margin-top:10px">${row("doc","Тип работы","Установка","")}${row("doc","Метки","Без меток","")}</div>
+  </div>${tabbar}` },
+  A2: { cap: "A. Работа — вкладка «Документы»: деньги и дерево", html: `<div class="scroll" style="padding-top:0">${collapsed(3).replace('<span class="on">Обзор</span>','<span>Обзор</span>').replace("<span>Документы<i>3</i></span>","<span class=on>Документы<i>3</i></span>")}
+    <div class="tiles" style="margin-top:4px"><div class="tile"><b>$3,420</b><span>Договор</span></div><div class="tile"><b>$342</b><span>Оплачено</span></div><div class="tile"><b>$3,078</b><span>Остаток</span></div></div>
+    ${docsHead(3)}${demoDocs}
+    <div class="lg" style="margin-top:10px">${row("doc","Выписка по договору","выставлено $342 · не выставлено $3,078","")}</div>
+    </div>${tabbar}` },
+
+  /* ===== Вариант B: вход из нижней «Деньги» → «Работы»; строка открывает вкладку «Документы» работы (A2) ===== */
+  B1: { cap: "B. «Деньги» → «Работы»: строка открывает «Документы» работы", html: `<div class="scroll">
+    <div class="hdr"><span class="av">AP</span><span class="sp"></span>${circ("plus")}</div>
+    <div class="bigt">Деньги</div>
+    <div class="seg4"><span class="on">Работы</span><span>Сметы</span><span>Счета</span><span>Оплаты</span></div>
+    <div class="gt"><h3>Ждут денег <span class="cnt">3</span></h3></div>
+    <div class="lg">
+      ${row("doc","Kitchen faucet","David Kim · срок прошёл 11 нояб.","$1,840", st("bad","x","Просрочен 9 дн"))}
+      ${row("doc","Interior painting","Robert Chen · срок 23 нояб.","$960", st("warn","half","Ждёт оплаты"))}
+      ${row("doc","Bathroom remodel","Sarah Mitchell · счёта нет","$3,078", st("info","minus","Не выставлено"))}
+    </div>
+    <div class="gt" style="margin-top:14px"><h3>Оплачено полностью <span class="cnt">2</span></h3></div>
+    <div class="lg">${row("doc","Deep clean","Maria Gonzalez","$780", st("ok","ok","Оплачено"))}${row("doc","TV mount + shelves","Sarah Mitchell","$240", st("ok","ok","Оплачено"))}</div>
+    </div>${tabbar.replace('<div class="on">','<div>').replace('<div class="">'+svg("cash"),'<div class="on">'+svg("cash"))}` },
+
+  /* ===== Вариант C: вход от клиента — «Деньги» клиента по работам; «›» у работы открывает её «Документы» ===== */
+  C1: { cap: "C. Клиент — «Счета» по работам", html: `<div class="scroll" style="padding-top:0">
+    <div class="hdr" style="margin:0 -16px;padding:6px 16px;background:var(--bg);border-bottom:1px solid var(--bd);height:56px">${circ("back")}<b style="font-size:17px">Sarah Mitchell</b><span class="sp"></span>${circ("plus")}${circ("more")}</div>
+    <div class="tabs" style="margin-top:0;padding-top:10px;padding-bottom:10px;background:var(--bg)"><span>Работы<i>2</i></span><span>Сметы<i>1</i></span><span class="on">Счета<i>2</i></span><span>Выезды<i>2</i></span><span>Объекты</span></div>
+    <div class="tiles" style="margin-top:4px"><div class="tile"><b>$0</b><span>Долг</span></div><div class="tile"><b>$3,078</b><span>Ещё выставить</span></div><div class="tile"><b>$582</b><span>Оплачено</span></div></div>
+    <div class="jh"><b>Bathroom remodel</b><span>JOB-0001 ›</span></div>
+    ${demoDocs}
+    <div class="jh"><b>TV mount + shelves</b><span>JOB-0008 ›</span></div>
+    <div class="lg">${row("inv","Счёт INV-0103","срок 18 нояб.","$240", st("ok","ok","Оплачен"))}${subrow("usd","Оплата · Zelle","RCT-0103 · 20 нояб.","$240")}</div>
+    </div>${tabbar}` },
+
+  /* ===== #3129: что видит клиент — (а) новый счёт на каждую предоплату, (б) один общий ===== */
+  P1: { cap: "#3129 (а): клиент получает счёт «Deposit 2»", html: `<div class="doc">
+    <div class="co">Demo Contractor · (626) 555-0100</div>
+    <span class="tag">Deposit 2</span><h3>Invoice INV-0106</h3><div class="co">Bathroom remodel · 1420 Oak Grove Ave · Sarah Mitchell</div>
+    <div class="box"><div class="l"><span>This invoice</span><b>$1,000.00</b></div><div class="l"><span>Due</span><span>Nov 25, 2026</span></div></div>
+    <div class="box"><div style="font-weight:700;margin-bottom:4px">Your contract</div><div class="l"><span>Contract total</span><span>$3,420.00</span></div><div class="l"><span>Paid so far (3 payments)</span><span>$2,000.00</span></div><div class="l"><span>This invoice</span><span>$1,000.00</span></div><div class="due"><span>Left after this</span><span>$420.00</span></div></div>
+    <div class="pay">Pay $1,000.00</div><div class="sm">Card or bank (ACH). A receipt comes by email right after you pay.</div></div>` },
+  P2: { cap: "#3129 (б): клиент получает старый счёт с новой суммой", html: `<div class="doc">
+    <div class="co">Demo Contractor · (626) 555-0100</div>
+    <h3>Invoice INV-0105</h3><div class="co">Bathroom remodel · 1420 Oak Grove Ave · Sarah Mitchell</div>
+    <div class="box"><div class="l"><span>Contract total</span><span>$3,420.00</span></div><div class="l"><span>Paid (3 payments)</span><span>$2,000.00</span></div><div class="due"><span>Balance</span><span>$1,420.00</span></div></div>
+    <div class="box"><div class="l"><span>Requested now</span><b>$1,000.00</b></div><div class="l"><span>Due</span><span>Nov 25, 2026</span></div></div>
+    <div class="pay">Pay $1,000.00</div><div class="sm">Card or bank (ACH). A receipt comes by email right after you pay.</div></div>` },
+  P3: { cap: "#3129 (а): у вас — у каждой предоплаты свой счёт", html: `<div class="scroll" style="padding-top:0">${collapsed(7).replace("<span>Документы<i>7</i></span>","<span class=on>Документы<i>7</i></span>").replace('<span class="on">Обзор</span>','<span>Обзор</span>')}${docsHead(7)}
+    <div class="lg">
+      ${row("doc","Смета","12 нояб.","$3,420", st("ok","ok","Подписана"))}
+      ${row("inv","Предоплата 1","INV-0105 · срок 19 нояб.","$2,000", st("ok","ok","Оплачен"))}
+      ${subrow("usd","Оплата · Наличные","RCT-0102 · 13 нояб.","$500")}
+      ${subrow("usd","Оплата · Zelle","RCT-0103 · 16 нояб.","$700")}
+      ${subrow("usd","Оплата · Карта","RCT-0104 · 18 нояб.","$800")}
+      ${row("inv","Предоплата 2","INV-0106 · срок 25 нояб.","$1,000", st("warn","half","Ждёт оплаты"))}
+      ${add("Взять оплату")}
+    </div></div>${tabbar}` },
+  P4: { cap: "#3129 (б): у вас — один счёт, много оплат", html: `<div class="scroll" style="padding-top:0">${collapsed(5).replace("<span>Документы<i>5</i></span>","<span class=on>Документы<i>5</i></span>").replace('<span class="on">Обзор</span>','<span>Обзор</span>')}${docsHead(5)}
+    <div class="lg">
+      ${row("doc","Смета","12 нояб.","$3,420", st("ok","ok","Подписана"))}
+      ${row("inv","Счёт INV-0105","на весь договор · срок 25 нояб.","$3,420", st("warn","half","Ждёт $1,000"))}
+      ${subrow("usd","Оплата · Наличные","RCT-0102 · 13 нояб.","$500")}
+      ${subrow("usd","Оплата · Zelle","RCT-0103 · 16 нояб.","$700")}
+      ${subrow("usd","Оплата · Карта","RCT-0104 · 18 нояб.","$800")}
+      ${add("Взять оплату")}
+    </div></div>${tabbar}` },
+
+  /* ===== Перестройка: схемы разделов ===== */
+  SCH0: { cap: "Сейчас: схема разделов", html: `<div class="sch"><h2>Сейчас</h2>
+    <div class="blk"><b>Нижняя панель</b><div class="tb"><span>Главная</span><span>План</span><span>Клиенты</span><span>Деньги</span><span>Лиды</span></div></div>
+    <div class="blk"><b>Деньги</b><div class="tb"><span>Сметы</span><span>Счета</span><span>Оплаты</span><span>4 плитки</span></div></div>
+    <div class="blk"><b>Работы</b>в меню «Ещё» и на «Плане»</div>
+    <div class="blk"><b>Карточка работы — 8 вкладок со счётчиками</b><div class="tb"><span>Обзор</span><span>Выезды</span><span>Сметы</span><span>Счета</span><span>Расходы</span><span>Заказы</span><span>Фото</span><span>Заметки</span></div></div>
+    <div class="blk"><b>Карточка клиента — 7 вкладок</b><div class="tb"><span>Обзор</span><span>Работы</span><span>Сметы</span><span>Счета</span><span>Выезды</span><span>Объекты</span><span>Журнал</span></div></div>
+    <div class="blk"><b>Где документы одной сделки</b>смета — в «Сметах», счета — в «Счетах», оплаты — внутри каждого счёта или в «Оплатах». Связь держит память.</div></div>` },
+  SCH1: { cap: "Вариант 1: всё — «Работа» от лида до денег", html: `<div class="sch"><h2>Вариант 1</h2>
+    <div class="blk"><b>Нижняя панель</b><div class="tb"><span>Сегодня</span><span class="n">Работы</span><span class="n">＋</span><span>Клиенты</span><span>Ещё</span></div><div style="margin-top:6px" class="tb"><span class="x">Деньги</span><span class="x">Лиды</span><span class="x">План</span></div></div>
+    <div class="blk"><b>Работа — одна вещь от первого звонка</b>Лид → Смета → Подписано → В работе → Ждём денег → Закрыта. Это этапы одной работы, не разные папки.</div>
+    <div class="blk"><b>Работы</b>один список, фильтр по этапу. Поиск по имени, телефону, номеру EST / INV.</div>
+    <div class="blk"><b>Карточка работы — без вкладок</b>одна лента: что дальше → деньги (лестница оплат) → объём работ и доп. работы → выезды → фото → журнал и PDF.</div>
+    <div class="blk"><b>Клиент</b>контакты, объекты, список его работ. Без вкладок «Сметы» и «Счета».</div>
+    <div class="blk"><b>Суммы по всем работам</b>«Сегодня» — кто должен; «Ещё → Отчёты».</div></div>` },
+  SCH2: { cap: "Вариант 2: «Работа» с подписи, панель почти как сейчас", html: `<div class="sch"><h2>Вариант 2</h2>
+    <div class="blk"><b>Нижняя панель</b><div class="tb"><span>Главная</span><span>План</span><span>Клиенты</span><span>Лиды</span><span class="n">Ещё</span></div><div style="margin-top:6px" class="tb"><span class="x">Деньги</span></div></div>
+    <div class="blk"><b>До подписи — как сейчас</b>лид и смета живут у лида и клиента. Подпись создаёт работу.</div>
+    <div class="blk"><b>После подписи — всё в работе</b>смета, доп. работы, предоплаты, оплаты, финальный счёт — одной лентой в карточке работы.</div>
+    <div class="blk"><b>Карточка работы — без вкладок</b>та же лента, что в варианте 1.</div>
+    <div class="blk"><b>Клиент</b>контакты, объекты, список работ. Без вкладок «Сметы» и «Счета».</div>
+    <div class="blk"><b>Суммы по всем работам</b>блок «Деньги» на Главной: ждём · просрочено → «Ещё → Деньги» (отчёт, не папка).</div></div>` },
+
+  /* ===== Перестройка: экран работы — одна лента, без вкладок ===== */
+  J: { cap: "Работа: одна лента, без вкладок", html: `<div class="scroll">
+    <div class="hdr">${circ("back")}<span class="who">Sarah Mitchell</span><span class="sp"></span>${circ("more")}</div>
+    <div class="title" style="margin:6px 0 4px"><h1 style="font-size:28px">Bathroom remodel</h1></div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">${st("info","half","В работе")}<span style="color:var(--mut);font-size:13px">· 1420 Oak Grove Ave</span></div>
+    <div class="phrase">Предоплата 2 ждёт оплаты до 25 нояб.</div>
+    <span class="b acc" style="width:100%;flex:none">Взять оплату</span>
+    <div class="gt" style="margin-top:16px"><h3>Деньги</h3></div>
+    <div class="card ladder" style="padding:14px 16px"><div style="color:var(--mut);font-size:13px">Осталось получить</div><div class="big">$2,220 <span style="font-size:15px;color:var(--mut);font-weight:500">из $3,420</span></div><div class="bar2"><i style="width:35%"></i></div></div>
+    <div class="lg" style="margin-top:8px">
+      ${row("doc","Смета","подписана 12 нояб.","$3,420", st("ok","ok","Подписана"))}
+      ${row("inv","Предоплата 1","наличные $500 · Zelle $700","$1,200", st("ok","ok","Оплачено"))}
+      ${row("inv","Предоплата 2","ссылка отправлена · до 25 нояб.","$1,000", st("warn","half","Ждём"))}
+      ${row("inv","Остаток","после работы","$1,220", st("neutral","minus","Не выставлен"))}
+      ${add("Ещё предоплата")}
+    </div>
+    <div class="gt" style="margin-top:14px"><h3>Выезды</h3><span style="color:var(--mut);font-size:13px">Все · 2 ›</span></div>
+    <div class="lg">${row("cal","пт, 20 нояб. 8:30 AM","Alex Petrov","", "")}</div>
+    </div>${tabbar}` },
+
+  /* Вариант 1: список «Работы» с этапами и новая панель */
+  V1L: { cap: "Вариант 1: «Работы» — один список, этапы фильтром", html: `<div class="scroll">
+    <div class="hdr"><span class="av">AP</span><span class="sp"></span>${circ("plus")}</div>
+    <div class="bigt" style="margin-bottom:10px">Работы</div>
+    <div class="chips"><span class="on">Все</span><span>Лиды</span><span>Смета</span><span>В работе</span><span>Ждём денег</span><span>Закрыты</span></div>
+    <div class="lg">
+      ${row("doc","Gutter replacement","Tom Baker · новый лид, 2 ч","", st("info","half","Лид"))}
+      ${row("doc","Fence repair + gate","Linda Alvarez · смета отправлена","$2,980", st("warn","half","Смета"))}
+      ${row("doc","Bathroom remodel","Sarah Mitchell · ждём $1,000","$3,420", st("info","half","В работе"))}
+      ${row("doc","Kitchen faucet","David Kim · просрочен 9 дн","$1,840", st("bad","x","Ждём денег"))}
+      ${row("doc","Deep clean","Maria Gonzalez · оплачено","$780", st("ok","ok","Закрыта"))}
+    </div></div>
+    <div class="tabbar">${[["home","Сегодня"],["doc","Работы",1]].map(([k,l,on])=>`<div class="${on?"on":""}">${svg(k)}<span>${l}</span></div>`).join("")}<div><span class="plus">${svg("plus")}</span></div>${[["people","Клиенты"],["more","Ещё"]].map(([k,l])=>`<div>${svg(k)}<span>${l}</span></div>`).join("")}</div>` },
+
+  /* Вариант 2: Главная с блоком денег, нижняя панель без «Деньги» */
+  V2H: { cap: "Вариант 2: «Деньги» — блок на Главной, не вкладка", html: `<div class="scroll">
+    <div class="hdr"><span class="av">AP</span><span class="sp"></span>${circ("plus")}</div>
+    <div class="bigt" style="margin-bottom:10px">Главная</div>
+    <div class="gt"><h3>Деньги</h3><span style="color:var(--mut);font-size:13px">Все ›</span></div>
+    <div class="lg">
+      ${row("inv","Ждём оплаты","3 работы","$3,800", st("warn","half","Ждём"))}
+      ${row("inv","Просрочено","Kitchen faucet · 9 дн","$1,840", st("bad","x","Просрочено"))}
+      ${row("doc","Можно выставить","2 работы закончены","$1,420", st("neutral","minus","Не выставлено"))}
+    </div>
+    <div class="gt" style="margin-top:14px"><h3>Требует внимания</h3></div>
+    <div class="lg">${row("doc","Tom Baker — новый лид","нет ответа 2 ч","", st("bad","x","Ответить"))}${row("doc","Bathroom remodel","выезд сегодня 8:30","", st("info","half","Выезд"))}</div>
+    </div>
+    <div class="tabbar">${[["home","Главная",1],["cal","План"],["people","Клиенты"],["target","Лиды"],["more","Ещё"]].map(([k,l,on])=>`<div class="${on?"on":""}">${svg(k)}<span>${l}</span></div>`).join("")}</div>` },
+
+  /* ===== Клиент — центр: всё по клиенту в одной карточке (после ревью 28.11) ===== */
+  K1: { cap: "Клиент: статус, деньги одной строкой, активная работа раскрыта", html: `<div class="scroll">
+    <div class="hdr">${circ("back")}<span class="who">Клиенты</span><span class="demo">• Демо</span><span class="sp"></span>${circ("plus")}${circ("more")}</div>
+    <div class="title" style="margin:6px 0 2px"><h1>Sarah Mitchell</h1></div>
+    <div style="margin-bottom:10px">${st("ok","ok","Активный")} <span style="color:var(--mut);font-size:13px">· VIP</span></div>
+    <div class="qa" style="margin:0 0 10px">${[["phone","Позвонить"],["sms","SMS"],["route","Маршрут"],["mail","Почта"]].map(([k,l])=>`<div>${circ(k)}${l}</div>`).join("")}</div>
+    <div class="money1"><span>Ждём <b>$1,000</b></span>·<span>оплачено <b>$1,440</b></span>·<span>долга нет</span></div>
+    <div class="jobc">
+      <div class="h"><b>Bathroom remodel</b>${st("info","half","В работе")}</div>
+      <div class="phrase" style="margin:6px 0 10px;font-size:13.5px;color:var(--mut)">Предоплата 2 отправлена, ждём до 25 нояб.</div>
+      <span class="b acc" style="width:100%;flex:none">Взять оплату</span>
+      <div class="lg">
+        ${row("doc","Смета","подписана 12 нояб.","$3,420", st("ok","ok","Подписана"))}
+        ${row("inv","Предоплата 1","наличные $500 · Zelle $700","$1,200", st("ok","ok","Оплачено"))}
+        ${row("inv","Предоплата 2","до 25 нояб.","$1,000", st("warn","half","Ждём"))}
+        ${row("inv","Остаток","после работы","$1,220", st("neutral","minus","Не выставлен"))}
+        ${row("cal","Выезды · 2","ближайший пт, 20 нояб. 8:30","")}
+        ${row("camera","Фото · 6 · Заметки · 1","","")}
+      </div>
+    </div>
+    <div class="gt" style="margin-top:14px"><h3>Другие работы <span class="cnt">1</span></h3></div>
+    <div class="lg">${row("doc","TV mount + shelves","закрыта 20 нояб.","$240", st("ok","ok","Оплачено"))}</div>
+    </div>${tabbarK()}` },
+  K5: { cap: "Тот же клиент глазами мастера: без денег договора", html: `<div class="scroll">
+    <div class="hdr">${circ("back")}<span class="who">Мои выезды</span><span class="demo">• Демо</span></div>
+    <div class="title" style="margin:6px 0 2px"><h1>Sarah Mitchell</h1></div>
+    <div style="margin-bottom:10px;color:var(--mut);font-size:13px">1420 Oak Grove Ave, Pasadena</div>
+    <div class="qa" style="margin:0 0 12px">${[["phone","Позвонить"],["sms","SMS"],["route","Маршрут"]].map(([k,l])=>`<div>${circ(k)}${l}</div>`).join("")}</div>
+    <div class="jobc">
+      <div class="h"><b>Bathroom remodel</b>${st("info","half","В работе")}</div>
+      <div class="phrase" style="margin:6px 0 10px;font-size:13.5px;color:var(--mut)">Выезд пт, 20 нояб. 8:30 · код ворот 4721</div>
+      <span class="b acc" style="width:100%;flex:none">В путь</span>
+      <div class="lg">
+        ${row("doc","Объём работ","vanity, toilet, tile · 12 позиций","")}
+        ${row("cal","Выезды · 2","ближайший пт, 20 нояб. 8:30","")}
+        ${row("camera","Фото · 6","","")}
+        ${row("doc","Заметки · 1","«Собака во дворе»","")}
+      </div>
+    </div></div>${tabbarK("Клиенты")}` },
+  K2: { cap: "«Взять оплату»: по умолчанию — уже отправленная предоплата", html: `<div class="scroll">
+    <div class="hdr">${circ("back")}<span class="who">Клиенты</span><span class="sp"></span>${circ("plus")}${circ("more")}</div>
+    <div class="title" style="margin:8px 0 10px"><h1>Sarah Mitchell</h1></div></div>${tabbarK()}
+    <div class="sheet"><div class="in">
+      <div style="display:flex;justify-content:space-between;align-items:center;height:36px"><span style="color:var(--acc-text);font-weight:600">Отмена</span><b>Взять оплату</b><span style="width:52px"></span></div>
+      <p>Bathroom remodel · Sarah Mitchell</p>
+      <div class="lg">
+        <div class="row"><div class="mid"><div class="nm">Предоплата 2 · INV-0106</div><div class="ds">отправлена 18 нояб. · ждём до 25 нояб.</div></div><div class="val">$1,000.00</div><span style="color:var(--acc-text);width:20px">${svg("ok",2.2).replace('<circle cx="12" cy="12" r="9"/>','')}</span></div>
+        <div class="row"><div class="mid"><div class="nm">Новая предоплата</div><div class="ds">предоплата 3 · ещё не выставлено $1,220.00</div></div></div>
+      </div>
+      <div class="lg">${row("sms","Кому: SMS","(626) 555-0142 · Sarah Mitchell","")}</div>
+      <span class="b acc" style="flex:none;height:44px">${svg("send")} Отправить ссылку на $1,000.00</span>
+      <span style="text-align:center;color:var(--acc-text);font-weight:600;padding:6px">Записать оплату на месте</span>
+    </div></div>` },
+  K3: { cap: "Счёт открывается своим экраном, «‹ Sarah Mitchell» — назад в клиента", html: `<div class="scroll">
+    <div class="hdr">${circ("back")}<span class="who">Sarah Mitchell</span><span class="demo">• Демо</span><span class="sp"></span>${circ("more")}</div>
+    <div class="title" style="margin:6px 0 2px"><h1>Предоплата 2</h1></div>
+    <div style="margin-bottom:6px">${st("warn","half","Ждём")} <span style="color:var(--mut);font-size:13px">· INV-0106 · до 25 нояб.</span></div>
+    <div class="phrase" style="font-size:13.5px;color:var(--mut)">Ссылка отправлена 18 нояб., клиент открывал вчера.</div>
+    <div class="btns"><span class="b acc">Записать оплату</span><span class="b sec" style="color:var(--ink)">Напомнить</span></div>
+    <div class="pdf"><h4>Invoice INV-0106 · Deposit 2</h4><div style="color:#585B63;margin-bottom:8px">Bathroom remodel · Sarah Mitchell</div>
+      <div class="l"><span>This invoice</span><b>$1,000.00</b></div><div class="l"><span>Contract total</span><span>$3,420.00</span></div><div class="l"><span>Paid so far</span><span>$1,200.00</span></div><div class="l"><span>Left after this</span><b>$1,220.00</b></div></div>
+    <div class="gt" style="margin-top:14px"><h3>Связано</h3></div>
+    <div class="lg">${row("doc","Работа Bathroom remodel","смета подписана 12 нояб.","")}</div>
+    </div>${tabbarK()}` },
+  K4: { cap: "Главная: поиск, итог по деньгам, нажатие ведёт в клиента", html: `<div class="scroll">
+    <div class="hdr"><span class="av">AP</span><span class="demo">• Демо</span><span class="sp"></span>${circ("search")}${circ("plus")}</div>
+    <div class="bigt" style="margin-bottom:6px">Главная</div>
+    <div class="money1" style="margin-bottom:10px"><span>Ждём <b>$3,800</b></span>·<span>просрочено <b>$1,840</b></span>·<span>за неделю <b>$1,020</b></span><span style="color:var(--acc-text);font-weight:600">›</span></div>
+    <div class="gt"><h3>Требует внимания</h3></div>
+    <div class="lg">${row("people","Tom Baker","новый лид · нет ответа 2 ч","", st("bad","x","Ответить"))}${row("inv","David Kim","Kitchen faucet · просрочен","$1,840", st("bad","x","Просрочен"))}</div>
+    <div class="gt" style="margin-top:14px"><h3>Ждём денег</h3></div>
+    <div class="lg">${row("inv","Sarah Mitchell","Bathroom remodel · предоплата 2","$1,000", st("warn","half","Ждём"))}${row("inv","Robert Chen","Interior painting · до 30 нояб.","$960", st("warn","half","Ждём"))}</div>
+    </div>${tabbarK("Главная")}` },
+  /* ===== Концепция 1: «Линия работы» (идея основателя) — экран без нижней панели, как поток выезда (DS §8.9) ===== */
+  L1: { cap: "Линия работы: пройденное сжато, текущий шаг крупно, фото и заметка под пальцем", html: `<div class="scroll" style="padding-top:0;inset:0 0 96px 0"><div class="hdr" style="margin:0 -16px;padding:6px 16px;background:var(--bg);border-bottom:1px solid var(--bd);height:56px">${circ("back")}<span><b style="font-size:16px">Bathroom remodel</b><br><span style="color:var(--mut);font-size:12px">Sarah Mitchell · 1420 Oak Grove Ave</span></span><span class="sp"></span>${circ("more")}</div>
+    <div class="mbar" style="margin-top:10px"><div class="t"><span>Оплачено <b>$1,200</b> из $3,420</span><span style="color:var(--mut)">ждём $1,000</span></div><div class="segbar"><i class="p" style="flex:12"></i><i style="flex:10"></i><i style="flex:12.2"></i></div></div>
+    <div class="chips" style="margin-bottom:6px"><span class="on">Всё</span><span>Фото · 6</span><span>Заметки · 2</span><span>Деньги</span></div>
+    <div class="line">
+      <div class="nd done"><span>Смета</span><span style="display:flex;align-items:center"><span class="r"><span class="d">12 нояб. · $3,420</span>${st("ok","ok","Подписана")}</span><span class="chev">${svg("chev")}</span></span></div>
+      <div class="nd done"><span>Инвойс на всю сумму</span><span style="display:flex;align-items:center"><span class="r"><span class="d">INV-0105 · $3,420</span>${st("ok","ok","Выставлен")}</span><span class="chev">${svg("chev")}</span></span></div>
+      <div class="nd done"><span>Предоплата 1 · 2 фото</span><span style="display:flex;align-items:center"><span class="r"><span class="d">13 нояб. · $1,200</span>${st("ok","ok","Оплачено")}</span><span class="chev">${svg("chev")}</span></span></div>
+      <div class="cur"><div style="display:flex;justify-content:space-between"><b style="font-size:16px">Предоплата 2</b>${st("warn","half","Ждём")}</div>
+        <div style="font-size:26px;font-weight:700;margin:4px 0">$1,000</div>
+        <div style="color:var(--mut);font-size:13px">ссылка отправлена 18 нояб. · до 25 нояб.</div>
+        <div style="margin-top:8px;font-size:13px;display:flex;gap:6px;align-items:center"><span style="width:16px;display:inline-flex;color:var(--mut)">${svg("pen")}</span>«Клиент просил чек на e-mail»</div></div>
+      <div class="nd fut"><span>Выезд · начало работ</span><span class="d">пт, 20 нояб.</span></div>
+      <div class="nd fut"><span>Финал · остаток</span><span class="d">$1,220</span></div>
+      <div class="nd" style="font-weight:600"><span>＋ Шаг: выезд, доп. работа, предоплата</span></div>
+    </div></div>
+    <div class="pinbar"><span class="circ" aria-label="Фото">${svg("camera")}</span><span class="circ" aria-label="Заметка голосом">${svg("mic")}</span><span class="b acc" style="flex:1;height:44px">Взять предоплату 2 · $1,000</span></div>` },
+  L2: { cap: "Та же линия, фильтр «Фото»: снимки по шагам — вместо вкладки", html: `<div class="scroll" style="padding-top:0;inset:0 0 96px 0"><div class="hdr" style="margin:0 -16px;padding:6px 16px;background:var(--bg);border-bottom:1px solid var(--bd);height:56px">${circ("back")}<span><b style="font-size:16px">Bathroom remodel</b><br><span style="color:var(--mut);font-size:12px">Sarah Mitchell · 1420 Oak Grove Ave</span></span><span class="sp"></span>${circ("more")}</div>
+    <div class="mbar" style="margin-top:10px"><div class="t"><span>Оплачено <b>$1,200</b> из $3,420</span><span style="color:var(--mut)">ждём $1,000</span></div><div class="segbar"><i class="p" style="flex:12"></i><i style="flex:10"></i><i style="flex:12.2"></i></div></div>
+    <div class="chips" style="margin-bottom:6px"><span>Всё</span><span class="on">Фото · 6</span><span>Заметки · 2</span><span>Деньги</span></div>
+    <div class="line">
+      <div class="nd done"><span>Замер · 10 нояб.</span><span class="d">4 фото</span></div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin:4px 0 8px"><i style="height:70px;border-radius:10px;background:linear-gradient(135deg,#8a7a5c,#4c5560)"></i><i style="height:70px;border-radius:10px;background:linear-gradient(135deg,#6b7a8c,#3c4550)"></i><i style="height:70px;border-radius:10px;background:linear-gradient(135deg,#8c6b5c,#50403c)"></i><i style="height:70px;border-radius:10px;background:linear-gradient(135deg,#7a8c6b,#40503c)"></i></div>
+      <div class="nd done"><span>Предоплата 1 · 13 нояб.</span><span class="d">2 фото</span></div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin:4px 0 8px"><i style="height:70px;border-radius:10px;background:linear-gradient(135deg,#8a7a5c,#4c5560)"></i><i style="height:70px;border-radius:10px;background:linear-gradient(135deg,#6b7a8c,#3c4550)"></i></div>
+      <div class="nd fut"><span>Выезд · пт, 20 нояб.</span></div>
+      <div style="color:var(--mut);font-size:12.5px;margin:-4px 0 0">снимки «до» и «после» лягут сюда</div>
+    </div></div>
+    <div class="pinbar"><span class="circ" aria-label="Фото">${svg("camera")}</span><span class="circ" aria-label="Заметка голосом">${svg("mic")}</span><span class="b acc" style="flex:1;height:44px">Взять предоплату 2 · $1,000</span></div>` },
+
+  /* ===== Концепция 2: вкладки остаются, «Обзор» — прогресс ===== */
+  T1: { cap: "Вкладки остаются (4, без счётчиков); «Обзор» — прогресс и следующий шаг", html: `<div class="scroll">
+    <div class="hdr">${circ("back")}<span class="who">Sarah Mitchell</span><span class="sp"></span>${circ("plus")}${circ("more")}</div>
+    <div class="title" style="margin:6px 0 10px"><h1>Bathroom remodel</h1></div>
+    <div class="tabs" style="margin-top:0"><span class="on">Обзор</span><span>Документы</span><span>Фото</span><span>Заметки</span></div>
+    <div class="card"><div style="font-size:13px;color:var(--mut)">Шаг 4 из 6 · смета, подпись и инвойс пройдены</div>
+      <div class="segbar" style="margin:6px 0 12px"><i class="p" style="flex:1"></i><i class="p" style="flex:1"></i><i class="p" style="flex:1"></i><i style="flex:1;background:var(--ink)"></i><i style="flex:1"></i><i style="flex:1"></i></div>
+      <b style="font-size:16px">Предоплата 2 · $1,000</b><div style="color:var(--mut);font-size:13px;margin:2px 0 10px">ссылка отправлена 18 нояб. · до 25 нояб.</div>
+      <span class="b acc" style="width:100%;flex:none">Взять оплату</span></div>
+    <div class="mbar" style="margin-top:10px"><div class="t"><span>Оплачено <b>$1,200</b> из $3,420</span><span style="color:var(--mut)">остаток $2,220</span></div></div>
+    <div class="lg">${row("cal","Ближайший выезд","пт, 20 нояб. 8:30 · Alex Petrov","")}${row("camera","Последние фото · 6","10 нояб.","")}</div>
+    </div>${tabbarK()}` },
+
+  /* ===== Концепция 3: «Объект в кармане» — плашка на экране блокировки ===== */
+  P0: { cap: "Объект в кармане: работа на экране блокировки во время выезда", html: `<div class="lock"><div style="text-align:center;font-size:15px;opacity:.8">пятница, 20 ноября</div><div class="tm">9:41</div>
+    <div class="la"><div style="display:flex;justify-content:space-between;font-size:13px;opacity:.85"><span>GoRix · на объекте</span><span>с 8:34</span></div>
+      <div style="font-weight:700;font-size:17px;margin-top:4px">Sarah Mitchell · Bathroom remodel</div>
+      <div class="segbar" style="margin:8px 0 4px"><i class="p" style="flex:12;background:#fff"></i><i style="flex:10;background:rgba(255,255,255,.25)"></i><i style="flex:12.2;background:rgba(255,255,255,.25)"></i></div>
+      <div style="font-size:13px;opacity:.85">оплачено $1,200 из $3,420 · ждём предоплату 2</div>
+      <div class="btn3"><span>${svg("camera").replace("<svg","<svg width=18 height=18")}&nbsp;Фото</span><span>${svg("mic").replace("<svg","<svg width=18 height=18")}&nbsp;Заметка</span><span>${svg("usd").replace("<svg","<svg width=18 height=18")}&nbsp;Оплата</span></div><div style="font-size:12px;opacity:.75;margin-top:8px">Оплата — только после Face ID</div></div></div>` },
+
+  /* ===== #3129: один договорной инвойс на всю сумму — что видит клиент ===== */
+  INV1: { cap: "Клиент: один инвойс на всю сумму, предоплаты внутри", html: `<div class="doc">
+    <div class="co">Demo Contractor · (626) 555-0100</div>
+    <h3>Invoice INV-0105</h3><div class="co">Bathroom remodel · 1420 Oak Grove Ave · Sarah Mitchell</div>
+    <div class="box"><div class="l"><span>Contract total</span><span>$3,420.00</span></div>
+      <div class="l"><span>Deposit 1 · paid Nov 13</span><span>$1,200.00 ✓</span></div>
+      <div class="l"><span><b>Deposit 2 · due Nov 25</b></span><b>$1,000.00</b></div>
+      <div class="l"><span>Final · after completion</span><span>$1,220.00</span></div>
+      <div class="due"><span>Balance</span><span>$2,220.00</span></div></div>
+    <div class="pay">Pay Deposit 2 · $1,000.00</div><div class="sm">A receipt for every payment comes by email right away.</div></div>` },
+
+  /* ===== Клиент с 4 работами: строки, у каждой текущий шаг и деньги; нажатие — линия работы ===== */
+  M1: { cap: "Клиент с 4 работами: активные сверху, у каждой текущий шаг и деньги", html: `<div class="scroll">
+    <div class="hdr">${circ("back")}<span class="who">Клиенты</span><span class="demo">• Демо</span><span class="sp"></span>${circ("plus")}${circ("more")}</div>
+    <div class="title" style="margin:6px 0 2px"><h1>Sarah Mitchell</h1></div>
+    <div style="margin-bottom:10px">${st("ok","ok","Активный")} <span style="color:var(--mut);font-size:13px">· 1420 Oak Grove Ave</span></div>
+    <div class="qa" style="margin:0 0 10px">${[["phone","Позвонить"],["sms","SMS"],["route","Маршрут"],["mail","Почта"]].map(([k,l])=>`<div>${circ(k)}${l}</div>`).join("")}</div>
+    <div class="money1"><span>Ждём <b>$1,000</b></span>·<span>оплачено <b>$2,540</b></span>·<span>долга нет</span></div>
+    <div class="gt"><h3>Идут <span class="cnt">2</span></h3></div>
+    <div class="lg"><div class="jr"><div class="mid"><div class="nm">Bathroom remodel</div><div class="ds">Предоплата 2 · ждём до 25 нояб.</div><div class="mini"><i class="p"></i><i class="p"></i><i class="p"></i><i class="c"></i><i class=""></i><i class=""></i></div></div><div class="val" style="text-align:right;font-weight:700">$1,000<small style="display:block;font-weight:600">${st("warn","half","Ждём")}</small></div><span class="chev" style="width:14px;color:var(--mut)">${svg("chev")}</span></div><div class="jr"><div class="mid"><div class="nm">Gutter replacement</div><div class="ds">Смета отправлена 2 дн назад</div><div class="mini"><i class="c"></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i></div></div><div class="val" style="text-align:right;font-weight:700">$2,980<small style="display:block;font-weight:600">${st("info","half","Ждёт подписи")}</small></div><span class="chev" style="width:14px;color:var(--mut)">${svg("chev")}</span></div></div>
+    <div class="gt" style="margin-top:14px"><h3>Закрытые <span class="cnt">2</span></h3></div>
+    <div class="lg"><div class="jr"><div class="mid"><div class="nm">TV mount + shelves</div><div class="ds">20 нояб.</div></div><div class="val" style="text-align:right;font-weight:700">$240<small style="display:block;font-weight:600">${st("ok","ok","Оплачено")}</small></div><span class="chev" style="width:14px;color:var(--mut)">${svg("chev")}</span></div><div class="jr"><div class="mid"><div class="nm">Fence repair</div><div class="ds">3 окт.</div></div><div class="val" style="text-align:right;font-weight:700">$1,100<small style="display:block;font-weight:600">${st("ok","ok","Оплачено")}</small></div><span class="chev" style="width:14px;color:var(--mut)">${svg("chev")}</span></div></div>
+    </div>${tabbarK()}` },
+
+  /* Линия работы без фильтра: одна лента; фото — строкой «Все фото» */
+  L3: { cap: "Линия работы: один счёт на всю сумму, платежи по графику, у каждого — квитанция", html: `<div class="scroll" style="padding-top:0;inset:0 0 72px 0">
+    <div class="hdr" style="margin:0 -16px;padding:6px 16px;background:var(--bg);border-bottom:1px solid var(--bd);height:56px">${circ("back")}<span><b style="font-size:16px">Bathroom remodel</b><br><span style="color:var(--mut);font-size:12px">Sarah Mitchell · 1420 Oak Grove Ave</span></span><span class="sp"></span>${circ("more")}</div>
+    <div class="mbar" style="margin-top:10px"><div class="t"><span>Оплачено <b>$1,200</b> из $3,420</span><span style="color:var(--mut)">ждём $1,000</span></div><div class="segbar"><i class="p" style="flex:12"></i><i style="flex:10"></i><i style="flex:12.2"></i></div></div>
+    <div class="cur" style="margin:10px 0"><div style="display:flex;justify-content:space-between"><b style="font-size:16px">Платёж 2 по графику</b>${st("warn","half","Ждём")}</div>
+      <div style="font-size:26px;font-weight:700;margin:4px 0">$1,000</div>
+      <div style="color:var(--mut);font-size:13px">по счёту INV-0105 · ссылка отправлена 18 нояб. · до 25 нояб.</div>
+      <div style="display:flex;gap:8px;margin-top:10px;align-items:center"><span class="circ" aria-label="Фото">${svg("camera")}</span><span class="circ" aria-label="Заметка голосом">${svg("mic")}</span><span class="b acc" style="flex:1;height:44px">Взять оплату · $1,000</span></div></div>
+    <div class="lg" style="margin-bottom:6px"><div class="row" style="min-height:48px"><span class="ic">${svg("camera")}</span><div class="mid"><div class="nm">Все фото · 6</div></div><div class="thumbs"><i></i><i></i><i></i></div><span class="chev">${svg("chev")}</span></div></div>
+    <div class="line">
+      <div class="nd done"><span>Смета</span><span style="display:flex;align-items:center"><span class="r"><span class="d">12 нояб. · $3,420</span>${st("ok","ok","Подписана")}</span><span class="chev">${svg("chev")}</span></span></div>
+      <div class="nd done"><span>Счёт на всю сумму · график из 3 платежей</span><span style="display:flex;align-items:center"><span class="r"><span class="d">INV-0105 · $3,420</span>${st("info","half","Оплачен частично")}</span><span class="chev">${svg("chev")}</span></span></div>
+      <div class="nd done"><span>Платёж 1 · квитанция RCT-0101</span><span style="display:flex;align-items:center"><span class="r"><span class="d">13 нояб. · $1,200</span>${st("ok","ok","Оплачено")}</span><span class="chev">${svg("chev")}</span></span></div>
+      <div class="nd fut"><span>Платёж 2 · по графику</span><span class="d">до 25 нояб. · $1,000</span></div>
+      <div class="nd fut"><span>Выезд · начало работ</span><span class="d">пт, 20 нояб.</span></div>
+      <div class="nd fut"><span>Платёж 3 · остаток</span><span class="d">после работ · $1,220</span></div>
+      <div class="nd" style="font-weight:600"><span>＋ Шаг: выезд, доп. работа, расход</span></div>
+    </div></div>${tabbarK()}` },
+  /* (б) #3129: «Взять оплату» — платёж по графику одного счёта */
+  K6: { cap: "«Взять оплату» по одному счёту: по умолчанию — платёж по графику; клиент видит всё движение денег", html: `<div class="scroll">
+    <div class="hdr">${circ("back")}<span class="who">Bathroom remodel</span><span class="sp"></span>${circ("more")}</div></div>${tabbarK()}
+    <div class="sheet"><div class="in">
+      <div style="display:flex;justify-content:space-between;align-items:center;height:36px"><span style="color:var(--acc-text);font-weight:600">Отмена</span><b>Взять оплату</b><span style="width:52px"></span></div>
+      <p>Счёт INV-0105 · $3,420.00 · оплачено $1,200.00</p>
+      <div class="lg">
+        <div class="row"><div class="mid"><div class="nm">Платёж 2 по графику</div><div class="ds">до 25 нояб.</div></div><div class="val">$1,000.00</div><span style="color:var(--acc-text);width:20px">${svg("ok",2.2).replace('<circle cx="12" cy="12" r="9"/>','')}</span></div>
+        <div class="row"><div class="mid"><div class="nm">Весь остаток</div><div class="ds">платежи 2 и 3</div></div><div class="val">$2,220.00</div></div>
+        <div class="row"><div class="mid"><div class="nm">Другая сумма</div><div class="ds">график пересчитается сам</div></div></div>
+      </div>
+      <div class="lg">${row("usd","Записать оплату на месте","карта, наличные, чек","")}${row("sms","Отправить ссылку","SMS (626) 555-0142","")}</div>
+      <div style="color:var(--mut);font-size:12.5px;text-align:center">На каждую оплату — квитанция. Клиент по ссылке видит счёт, график, что оплачено и что осталось.</div>
+    </div></div>` },
+
+  /* Концепция 3 по правилам Apple: плашка живёт только на время выезда; без денег; одна кнопка — следующий шаг выезда */
+  P3: { cap: "Выезд: остров и экран блокировки — без денег, одна кнопка «Закончил»", html: `<div class="lock" style="padding:12px 12px">
+    <div class="cap2">Dynamic Island · компактно</div>
+    <div class="di"><span style="display:flex;gap:6px;align-items:center">${svg("route").replace("<svg","<svg width=14 height=14")} На объекте</span><span style="font-variant-numeric:tabular-nums">0:42</span></div>
+    <div class="cap2">Dynamic Island · раскрыт (долгое нажатие)</div>
+    <div class="die"><div style="display:flex;justify-content:space-between;font-size:13px;opacity:.85"><span>Выезд · Bathroom remodel</span><span>0:42</span></div>
+      <div style="font-weight:700;font-size:17px;margin:4px 0 2px">На объекте с 8:34</div>
+      <div style="font-size:12.5px;opacity:.8">Еду ✓ · На объекте ● · Закончил ○</div>
+      <div style="display:flex;gap:8px;margin-top:10px"><span style="flex:1;background:rgba(255,255,255,.16);border-radius:999px;height:40px;display:flex;align-items:center;justify-content:center;font-weight:700">Закончил выезд</span></div></div>
+    <div class="cap2">Экран блокировки</div>
+    <div class="la" style="margin-top:0"><div style="display:flex;justify-content:space-between;font-size:12.5px;opacity:.85"><span>GoRix · выезд</span><span>с 8:34 · 0:42</span></div>
+      <div style="font-weight:700;font-size:16px;margin-top:4px">Bathroom remodel · Oak Grove Ave</div>
+      <div style="font-size:12.5px;opacity:.8;margin-top:2px">Еду ✓ · На объекте ● · Закончил ○</div>
+      <div style="display:flex;gap:8px;margin-top:10px"><span style="flex:1;background:rgba(255,255,255,.16);border-radius:999px;height:40px;display:flex;align-items:center;justify-content:center;font-weight:700">Закончил выезд</span></div>
+      <div style="font-size:12px;opacity:.7;margin-top:8px">Нажмите на плашку — откроется выезд: фото, заметка голосом</div></div>
+    <div style="font-size:11.5px;opacity:.55;text-align:center;margin-top:10px">Сумм и имени клиента на экране блокировки нет — правило Apple</div></div>` },
+  /* ===== Сценарий (а): мелкая работа на месте — линия из двух точек ===== */
+  Q1: { cap: "(а) 1. Быстрая смета на месте: одна позиция, клиент уже есть", html: `<div class="scroll">
+    <div class="hdr"><span style="color:var(--acc-text);font-weight:600">Отмена</span><span class="sp"></span><b>Быстрая смета</b><span class="sp"></span><span style="width:52px"></span></div>
+    <div style="margin:10px 0 6px;color:var(--mut);font-size:13px">Клиент</div>
+    <div class="lg">${row("people","Sarah Mitchell","1420 Oak Grove Ave","")}</div>
+    <div style="margin:14px 0 6px;color:var(--mut);font-size:13px">Что сделали</div>
+    <div class="lg">${row("doc","Outlet replacement","из каталога · 1 шт","$180.00")}${add("Позиция")}</div>
+    <div class="mbar" style="margin-top:14px"><div class="t"><span>Итого</span><b>$180.00</b></div></div>
+    </div><div class="pinbar" style="bottom:0"><span class="b acc" style="flex:1;height:44px">Подписать на месте</span></div>` },
+  Q2: { cap: "(а) 2. Подписал — сразу «Оплатить сейчас» $180", html: `<div class="scroll"><div class="hdr"><b>Быстрая смета</b></div></div>
+    <div class="sheet"><div class="in">
+      <div style="display:flex;justify-content:space-between;align-items:center;height:36px"><span style="color:var(--acc-text);font-weight:600">Позже</span><b>Оплатить сейчас</b><span style="width:52px"></span></div>
+      <div style="text-align:center;margin:6px 0"><div style="font-size:34px;font-weight:700">$180.00</div><div style="color:var(--mut);font-size:13px">Outlet replacement · подписано 10:42</div></div>
+      <div class="lg">${row("usd","Карта — Tap to Pay","прислонить карту к телефону","")}${row("usd","Наличные","","")}${row("usd","Чек","номер чека","")}${row("send","Ссылка на оплату","SMS клиенту","")}</div>
+      <div style="color:var(--mut);font-size:12.5px;text-align:center">Квитанция уйдёт клиенту сама</div>
+    </div></div>` },
+  Q3: { cap: "(а) 3. Линия схлопнулась: смета и оплата — две точки, работа закрыта", html: `<div class="scroll" style="padding-top:0;inset:0 0 72px 0">
+    <div class="hdr" style="margin:0 -16px;padding:6px 16px;background:var(--bg);border-bottom:1px solid var(--bd);height:56px">${circ("back")}<span><b style="font-size:16px">Outlet replacement</b><br><span style="color:var(--mut);font-size:12px">Sarah Mitchell · сегодня</span></span><span class="sp"></span>${circ("more")}</div>
+    <div class="mbar" style="margin-top:10px"><div class="t"><span>Оплачено <b>$180</b> из $180</span>${st("ok","ok","Закрыта")}</div></div>
+    <div class="line">
+      <div class="nd done"><span>Смета · подписана на месте</span><span style="display:flex;align-items:center"><span class="r"><span class="d">10:42 · $180</span>${st("ok","ok","Подписана")}</span><span class="chev">${svg("chev")}</span></span></div>
+      <div class="nd done"><span>Оплата · Tap to Pay</span><span style="display:flex;align-items:center"><span class="r"><span class="d">10:43 · RCT-0107</span>${st("ok","ok","Оплачено")}</span><span class="chev">${svg("chev")}</span></span></div>
+    </div>
+    <div style="color:var(--mut);font-size:12.5px;margin-top:10px">Инвойс INV-0107 создан и сразу оплачен — отдельным шагом его не показываем. Квитанция ушла клиенту.</div>
+    </div>${tabbarK()}` },
+
+  /* ===== Сценарий (б): новая смета новому клиенту с нуля ===== */
+  N1: { cap: "(б) 1. «＋» на Главной: что создать", html: `<div class="scroll">
+    <div class="hdr"><span class="av">AP</span><span class="demo">• Демо</span><span class="sp"></span>${circ("search")}${circ("plus")}</div>
+    <div class="bigt" style="margin-bottom:6px">Главная</div></div>
+    <div class="sheet"><div class="in"><span class="grab"></span><h2>Создать · как сейчас</h2>
+      <div class="lg">${row("doc","Новая смета","клиент новый или из списка","")}${row("people","Новый клиент","","")}${row("doc","Работа без сметы","гарантия, повторный выезд","")}${row("people","Новый лид","звонок, заявка","")}${row("usd","Расход по чеку","","")}</div>
+    </div></div>` },
+  N2: { cap: "(б) 2. Новая смета: клиент, объект и позиции — один экран", html: `<div class="scroll">
+    <div class="hdr"><span style="color:var(--acc-text);font-weight:600">Отмена</span><span class="sp"></span><b>Новая смета</b><span class="sp"></span><span style="width:52px"></span></div>
+    <div style="margin:10px 0 6px;color:var(--mut);font-size:13px">Клиент · новый</div>
+    <div class="lg"><div class="row"><div class="mid"><div class="nm">Mike Ross</div><div class="ds">(626) 555-0177 · mike@example.com</div></div></div><div class="row"><div class="mid"><div class="nm">88 Linden St, Pasadena</div><div class="ds">объект · 2 этажа</div></div></div></div>
+    <div style="margin:14px 0 6px;color:var(--mut);font-size:13px">Работа</div>
+    <div class="lg">${row("doc","Gutter replacement","название работы","")}</div>
+    <div style="margin:14px 0 6px;color:var(--mut);font-size:13px">Позиции</div>
+    <div class="lg">${row("doc","5\" K-style gutter","120 ft","$1,560.00")}${row("doc","Downspouts","4 шт","$420.00")}${add("Позиция или замер")}</div>
+    </div><div class="pinbar" style="bottom:0"><span class="b sec" style="flex:1;height:44px;color:var(--ink)">Подписать на месте</span><span class="b acc" style="flex:1;height:44px">Отправить</span></div>` },
+  N3: { cap: "(б) 3. Готово: новый клиент, у него работа «Ждёт подписи»", html: `<div class="scroll">
+    <div class="hdr">${circ("back")}<span class="who">Клиенты</span><span class="sp"></span>${circ("plus")}${circ("more")}</div>
+    <div class="title" style="margin:6px 0 2px"><h1>Mike Ross</h1></div>
+    <div style="margin-bottom:10px">${st("info","half","Новый")} <span style="color:var(--mut);font-size:13px">· 88 Linden St</span></div>
+    <div class="qa" style="margin:0 0 10px">${[["phone","Позвонить"],["sms","SMS"],["route","Маршрут"],["mail","Почта"]].map(([k,l])=>`<div>${circ(k)}${l}</div>`).join("")}</div>
+    <div class="gt"><h3>Идут <span class="cnt">1</span></h3></div>
+    <div class="lg"><div class="jr"><div class="mid"><div class="nm">Gutter replacement</div><div class="ds">Смета отправлена только что · SMS и e-mail</div><div class="mini"><i class="c"></i><i></i><i></i><i></i><i></i><i></i></div></div><div class="val" style="text-align:right;font-weight:700">$1,980<small style="display:block;font-weight:600">${st("info","half","Ждёт подписи")}</small></div><span class="chev" style="width:14px;color:var(--mut)">${svg("chev")}</span></div></div>
+    <div style="color:var(--mut);font-size:12.5px;margin-top:10px">Создано одним экраном: клиент → объект → работа со сметой. После подписи на линии сам появится инвойс на всю сумму.</div>
+    </div>${tabbarK()}` },
+
+  /* ===== Где «＋»: клиент и План ===== */
+  X1: { cap: "«＋» в клиенте: всё создаётся сразу для этого клиента", html: `<div class="scroll">
+    <div class="hdr">${circ("back")}<span class="who">Клиенты</span><span class="sp"></span>${circ("plus")}${circ("more")}</div>
+    <div class="title" style="margin:6px 0 2px"><h1>Sarah Mitchell</h1></div></div>
+    <div class="sheet"><div class="in"><span class="grab"></span><h2>Для Sarah Mitchell</h2>
+      <div class="lg">${row("doc","Новая смета","новая работа со сметой","")}${row("doc","Быстрая смета на месте","подпись и оплата сразу","")}${row("doc","Работа без сметы","гарантия, повторный выезд","")}${row("cal","Выезд","к работе или осмотр","")}${row("pen","Заметка","","")}</div>
+    </div></div>` },
+  X2: { cap: "«＋» в Плане: выезд, работа, событие, выходной", html: `<div class="scroll">
+    <div class="hdr"><span class="av">AP</span><span class="sp"></span>${circ("plus")}</div>
+    <div class="bigt" style="margin-bottom:6px">План</div></div>
+    <div class="sheet"><div class="in"><span class="grab"></span><h2>Добавить в план</h2>
+      <div class="lg">${row("cal","Выезд","к работе клиента","")}${row("doc","Новая работа","клиент → работа → выезд","")}${row("cal","Событие","встреча, закупка","")}${row("cal","Выходной","","")}${row("people","Новый лид","","")}</div>
+    </div></div>` },
+
+  /* ===== Переключатель вида карточки клиента ===== */
+  V0: { cap: "«⋯» клиента → «Вид»: Обычный (как сейчас) или Линия работы; запоминается на этом телефоне", html: `<div class="scroll">
+    <div class="hdr">${circ("back")}<span class="who">Клиенты</span><span class="sp"></span>${circ("plus")}${circ("more")}</div>
+    <div class="title" style="margin:6px 0 2px"><h1>Sarah Mitchell</h1></div></div>
+    <div class="sheet"><div class="in"><span class="grab"></span><h2>Sarah Mitchell</h2>
+      <div style="margin:4px 0 6px;color:var(--mut);font-size:13px">Вид карточки</div>
+      <div class="lg"><div class="row"><div class="mid"><div class="nm">Обычный</div><div class="ds">вкладки: Обзор · Работы · Сметы · Счета · Выезды · Объекты · Журнал</div></div></div><div class="row"><div class="mid"><div class="nm">Линия работы</div><div class="ds">работы строками, у работы — линия шагов</div></div><span style="color:var(--acc-text);font-weight:700">✓</span></div></div>
+      <div class="lg" style="margin-top:12px">${row("pen","Изменить","","")}${row("people","Статус","","")}${row("people","Метки","","")}${row("people","Люди","","")}</div>
+    </div></div>` },
+
+};
+
+// экран работы с нижней панелью своего варианта
+const barOf = (k) => S[k].html.slice(S[k].html.lastIndexOf('<div class="tabbar">'));
+S.J1 = { cap: "Вариант 1: экран работы", html: S.J.html.replace(tabbar, barOf("V1L")) };
+S.J2 = { cap: "Вариант 2: экран работы", html: S.J.html.replace(tabbar, barOf("V2H")) };
+const q = new URLSearchParams(location.search);
+const one = q.get("s"), th = q.get("t") || "dark";
+document.documentElement.dataset.theme = th;
+const keys = one ? [one] : Object.keys(S);
+if (!one) document.body.classList.add("all");
+const CENTS = q.get("c") === "1"; // ?c=1 — суммы с центами, как в приложении сейчас (для пар «как есть | как будет»)
+const cents = (h) => h.replace(/([+−-]?\$\d{1,3}(?:,\d{3})*)(?![\d.,])/g, "$1.00");
+document.body.insertAdjacentHTML("beforeend", keys.map((k) => `<div class="ph" role="img" aria-label="${S[k].cap}">${CENTS && !/^P[12]$/.test(k) ? cents(S[k].html) : S[k].html}</div>`).join(""));
+</script>
+</body>
+</html>
