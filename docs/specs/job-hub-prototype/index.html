@@ -225,7 +225,7 @@ const st = (cls, ic, word) => `<span class="st ${cls}">${svg(ic,2)}${word}</span
 const row = (ic, nm, ds, val, sub) => `<div class="row"><span class="ic">${svg(ic)}</span><div class="mid"><div class="nm">${nm}</div>${ds?`<div class="ds">${ds}</div>`:""}</div><div class="val">${val}${sub?`<small>${sub}</small>`:""}</div><span class="chev">${svg("chev")}</span></div>`;
 const subrow = (ic, nm, ds, val) => `<div class="row sub"><span class="ic">${svg(ic)}</span><div class="mid"><div class="nm" style="font-size:14px;font-weight:500">${nm}</div><div class="ds">${ds}</div></div><div class="val" style="font-size:14px;font-weight:600">${val}</div><span class="chev">${svg("chev")}</span></div>`;
 const add = (nm) => `<div class="row add"><span class="ic">${svg("plus")}</span><span>${nm}</span></div>`;
-const tabbarK = (on = "Клиенты") => `<div class="tabbar">${[["home","Главная"],["cal","План"],["people","Клиенты"],["target","Лиды",2],["more","Ещё"]].map(([k,l,n])=>`<div class="${l===on?"on":""}">${svg(k)}${n?`<span class="badge">${n}</span>`:""}<span>${l}</span></div>`).join("")}</div>`;
+const tabbarK = (on = "Клиенты") => `<div class="tabbar">${[["home","Главная"],["cal","План"],["people","Клиенты"],["cash","Деньги"],["target","Лиды",2]].map(([k,l,n])=>`<div class="${l===on?"on":""}">${svg(k)}${n?`<span class="badge">${n}</span>`:""}<span>${l}</span></div>`).join("")}</div>`;
 const docsHead = (n) => `<div class="gt"><h3>Документы <span class="cnt">${n}</span></h3></div>`;
 
 /* Шапка и «Сейчас» работы JOB-0001 — как в приложении (снимок /job/j1); суммы на обзоре — целыми долларами (#3029) */
@@ -685,8 +685,8 @@ const S = {
   N1: { cap: "(б) 1. «＋» на Главной: что создать", html: `<div class="scroll">
     <div class="hdr"><span class="av">AP</span><span class="demo">• Демо</span><span class="sp"></span>${circ("search")}${circ("plus")}</div>
     <div class="bigt" style="margin-bottom:6px">Главная</div></div>
-    <div class="sheet"><div class="in"><span class="grab"></span><h2>Создать</h2>
-      <div class="lg">${row("doc","Новая смета","клиент новый или из списка","")}${row("doc","Быстрая смета на месте","одна-две позиции, подпись и оплата сразу","")}${row("doc","Работа без сметы","гарантия, повторный выезд","")}${row("people","Новый лид","звонок, заявка","")}${row("usd","Расход по чеку","","")}</div>
+    <div class="sheet"><div class="in"><span class="grab"></span><h2>Создать · как сейчас</h2>
+      <div class="lg">${row("doc","Новая смета","клиент новый или из списка","")}${row("people","Новый клиент","","")}${row("doc","Работа без сметы","гарантия, повторный выезд","")}${row("people","Новый лид","звонок, заявка","")}${row("usd","Расход по чеку","","")}</div>
     </div></div>` },
   N2: { cap: "(б) 2. Новая смета: клиент, объект и позиции — один экран", html: `<div class="scroll">
     <div class="hdr"><span style="color:var(--acc-text);font-weight:600">Отмена</span><span class="sp"></span><b>Новая смета</b><span class="sp"></span><span style="width:52px"></span></div>
@@ -719,6 +719,16 @@ const S = {
     <div class="bigt" style="margin-bottom:6px">План</div></div>
     <div class="sheet"><div class="in"><span class="grab"></span><h2>Добавить в план</h2>
       <div class="lg">${row("cal","Выезд","к работе клиента","")}${row("doc","Новая работа","клиент → работа → выезд","")}${row("cal","Событие","встреча, закупка","")}${row("cal","Выходной","","")}${row("people","Новый лид","","")}</div>
+    </div></div>` },
+
+  /* ===== Переключатель вида карточки клиента ===== */
+  V0: { cap: "«⋯» клиента → «Вид»: Обычный (как сейчас) или Линия работы; запоминается на этом телефоне", html: `<div class="scroll">
+    <div class="hdr">${circ("back")}<span class="who">Клиенты</span><span class="sp"></span>${circ("plus")}${circ("more")}</div>
+    <div class="title" style="margin:6px 0 2px"><h1>Sarah Mitchell</h1></div></div>
+    <div class="sheet"><div class="in"><span class="grab"></span><h2>Sarah Mitchell</h2>
+      <div style="margin:4px 0 6px;color:var(--mut);font-size:13px">Вид карточки</div>
+      <div class="lg"><div class="row"><div class="mid"><div class="nm">Обычный</div><div class="ds">вкладки: Обзор · Работы · Сметы · Счета · Выезды · Объекты · Журнал</div></div></div><div class="row"><div class="mid"><div class="nm">Линия работы</div><div class="ds">работы строками, у работы — линия шагов</div></div><span style="color:var(--acc-text);font-weight:700">✓</span></div></div>
+      <div class="lg" style="margin-top:12px">${row("pen","Изменить","","")}${row("people","Статус","","")}${row("people","Метки","","")}${row("people","Люди","","")}</div>
     </div></div>` },
 
 };
