@@ -5,8 +5,8 @@
  * for roles that see the contract (`showMoney`); the sums go through @octo/estimating-engine (rule 8).
  * Pure: no react-native, so the rule is tested on its own (test/jobLine.test.ts).
  */
-import { sumCents } from "@octo/estimating-engine";
-import type { DB, ID, Invoice } from "@/data/types";
+import { invoicesOwe, sumCents } from "@octo/estimating-engine";
+import type { DB, ID, Invoice, Job } from "@/data/types";
 import { findJob } from "@/data/jobs";
 
 export type JobLineKind = "estimate" | "deposit" | "progress" | "final" | "invoice" | "payment" | "refund" | "visit" | "expense" | "order";
@@ -105,10 +105,16 @@ export function jobLineOf(d: D, jobId: ID, showMoney: boolean): JobLine {
   const money = showMoney
     ? (() => {
         const paidCents = sumCents(payments.map(net));
-        const dueCents = sumCents(invoices.map((i) => Math.max(0, i.totalCents - i.paidCents)));
+        const dueCents = invoicesOwe(invoices);
         return { totalCents: job?.amountCents ?? 0, paidCents, dueCents };
       })()
     : undefined;
 
   return { steps, current: firstOpen >= 0 ? steps[firstOpen] : undefined, cancelled, money };
 }
+
+/** #3124 В1: the client's estimates still waiting for a signature with no job made from them — «Ждёт подписи» in «Идут» */
+export const unsignedWithoutJob = <E extends { id: string; status: string }>(estimates: E[], jobs: Pick<Job, "estimateId">[]) => {
+  const used = new Set(jobs.map((j) => j.estimateId).filter(Boolean));
+  return estimates.filter((e) => !used.has(e.id) && (e.status === "draft" || e.status === "sent" || e.status === "awaiting_countersign"));
+};

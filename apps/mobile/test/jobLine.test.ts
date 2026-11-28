@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { jobLineOf } from "@/features/job/jobLine";
+import { jobLineOf, unsignedWithoutJob } from "@/features/job/jobLine";
 import type { DB } from "@/data/types";
 
 // #3124 В1 (spec 71 §16): the line of one job from today's data — order, the current step, money for the office only
@@ -76,5 +76,13 @@ describe("jobLine (#3124 В1)", () => {
     expect(line.steps.find((s) => s.kind === "expense")?.href).toBeUndefined();
     expect(line.steps.find((s) => s.kind === "payment")?.href).toBe("/receipt/pay1");
     expect(line.steps.find((s) => s.kind === "final")?.href).toBe("/invoice/i2");
+  });
+});
+
+describe("unsignedWithoutJob (#3124 В1: «Ждёт подписи» in «Идут»)", () => {
+  const est = (id: string, status: string) => ({ id, status });
+  it("an estimate not signed and not used by a job is waiting; signed, declined or already a job's — not", () => {
+    const list = [est("a", "draft"), est("b", "sent"), est("c", "awaiting_countersign"), est("d", "approved"), est("e", "declined"), est("f", "sent")];
+    expect(unsignedWithoutJob(list, [{ estimateId: "f" }, { estimateId: undefined }]).map((e) => e.id)).toEqual(["a", "b", "c"]);
   });
 });

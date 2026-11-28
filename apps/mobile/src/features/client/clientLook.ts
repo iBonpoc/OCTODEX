@@ -54,3 +54,12 @@ export const __resetClientLook = () => {
   current = null;
   reading = null;
 };
+
+/**
+ * the two items of «⋯» that switch the look («Вид: обычный» / «Вид: линия работы»), the chosen one ticked; their own group at the
+ * end of the menu. `where` names the testID: `client-look-line`, `job-look-plain`…
+ */
+export const lookItems = (look: ClientLook, t: (k: "line.look.plain" | "line.look.line") => string, where: "client" | "job") => [
+  { key: "look.plain", label: t("line.look.plain"), icon: "list" as const, selected: look === "plain", group: true, testID: `${where}-look-plain` },
+  { key: "look.line", label: t("line.look.line"), icon: "layers" as const, selected: look === "line", testID: `${where}-look-line` },
+];

@@ -35,3 +35,15 @@ describe("clientLook (#3124 В1)", () => {
     expect(store.get(CLIENT_LOOK_KEY)).toBe("plain");
   });
 });
+
+describe("lookItems (#3124 В1: «⋯ → Вид»)", () => {
+  it("two items of their own group, the chosen look ticked, testIDs by the screen", async () => {
+    const { lookItems } = await import("@/features/client/clientLook");
+    const items = lookItems("line", (k) => k, "job");
+    expect(items.map((i) => [i.key, i.selected, i.testID])).toEqual([
+      ["look.plain", false, "job-look-plain"],
+      ["look.line", true, "job-look-line"],
+    ]);
+    expect(items[0]!.group).toBe(true);
+  });
+});
