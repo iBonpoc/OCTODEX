@@ -155,6 +155,23 @@ export function ProtoObject() {
           aside={{ label: t("k1.cancel"), onPress: said(t("k1.cancel")), testID: "showcase-main-aside" }}
         />
       </View>
+      {/* #2935 (founder 27.11, «как у Джобер»): the estimate editor's bar — «Итого» on the left, «Готово» (unfilled) before «Отправить» */}
+      <View style={{ gap: space[2] }}>
+        <T v="heading">{t("ds.proto.sendBar")}</T>
+        <MainStep
+          placement="bar"
+          main={{ label: t("est.bar.send"), onPress: said(t("est.bar.send")), testID: "showcase-main-send" }}
+          total={{ label: t("ue.total"), value: "$772.36", testID: "showcase-main-send-total" }}
+          aside={{ label: t("proto.est.done"), onPress: said(t("proto.est.done")), outline: true, testID: "showcase-main-send-done" }}
+        />
+        {/* review 27.11: a sent one — «Отправить изменения»; «Итого · налог» on the caption line; no room beside the buttons — the total's own line */}
+        <MainStep
+          placement="bar"
+          main={{ label: t("r1.est.sendChanges"), onPress: said(t("r1.est.sendChanges")), testID: "showcase-main-resend" }}
+          total={{ label: t("ue.total"), value: "$123,456.78", sub: t("px3.est.tax", { sum: "$9,144.95" }), testID: "showcase-main-resend-total" }}
+          aside={{ label: t("proto.est.done"), onPress: said(t("proto.est.done")), outline: true, testID: "showcase-main-resend-done" }}
+        />
+      </View>
       <View style={{ gap: space[2] }}>
         <T v="heading">{t("ds.proto.outline")}</T>
         <MainStep placement="bar" main={{ label: t("ds.proto.restore"), onPress: said(t("ds.proto.restore")), outline: true, testID: "showcase-main-outline" }} />

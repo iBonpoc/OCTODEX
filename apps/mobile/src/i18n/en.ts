@@ -69,6 +69,13 @@ export const en: Dict = {
   "fab.list.plan": "Schedule",
   "fab.list.calls": "Call",
   "fab.list.messages": "Message",
+  // DS §12.13 «Шапка» (#2841, ревью design/crm): «＋» has no word — VoiceOver says the action
+  "fab.a11y.clients": "New client",
+  "fab.a11y.tasks": "New task",
+  "fab.a11y.plan": "Add to schedule",
+  "fab.a11y.calls": "New call",
+  "fab.a11y.messages": "New message",
+  "money.newExpense": "New expense",
   // #1395: the short object on the card of an address, two buttons in a row on the phone («＋ Смета», not the long path.*New)
   "fab.obj.estimate": "Estimate",
   "fab.obj.job": "Job",
@@ -372,7 +379,7 @@ export const en: Dict = {
   "offline.synced": "Back online. Queue sent: {n}",
   "offline.toggle": "Test: offline mode",
 
-  "triage.title": "Triage",
+  "triage.title": "Needs attention",
   "triage.of": "{i} of {n}",
   "triage.done": "All caught up",
   "triage.doneHint": "New items will appear here automatically.",
@@ -1683,6 +1690,8 @@ export const en: Dict = {
   "task.saved": "Task saved",
   "task.noDate": "No due date",
   "task.none": "No open tasks",
+  // DS §12.13 «Шапка» (#2841, ревью design/crm): the count of a list with no chips — a line under the title
+  "task.openN": "Open: {n}",
   "task.overdue": "Overdue",
   "task.what": "What to do",
   "task.whatPh": "e.g. call back and confirm the scope",
@@ -2835,6 +2844,8 @@ export const en: Dict = {
   "ds.btn.pairLong": "A long label — the buttons in a column",
   "ds.btn.secondary": "Secondary",
   "ds.btn.secondaryNote": "Next to the main one: surf2 and a border",
+  "ds.btn.outline": "Outline",
+  "ds.btn.outlineNote": "No fill, a thin `dash` edge: the second one beside the main on a `surf2` cell («Done» on the estimate bar)",
   "ds.btn.ghost": "Quiet",
   "ds.btn.ghostNote": "No fill: «Cancel», «Back»",
   "ds.btn.danger": "Danger",
@@ -5568,6 +5579,9 @@ export const en: Dict = {
   "proto.est.depositShort": "deposit {amount}",
   "proto.est.done": "Done",
   "proto.est.saveSend": "Save and send",
+  // #2935 (founder 27.11, «как у Джобер»): the main step of the estimate editor's bar
+  "est.bar.send": "Send",
+  "ds.proto.sendBar": "Estimate bottom: Done · Send",
   "proto.est.add": "Add to estimate",
   "proto.est.rowsFull": "Detailed items",
   "proto.est.help": "Tap to edit · hold to reorder",

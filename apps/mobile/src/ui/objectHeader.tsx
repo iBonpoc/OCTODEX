@@ -211,7 +211,8 @@ export function ObjectHeader(p: ObjectHeaderProps) {
         <HeaderFade>
         {link ? (
           <Press testID={id("link")} onPress={link.onPress} accessibilityRole="link" accessibilityLabel={link.label} style={{ alignSelf: "flex-start", minHeight: size.hitMin, justifyContent: "center" }}>
-            <T v="caption" w="semibold" numberOfLines={1} style={{ color: c.accText }}>
+            {/* DS §12.13 «Шапка» (#2841): a link is the text tone with «›» — yellow is the main action only (rule 2) */}
+            <T v="caption" w="semibold" numberOfLines={1}>
               {`${link.label} ›`}
             </T>
           </Press>
@@ -221,7 +222,7 @@ export function ObjectHeader(p: ObjectHeaderProps) {
             <View style={{ flex: 1, minWidth: 0 }}>
               {p.address ? (
                 <Press testID={id("address")} onPress={p.address.onPress} accessibilityRole="link" accessibilityLabel={p.address.text} style={{ minHeight: size.hitMin, justifyContent: "center" }}>
-                  <T v="caption" numberOfLines={1} style={{ color: c.accText }}>
+                  <T v="caption" numberOfLines={1}>
                     {`${p.address.text} ›`}
                   </T>
                 </Press>

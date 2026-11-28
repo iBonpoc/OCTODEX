@@ -152,8 +152,8 @@ export function CalendarScreen(p: CalendarScreenProps) {
       head={{
         kind: "root",
         kicker: p.kicker ?? p.dayTitle,
-        // folded: the tab's name («План») in the row
-        mini: p.title,
+        // folded: the tab's name and the month («План · Ноябрь», DS §12.13 «Шапка», #2845 (а): the month stays the big title)
+        mini: `${p.title} · ${month.title}`,
         titlePress: { open: month.open, label: month.label, onPress: month.toggle, testID: `${p.testID}-month-title` },
         trailing: <MonthArrows testID={`${p.testID}-month`} head={month} />,
       }}

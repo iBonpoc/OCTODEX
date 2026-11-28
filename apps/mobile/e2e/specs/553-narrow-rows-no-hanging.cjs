@@ -1,0 +1,52 @@
+/**
+ * e2e 553 — rows that do not hang their parts on lines of their own (#2954, founder 26.11: «почему это всё в отдельной строке?»;
+ * DS §8.7а, А14а), every view, by testID:
+ * С1 ДАНО форма «Новый клиент» ТОГДА «＋» телефона и e-mail стоит в той же строке, что последнее значение (после 🗑), а не строкой ниже;
+ *    единственная пустая строка — без 🗑; набрано — 🗑 есть; «＋» добавил строку — «＋» перешёл в новую последнюю строку, 🗑 одной колонкой.
+ * С2 ДАНО смета EST-0006 ТОГДА строка «Депозит» — одной строкой на всех ширинах (founder 26.11: «Депозит, маленький переключатель…
+ *    Текстовое поле 10% и итоговая сумма»): слово · тумблер · поле · сумма; тумблеры строк стоят столбиком.
+ */
+exports.run = async (h) => {
+  const p = h.page;
+  const tid = (id) => p.getByTestId(id).locator("visible=true").first();
+  const box = (id) => tid(id).boundingBox();
+  const mid = (b) => b.y + b.height / 2;
+  const count = (id) => p.getByTestId(id).locator("visible=true").count();
+
+  // С1: the new client's form
+  await h.go("/client/edit");
+  await tid("client-form").waitFor({ timeout: 8000 });
+  for (const g of ["client-phones", "client-emails"]) {
+    if (!(await count(`${g}-row-0`))) continue;
+    const [row, add] = [await box(`${g}-row-0`), await box(`${g}-add`)];
+    h.expect(Math.abs(mid(add) - mid(row)) < 4, `С1 ${g}: «＋» on the value's line (row ${Math.round(mid(row))}, ＋ ${Math.round(mid(add))})`);
+  }
+  h.expect((await count("client-phones-row-0-remove")) === 0, "С1: a lone empty phone has no 🗑");
+  await tid("client-phones-row-0-value").locator("input").fill("(818) 555-0553");
+  await tid("client-phones-row-0-remove").waitFor({ timeout: 3000 });
+  await tid("client-phones-add").click();
+  await tid("client-phones-row-1").waitFor({ timeout: 3000 });
+  const [r0, r1, add1, t0, t1] = [await box("client-phones-row-0"), await box("client-phones-row-1"), await box("client-phones-add"), await box("client-phones-row-0-remove"), await box("client-phones-row-1-remove")];
+  h.expect(Math.abs(mid(add1) - mid(r1)) < 4 && mid(add1) > mid(r0) + 4, "С1: «＋» moved to the new last row");
+  h.expect(Math.abs(t0.x - t1.x) < 2, `С1: the 🗑 stand in one column (${Math.round(t0.x)}, ${Math.round(t1.x)})`);
+  await h.shot("client-form");
+
+  // С2: the deposit row of an estimate
+  await h.go("/estimate/new?id=e6");
+  await tid("est-add-new").waitFor({ timeout: 8000 });
+  await tid("est-deposit-row").scrollIntoViewIfNeeded();
+  const [seg, field, sum] = [await box("est-deposit-row-mode-pct"), await box("est-deposit-row-field"), await box("est-deposit-row-sum")];
+  const head = await box("est-deposit-row-head");
+  // one line on every width — 390, the 820 totals column (narrower than a phone's row) and 1280
+  h.expect([seg, field, sum].every((b) => Math.abs(mid(b) - mid(head)) < 4), `С2: one line — the toggle, the field and the sum (toggle ${Math.round(mid(seg))}, field ${Math.round(mid(field))}, sum ${Math.round(mid(sum))})`);
+  h.expect(seg.x + seg.width <= field.x && field.x + field.width <= sum.x + 1, "С2: from left to right — the toggle, the field, the sum");
+  // the fields stand in one column: the tax's 2-position toggle keeps the slot of the 3-position one
+  const taxField = await p.getByTestId("est-tax-row-head").locator("visible=true").first().evaluate((e) => {
+    const t = [...e.querySelectorAll("*")].find((x) => /%/.test(x.textContent || "") && x.children.length === 0 && !x.closest('[role="radio"]') && !x.closest('[data-testid$="-mode"]'));
+    return t ? t.getBoundingClientRect().x : null;
+  });
+  if (taxField !== null) h.expect(Math.abs(taxField - field.x) < 24, `С2: the tax's rate starts in the deposit's field column (${Math.round(taxField)}, ${Math.round(field.x)})`);
+  const dSeg = await box("est-discount-row-mode-pct");
+  h.expect(Math.abs(dSeg.x - seg.x) < 2, `С2: the toggles stand in one column (discount ${Math.round(dSeg.x)}, deposit ${Math.round(seg.x)})`);
+  await h.shot("deposit");
+};

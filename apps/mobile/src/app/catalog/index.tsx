@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { HeaderButton } from "@/ui/headerIcon";
 import { usableItems } from "@/features/catalogMatch";
 import { seeCosts } from "@/features/access";
 import { View } from "react-native";
@@ -83,7 +84,7 @@ export default function Catalog() {
       back={back}
       help={t("cat.help")}
       hintKey="catalog"
-      right={canEdit ? <Button label={t("cat.new")} icon="plus" size="sm" variant="secondary" onPress={() => router.push(`/catalog/new${kind !== "all" ? `?kind=${kind}` : ""}`)} /> : undefined}
+      right={canEdit ? <HeaderButton icon="plus" label={t("cat.new")} testID="cat-new" onPress={() => router.push(`/catalog/new${kind !== "all" ? `?kind=${kind}` : ""}`)} /> : undefined}
     >
       {/* spec 31 (variant Б): the search and one lane of kinds with counts; nothing in the sheet (no «Фильтр» button) */}
       <FilterBar<CatalogKind | "all">

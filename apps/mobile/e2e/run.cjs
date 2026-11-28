@@ -44,6 +44,7 @@ async function installClock(ctx, time) {
 const APP = path.join(__dirname, "..");
 const DIST = path.join(APP, "dist");
 const OUT = path.join(__dirname, "out");
+const { startTrace } = require("./traceOnFail.cjs");
 const args = process.argv.slice(2);
 const only = args.filter((a) => !a.startsWith("--"));
 const opt = (k) => args.find((a) => a.startsWith(`--${k}=`))?.split("=")[1];
@@ -94,6 +95,9 @@ async function waitPastCompanyMidnight() {
     const errors = [];
     const ctx = await browser.newContext({ viewport: { width: layout.width, height: layout.width === 390 ? 844 : 900 }, locale: "en-US", reducedMotion: "reduce" });
     await installClock(ctx);
+    // CHECKS §9 №87: the specs in E2E_TRACE_SPECS keep a Playwright trace of a failed run (e2e/traceOnFail.cjs)
+    const stopTrace = await startTrace(ctx, { file, layout, out: OUT });
+    let runFailed = false;
     await ctx.addInitScript((o) => {
       if (localStorage.getItem("octo.lang.v1")) return;
       localStorage.setItem("octo.lang.v1", JSON.stringify(o.lang));
@@ -143,9 +147,11 @@ async function waitPastCompanyMidnight() {
       console.log(`✓ ${tag} (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
     } catch (e) {
       failed++;
+      runFailed = true;
       await page.screenshot({ path: path.join(OUT, `${file}-${layout.width}-${layout.theme}-FAIL.png`) }).catch(() => {});
       console.log(`✗ ${tag}\n  ${String(e.message || e).split("\n").slice(0, 6).join("\n  ")}`);
     }
+    await stopTrace(runFailed);
     await ctx.close();
   }
   await browser.close();
