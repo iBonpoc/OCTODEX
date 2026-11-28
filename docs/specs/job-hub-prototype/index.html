@@ -185,6 +185,7 @@ body.all .note{display:block}
 .nd .d{color:var(--mut);font-size:12.5px}.nd .r{display:flex;flex-direction:column;align-items:flex-end;gap:1px}.nd .chev{width:14px;color:var(--mut);margin-left:6px}
 .cur{position:relative;background:var(--surf);border-radius:18px;padding:12px 14px;margin:6px 0;box-shadow:var(--sh)}
 .cur:before{content:"";position:absolute;left:-23px;top:18px;width:16px;height:16px;border-radius:50%;background:var(--acc);border:3px solid var(--bg)}
+.scroll > .cur:before{display:none}
 .thumbs{display:flex;gap:4px}.thumbs i{width:26px;height:26px;border-radius:6px;background:linear-gradient(135deg,#8a7a5c,#4c5560);display:block}
 .pinbar{position:absolute;left:0;right:0;bottom:0;padding-bottom:28px!important;background:var(--ov-solid);border-top:1px solid var(--bd);padding:8px 12px;display:flex;gap:8px;align-items:center;z-index:4}
 .pinbar .circ{width:44px;height:44px}
@@ -620,23 +621,37 @@ const S = {
     </div>${tabbarK()}` },
 
   /* Линия работы без фильтра: одна лента; фото — строкой «Все фото» */
-  L3: { cap: "Линия работы: одна лента, «Все фото · 6 ›» вместо фильтра", html: `<div class="scroll" style="padding-top:0;inset:0 0 96px 0">
+  L3: { cap: "Линия работы: один счёт на всю сумму, платежи по графику, у каждого — квитанция", html: `<div class="scroll" style="padding-top:0;inset:0 0 72px 0">
     <div class="hdr" style="margin:0 -16px;padding:6px 16px;background:var(--bg);border-bottom:1px solid var(--bd);height:56px">${circ("back")}<span><b style="font-size:16px">Bathroom remodel</b><br><span style="color:var(--mut);font-size:12px">Sarah Mitchell · 1420 Oak Grove Ave</span></span><span class="sp"></span>${circ("more")}</div>
     <div class="mbar" style="margin-top:10px"><div class="t"><span>Оплачено <b>$1,200</b> из $3,420</span><span style="color:var(--mut)">ждём $1,000</span></div><div class="segbar"><i class="p" style="flex:12"></i><i style="flex:10"></i><i style="flex:12.2"></i></div></div>
+    <div class="cur" style="margin:10px 0"><div style="display:flex;justify-content:space-between"><b style="font-size:16px">Платёж 2 по графику</b>${st("warn","half","Ждём")}</div>
+      <div style="font-size:26px;font-weight:700;margin:4px 0">$1,000</div>
+      <div style="color:var(--mut);font-size:13px">по счёту INV-0105 · ссылка отправлена 18 нояб. · до 25 нояб.</div>
+      <div style="display:flex;gap:8px;margin-top:10px;align-items:center"><span class="circ" aria-label="Фото">${svg("camera")}</span><span class="circ" aria-label="Заметка голосом">${svg("mic")}</span><span class="b acc" style="flex:1;height:44px">Взять оплату · $1,000</span></div></div>
     <div class="lg" style="margin-bottom:6px"><div class="row" style="min-height:48px"><span class="ic">${svg("camera")}</span><div class="mid"><div class="nm">Все фото · 6</div></div><div class="thumbs"><i></i><i></i><i></i></div><span class="chev">${svg("chev")}</span></div></div>
     <div class="line">
       <div class="nd done"><span>Смета</span><span style="display:flex;align-items:center"><span class="r"><span class="d">12 нояб. · $3,420</span>${st("ok","ok","Подписана")}</span><span class="chev">${svg("chev")}</span></span></div>
-      <div class="nd done"><span>Инвойс на всю сумму</span><span style="display:flex;align-items:center"><span class="r"><span class="d">INV-0105 · $3,420</span>${st("ok","ok","Выставлен")}</span><span class="chev">${svg("chev")}</span></span></div>
-      <div class="nd done"><span>Предоплата 1 · 2 фото</span><span style="display:flex;align-items:center"><span class="r"><span class="d">13 нояб. · $1,200</span>${st("ok","ok","Оплачено")}</span><span class="chev">${svg("chev")}</span></span></div>
-      <div class="cur"><div style="display:flex;justify-content:space-between"><b style="font-size:16px">Предоплата 2</b>${st("warn","half","Ждём")}</div>
-        <div style="font-size:26px;font-weight:700;margin:4px 0">$1,000</div>
-        <div style="color:var(--mut);font-size:13px">ссылка отправлена 18 нояб. · до 25 нояб.</div>
-        <div style="margin-top:8px;font-size:13px;display:flex;gap:6px;align-items:center"><span style="width:16px;display:inline-flex;color:var(--mut)">${svg("pen")}</span>«Клиент просил чек на e-mail»</div></div>
+      <div class="nd done"><span>Счёт на всю сумму · график из 3 платежей</span><span style="display:flex;align-items:center"><span class="r"><span class="d">INV-0105 · $3,420</span>${st("info","half","Оплачен частично")}</span><span class="chev">${svg("chev")}</span></span></div>
+      <div class="nd done"><span>Платёж 1 · квитанция RCT-0101</span><span style="display:flex;align-items:center"><span class="r"><span class="d">13 нояб. · $1,200</span>${st("ok","ok","Оплачено")}</span><span class="chev">${svg("chev")}</span></span></div>
+      <div class="nd fut"><span>Платёж 2 · по графику</span><span class="d">до 25 нояб. · $1,000</span></div>
       <div class="nd fut"><span>Выезд · начало работ</span><span class="d">пт, 20 нояб.</span></div>
-      <div class="nd fut"><span>Финал · остаток</span><span class="d">$1,220</span></div>
-      <div class="nd" style="font-weight:600"><span>＋ Шаг: выезд, доп. работа, предоплата</span></div>
-    </div></div>
-    <div class="pinbar"><span class="circ">${svg("camera")}</span><span class="circ">${svg("mic")}</span><span class="b acc" style="flex:1;height:44px">Взять предоплату 2 · $1,000</span></div>` },
+      <div class="nd fut"><span>Платёж 3 · остаток</span><span class="d">после работ · $1,220</span></div>
+      <div class="nd" style="font-weight:600"><span>＋ Шаг: выезд, доп. работа, расход</span></div>
+    </div></div>${tabbarK()}` },
+  /* (б) #3129: «Взять оплату» — платёж по графику одного счёта */
+  K6: { cap: "«Взять оплату» по одному счёту: по умолчанию — платёж по графику; клиент видит всё движение денег", html: `<div class="scroll">
+    <div class="hdr">${circ("back")}<span class="who">Bathroom remodel</span><span class="sp"></span>${circ("more")}</div></div>${tabbarK()}
+    <div class="sheet"><div class="in">
+      <div style="display:flex;justify-content:space-between;align-items:center;height:36px"><span style="color:var(--acc-text);font-weight:600">Отмена</span><b>Взять оплату</b><span style="width:52px"></span></div>
+      <p>Счёт INV-0105 · $3,420.00 · оплачено $1,200.00</p>
+      <div class="lg">
+        <div class="row"><div class="mid"><div class="nm">Платёж 2 по графику</div><div class="ds">до 25 нояб.</div></div><div class="val">$1,000.00</div><span style="color:var(--acc-text);width:20px">${svg("ok",2.2).replace('<circle cx="12" cy="12" r="9"/>','')}</span></div>
+        <div class="row"><div class="mid"><div class="nm">Весь остаток</div><div class="ds">платежи 2 и 3</div></div><div class="val">$2,220.00</div></div>
+        <div class="row"><div class="mid"><div class="nm">Другая сумма</div><div class="ds">график пересчитается сам</div></div></div>
+      </div>
+      <div class="lg">${row("usd","Записать оплату на месте","карта, наличные, чек","")}${row("sms","Отправить ссылку","SMS (626) 555-0142","")}</div>
+      <div style="color:var(--mut);font-size:12.5px;text-align:center">На каждую оплату — квитанция. Клиент по ссылке видит счёт, график, что оплачено и что осталось.</div>
+    </div></div>` },
 
   /* Концепция 3 по правилам Apple: плашка живёт только на время выезда; без денег; одна кнопка — следующий шаг выезда */
   P3: { cap: "Выезд: остров и экран блокировки — без денег, одна кнопка «Закончил»", html: `<div class="lock" style="padding:12px 12px">
