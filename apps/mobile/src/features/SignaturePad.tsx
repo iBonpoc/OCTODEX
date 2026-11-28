@@ -37,7 +37,8 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label, consent
   const lockRef = useRef(lockScroll);
   lockRef.current = lockScroll;
   // #3156: on with the stroke, off with its end — and off when the pad leaves the screen mid-stroke (else the screen stays locked)
-  const padLock = useRef(padScrollLock(() => lockRef.current)).current;
+  // made once (a lazy state init: `useRef(padScrollLock(...))` would build a new one on every render and throw it away)
+  const [padLock] = useState(() => padScrollLock(() => lockRef.current));
   useEffect(() => () => padLock.unmount(), [padLock]);
   const pan = useRef(
     PanResponder.create({
