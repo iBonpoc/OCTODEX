@@ -39,6 +39,18 @@ const hasLinesOf = (e: Estimate, measurementId: string) => !!e.doc?.options?.som
 /** a signed estimate (awaiting countersign or approved) stands on this measurement — it can not be deleted (П24 Б6) */
 export const signedOn = (db: Pick<DB, "estimates">, measurementId: string) => db.estimates.some((e) => SIGNED.has(e.status) && hasLinesOf(e, measurementId));
 
+/**
+ * #2990 (founder 27.11: «привязал чертёж к лиду… что должно произойти? непонятно»): the estimates the measurement's lead (or its client's
+ * address) already has WITHOUT this measurement's lines — the card says so («У … уже есть смета EST-0006 · Отправлена»), not «Без сметы».
+ * Declined ones are left out; the newest number first (the one shown is [0]).
+ */
+export function otherEstimates(db: Pick<DB, "estimates">, m: Pick<MeasurementRow, "id" | "leadId" | "propertyId">): Estimate[] {
+  if (!m.leadId && !m.propertyId) return [];
+  return db.estimates
+    .filter((e) => e.status !== "declined" && !hasLinesOf(e, m.id) && ((!!m.leadId && e.leadId === m.leadId) || (!!m.propertyId && e.propertyId === m.propertyId)))
+    .sort((a, b) => (b.number ?? "").localeCompare(a.number ?? "", "en", { numeric: true }));
+}
+
 export function estimateOfMeasurement(db: Pick<DB, "estimates">, measurementId: string): Estimate | undefined {
   const mine = db.estimates.filter((e) => e.status !== "declined" && hasLinesOf(e, measurementId));
   const open = mine.filter((e) => !SIGNED.has(e.status));

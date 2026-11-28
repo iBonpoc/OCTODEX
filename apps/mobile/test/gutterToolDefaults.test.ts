@@ -9,7 +9,7 @@ const mem = new Map<string, string>();
 let writes = 0;
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: { getItem: async (k: string) => mem.get(k) ?? null, setItem: async (k: string, v: string) => { writes++; mem.set(k, v); } } }));
 import { MODULE_CHOICES as ch, newDsAttrs, newRunAttrs } from "../src/modules/gutters/settings";
-import { adopt, dsFor, loadDefaults, NEW_DEFAULTS_KEY, patchDs, patchRun, prune, pruneStored, putDefaults, readDefaults, resetKind, runFor, storeDefaults, type NewDefaults } from "../src/modules/gutters/canvas/toolDefaults";
+import { adopt, dsFor, likeElement, newDirty, loadDefaults, NEW_DEFAULTS_KEY, patchDs, patchRun, prune, pruneStored, putDefaults, readDefaults, resetKind, runFor, storeDefaults, type NewDefaults } from "../src/modules/gutters/canvas/toolDefaults";
 
 describe("new objects of one drawing", () => {
   it("none set: the company's defaults, the story drawn now", () => {
@@ -90,5 +90,30 @@ describe("kept on the phone (code-reviewer #1563 PR B)", () => {
     mem.set(NEW_DEFAULTS_KEY, JSON.stringify({ open: brown, live: brown, gone: brown }));
     await pruneStored(new Set(["open", "live"]));
     expect(Object.keys(await loadDefaults()).sort()).toEqual(["live", "open"]);
+  });
+});
+
+describe("one window for one and for new ones (#2987, founder 27.11)", () => {
+  it("«Новые — так же» on a gutter: the next ones take its size, colour and profile, never its story", () => {
+    const run = { ...newRunAttrs(ch, 3), size: "6" as const, color: "brown", profile: "k" as const };
+    const nd = likeElement(ch, {}, { kind: "run", attrs: run });
+    const next = runFor(ch, 1, nd);
+    expect(next.size).toBe("6");
+    expect(next.color).toBe("brown");
+    expect(next.story).toBe(1);
+    expect(nd.ds).toBeUndefined();
+  });
+  it("«Новые — так же» on a downspout: the next downspouts take its attributes; new gutters untouched", () => {
+    const ds = { ...newDsAttrs(ch), color: "brown" } as ReturnType<typeof dsFor>;
+    const nd = likeElement(ch, { run: newRunAttrs(ch, 1) }, { kind: "ds", attrs: ds });
+    expect(dsFor(ch, nd).color).toBe("brown");
+    expect(nd.run).toEqual(newRunAttrs(ch, 1));
+  });
+  it("the window «Новые …» is dirty only when its draft differs (Закрыть asks only then)", () => {
+    const now: NewDefaults = patchRun(ch, {}, { color: "white" });
+    expect(newDirty(null, now)).toBe(false);
+    expect(newDirty(now, now)).toBe(false);
+    expect(newDirty(patchRun(ch, now, { color: "brown" }), now)).toBe(true);
+    expect(newDirty(resetKind(now, "run"), now)).toBe(true);
   });
 });
