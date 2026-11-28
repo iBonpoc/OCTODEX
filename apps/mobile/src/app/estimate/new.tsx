@@ -1078,7 +1078,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // bottom is «Отправить» (the same press the header's ➤ had: save, then the send of the estimate — the way and the queue offline as
   // before) and «Готово» is the second, unfilled, beside it; «Отменить» then goes into «⋯» (editSession.barSteps)
   // CRM review 27.11: an estimate the client already has — «Отправить изменения» (as the header's ➤ said), a draft — «Отправить»
-  const sentBefore = !!existing && existing.status !== "draft";
+  // #3058: «Отправить изменения» for an estimate that ever went out (sentOnceAt) — also one back in draft after a send
+  const sentBefore = !!existing && (existing.status !== "draft" || !!sentOnceAt(existing));
   const bar = barSteps({ mayShare: canSend && !tplEdit, signed, hasLines: hasContent(doc), dirty, sent: sentBefore });
   const doneStep: MainAction = { label: t("proto.est.done"), onPress: () => void save(false), testID: "ue-save" };
   const step: MainAction =
