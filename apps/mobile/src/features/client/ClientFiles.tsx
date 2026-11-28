@@ -1,8 +1,8 @@
 /**
  * #3076 «Фото и файлы» клиента: every photo of the client's visits as a grid, grouped by visit (the newest first, as the moments
  * of iOS «Фото»), and the client's other files as rows under them. A group's title is the day; its first row — the job, the time
- * and the tech, «›» — opens the visit, the grid is under it. A photo opens the same viewer as the visit's strip (PhotoStrip, read-only here: photos are added and deleted in the
- * visit). The filter — «Объект» and «Работа» fields (DS А2) — shows only when there is more than one to choose from.
+ * and the tech, «›» — opens the visit, the grid is under it. A photo opens the same viewer as the visit's strip (PhotoStrip, read-only here: a visit's photos are added and deleted in the
+ * visit; a photo without a visit — «Повторить» and «Удалить» here, #3161). The filter — «Объект» and «Работа» fields (DS А2) — shows only when there is more than one to choose from.
  */
 import { useMemo, useState } from "react";
 import { View } from "react-native";
@@ -13,7 +13,9 @@ import { useI18n, type DictKey } from "@/i18n";
 import { PhotoStrip } from "@/features/PhotoStrip";
 import { visitWhen } from "@/features/schedule";
 import { useClientFacts } from "@/features/client/ClientSections";
-import { clientMediaOf, filterMedia, mediaChoices } from "@/features/client/clientMedia";
+import { canAddClientPhoto, canRemoveClientPhoto, clientMediaOf, filterMedia, mediaChoices } from "@/features/client/clientMedia";
+import { useStore } from "@/data/store";
+import { useToast } from "@/ui/overlays";
 import { GroupedList, GroupRow, ListGroup } from "@/ui/groupedList";
 import { SelectField } from "@/ui/selectField";
 import { Empty } from "@/ui/surfaces";
@@ -27,6 +29,12 @@ export function ClientFiles({ c }: { c: Customer }) {
   const f = useClientFacts(c);
   const { db, r, visits } = f;
   const { t, day, time } = useI18n();
+  const store = useStore();
+  const toast = useToast();
+  // #3161: a photo without a visit has no visit to retry or delete it from — here. «Удалить» — canRemoveClientPhoto, photo by photo
+  const mayAdd = canAddClientPhoto(db, store.role, c.id);
+  const retryLoose = (id: string) => toast.show(store.online ? t("photoUp.retried") : t("offline.queued"), store.retryClientFile(id));
+  const removeLoose = (id: string) => toast.show(t("photo.deleted"), store.removeClientFile(id));
   const [propertyId, setProperty] = useState<string | null>(null);
   const [jobId, setJob] = useState<string | null>(null);
   const all = useMemo(() => clientMediaOf(db, visits, c.id, new Set(r.jobs.map((j) => j.id))), [db, visits, c.id, r.jobs]);
@@ -68,7 +76,17 @@ export function ClientFiles({ c }: { c: Customer }) {
         // #3085: the client's photos without a visit (sent by the client, added here with «＋»)
         <ListGroup title={t("c3076.loose")} testID="client-files-loose">
           <View style={{ padding: space[3] }}>
-            <PhotoStrip grid title={t("c3076.k.photo")} photos={shown.loose.map((fi) => ({ id: fi.id, kind: "before" as const, uri: fi.uri, ...(fi.upload ? { upload: fi.upload } : {}) }))} />
+            <PhotoStrip
+              grid
+              title={t("c3076.k.photo")}
+              photos={shown.loose.map((fi) => ({ id: fi.id, kind: "before" as const, uri: fi.uri, ...(fi.upload ? { upload: fi.upload } : {}) }))}
+              onRetry={mayAdd ? retryLoose : undefined}
+              onRemove={removeLoose}
+              canRemove={(id) => {
+                const fi = shown.loose.find((x) => x.id === id);
+                return !!fi && canRemoveClientPhoto(db, store.role, c.id, fi);
+              }}
+            />
           </View>
         </ListGroup>
       ) : null}

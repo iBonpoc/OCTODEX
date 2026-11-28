@@ -1,6 +1,6 @@
 /** #3076 «Фото и файлы» клиента: the photos by visit (the newest first), a visit's photo kept as a file row counted once, the filter. */
 import { describe, expect, it } from "vitest";
-import { clientMediaOf, filterMedia, mediaChoices } from "../src/features/client/clientMedia";
+import { canAddClientPhoto, canRemoveClientPhoto, clientMediaOf, filterMedia, mediaChoices } from "../src/features/client/clientMedia";
 import { component, space } from "@octo/design-tokens";
 import { gridTile } from "../src/features/photoGrid";
 import type { FileItem, Job, Property, Visit } from "../src/data/types";
@@ -68,5 +68,46 @@ describe("gridTile (#3076: 4 in a row on a phone, more where photoThumb fits)", 
     const s = gridTile(900);
     expect(s).toBeGreaterThanOrEqual(component.photoThumb);
     expect(Math.floor((900 + space[2]) / (s + space[2]))).toBeGreaterThan(4);
+  });
+});
+
+describe("#3161 canAddClientPhoto — the database's rule (files_insert, T474)", () => {
+  const now = Date.parse("2026-11-28T20:00:00Z");
+  const v = (id: string, jobId: string, techId: string | null, extra: Partial<Visit> = {}): Visit =>
+    ({ ...visit(id, jobId, "2026-11-28T18:00:00Z", []), techId, ...extra }) as Visit;
+  const jobsC = [{ ...job("jA", "pA"), customerId: "cA" }, { ...job("jB", "pB"), customerId: "cB" }] as Job[];
+  const base = { me: "u1", jobs: jobsC, properties: [prop("pA"), prop("pB")], members: [{ id: "u1", kind: "staff" }], visits: [v("vA", "jA", "u1"), v("vB", "jB", "u2")] } as never;
+  it("the office (director, dispatcher, sales) — any client", () => {
+    for (const role of ["director", "dispatcher", "sales"] as const) expect(canAddClientPhoto(base, role, "cB", now)).toBe(true);
+  });
+  it("a tech — a client of his (his visit that counts on the client's job), not another", () => {
+    expect(canAddClientPhoto(base, "tech", "cA", now)).toBe(true);
+    expect(canAddClientPhoto(base, "tech", "cB", now)).toBe(false);
+  });
+  it("a tech whose visit no longer counts (older than 14 days) — not that client", () => {
+    const old = { ...(base as object), visits: [v("vA", "jA", "u1", { start: "2026-11-01T18:00:00Z" })] } as never;
+    expect(canAddClientPhoto(old, "tech", "cA", now)).toBe(false);
+  });
+  it("a subcontractor — never, even a client he works for", () => {
+    const sub = { ...(base as object), members: [{ id: "u1", kind: "sub" }] } as never;
+    expect(canAddClientPhoto(sub, "tech", "cA", now)).toBe(false);
+  });
+  it("the client through a lead or a property of the visit (no job) — as app.is_customer_assignee's coalesce", () => {
+    const viaLead = { ...(base as object), visits: [{ ...v("vL", "", "u1"), jobId: undefined, leadId: "l1" }], leads: [{ id: "l1", customerId: "cA" }] } as never;
+    expect(canAddClientPhoto(viaLead, "tech", "cA", now)).toBe(true);
+    const viaProp = { ...(base as object), visits: [{ ...v("vP", "", "u1"), jobId: undefined, propertyId: "pA" }], properties: [{ ...prop("pA"), customerId: "cA" }] } as never;
+    expect(canAddClientPhoto(viaProp, "tech", "cA", now)).toBe(true);
+  });
+  it("a cancelled visit (closed, not done) does not count", () => {
+    const cancelled = { ...(base as object), visits: [v("vA", "jA", "u1", { closed: true, step: "scheduled" })] } as never;
+    expect(canAddClientPhoto(cancelled, "tech", "cA", now)).toBe(false);
+  });
+  it("«Удалить»: the office — any photo; a tech of the client — only his own (its file on this phone); not the client's; a subcontractor or a tech without a visit — none", () => {
+    expect(canRemoveClientPhoto(base, "director", "cB", {}, now)).toBe(true);
+    expect(canRemoveClientPhoto(base, "tech", "cA", { uri: "file:///mine.jpg" }, now)).toBe(true);
+    expect(canRemoveClientPhoto(base, "tech", "cA", {}, now)).toBe(false);
+    expect(canRemoveClientPhoto(base, "tech", "cB", { uri: "file:///x.jpg" }, now)).toBe(false);
+    const sub = { ...(base as object), members: [{ id: "u1", kind: "sub" }] } as never;
+    expect(canRemoveClientPhoto(sub, "tech", "cA", { uri: "file:///x.jpg" }, now)).toBe(false);
   });
 });
