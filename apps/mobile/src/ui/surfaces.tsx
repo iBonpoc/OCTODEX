@@ -859,9 +859,12 @@ export function Screen({
       {big}
       <UpdateBar />
       {subtitle && kind !== "editor" ? (
-        <T v="body" tone="mut">
-          {subtitle}
-        </T>
+        // the line under the title («Открытых: 5», Д-шапка-7): its own testID — the tests read it, not its words
+        <View testID={testID ? `${testID}-subtitle` : undefined}>
+          <T v="body" tone="mut">
+            {subtitle}
+          </T>
+        </View>
       ) : null}
       {/* spec 42 S34: the company's name ▾ (two or more companies); a company not loaded here yet, offline — what to do */}
       {home ? <CompanyLine /> : null}
@@ -1132,7 +1135,9 @@ export function Screen({
       <View style={{ flex: 1 }}>
         <Background />
         {pinned ? (
+          // 820/1280 with a parent: the pinned address bar IS the screen's one header (its row) — the same testID as HeaderBar's
           <View
+            testID="screen-head"
             onLayout={(e) => setBarH(e.nativeEvent.layout.height)}
             style={{ paddingTop: navInsets.safeTop + space[3], paddingBottom: space[1], paddingLeft: navInsets.left, paddingRight: navInsets.right, gap: space[2], borderBottomWidth: component.hairline, borderBottomColor: c.bd }}
           >

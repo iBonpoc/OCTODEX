@@ -53,7 +53,7 @@ export function ProtoTemplates() {
   const create = { a11y: t("ds.tpl.create"), items: [{ key: "client", label: t("ds.tpl.newClient"), icon: "user" as const }, { key: "estimate", label: t("ds.proto.newEst"), icon: "doc" as const }] };
   const bell = { icon: "bell" as const, a11y: t("ds.tpl.bell"), onPress: said(t("ds.tpl.bell")), testID: "tpl-demo-bell" };
   // wave 3: the bell with its count (a status colour WITH the number), the a11y says it too
-  const bellN = { ...bell, a11y: t("ds.proto.bellN", { n: 3 }), badge: { n: 3 }, testID: "tpl-demo-bell-n" };
+  const bellN = { ...bell, a11y: t("ds.proto.bellN", { n: 3 }), badge: { n: 3, dot: true }, testID: "tpl-demo-bell-n" };
   const more = [
     { key: "archive", label: t("ds.tpl.archive"), icon: "inbox" as const },
     { key: "delete", label: t("ds.tpl.delete"), icon: "trash" as const, destructive: true },

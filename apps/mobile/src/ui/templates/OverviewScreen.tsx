@@ -3,7 +3,7 @@
  * Guarantees: a tab root — no «назад»; the header icons (search, the bell) · «＋» · «⋯» on the right, «⋯» the last; the next step
  * first (`next` — the NowCard with ONE main button in it, 40 the whole width); «Нужно внимание» — at most three rows, the rest behind
  * «Все ›»; the summary line; the rest folded (`details` in a Collapsible). The head: the icons row on top, the 30 title in one line
- * under it — or `greeting` (avatar · «Доброе утро» 17 · the date) on the left of the icons instead; `home` (default) — the company line.
+ * under it; `greeting` adds the avatar and the 13 line over the title (the date · «Доброе утро, Алекс», `overviewHead`); `home` (default) — the company line.
  * `preview` — the showcase frame instead of the Screen.
  */
 import type { ReactNode } from "react";
@@ -15,15 +15,16 @@ import { NowCard, type NowCardProps } from "../nowCard";
 import { Screen } from "../surfaces";
 import { SummaryLine, type SummaryItem } from "../summaryLine";
 import { CreateButton, HeaderIcons, MoreButton, TemplateFrame } from "./parts";
+import { overviewHead } from "./overviewHead";
 import { attentionRows, templateLayout } from "./templateRules";
 import type { CreateAction, IconAction, MoreAction } from "./types";
 
 export interface OverviewScreenProps {
-  /** the screen's name (the tests, VoiceOver, the tab); drawn as the 30 title only without `greeting` */
+  /** the screen's name (the tests, VoiceOver, the tab) and its 30 title («Главная»), with or without `greeting` */
   title: string;
-  /** the root header of a role's «Главная» (v2 «Корень вкладки»): the avatar on the left (→ «Ещё»), the date in the 13 line, «Доброе
-   *  утро, Алекс» as the 30 title; folded — «Сегодня, 20 нояб.» (`mini`) */
-  greeting?: { initials: string; text: string; date: string; mini?: string; onAvatar?: () => void; avatarLabel: string };
+  /** the root header of a role's «Главная» (v2 «Корень вкладки»): the avatar on the left (→ «Ещё»), the 13 line «дата · Доброе утро,
+   *  Алекс» over the 30 title «Главная» (`overviewHead`, #2922); folded — «Сегодня, 20 нояб.» (`mini`, DS §12.13) */
+  greeting?: { initials: string; text?: string; date: string; mini?: string; onAvatar?: () => void; avatarLabel: string };
   /** a role's «Главная» (default): the company line «Компания ▾» and its «not loaded yet» under the head, the sync badge; `false` — not */
   home?: boolean;
   headerIcons?: IconAction[];
@@ -54,6 +55,8 @@ export function OverviewScreen(p: OverviewScreenProps) {
   });
   const att = attentionRows(p.attention?.rows ?? []);
   const g = p.greeting;
+  // the same head for the live screen and the showcase preview (#2922: the showcase showed the old big greeting)
+  const head = overviewHead(p.title, g);
   const avatar = g ? (g.onAvatar ? { initials: g.initials, onPress: g.onAvatar, label: g.avatarLabel, testID: "home-profile" } : null) : undefined;
   const body = (
     // visual v2 «Поля и ритм»: between blocks 20
@@ -88,8 +91,8 @@ export function OverviewScreen(p: OverviewScreenProps) {
       <TemplateFrame
         testID={p.testID}
         kind="root"
-        title={g?.text ?? p.title}
-        kicker={g?.date}
+        title={head.title}
+        kicker={head.kicker}
         avatar={avatar ?? undefined}
         right={
           <>
@@ -104,9 +107,9 @@ export function OverviewScreen(p: OverviewScreenProps) {
   return (
     <Screen
       testID={p.testID}
-      title={p.title}
+      title={head.title}
       // DS §12.13 «Шапка» (#2841, #2844): the 30 title is the tab's word («Главная»); the greeting goes into the 13 line after the date
-      head={{ kind: "root", kicker: g ? [g.date, g.text].filter(Boolean).join(" · ") : undefined, mini: p.title, avatar }}
+      head={{ kind: "root", kicker: head.kicker, mini: g?.mini ?? head.title, avatar }}
       home={p.home ?? true}
       headerIcons={p.headerIcons}
       right={tail}
