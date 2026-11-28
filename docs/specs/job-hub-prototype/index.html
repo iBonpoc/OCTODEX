@@ -157,6 +157,20 @@ body.all .note{display:block}
 .chips span.on{background:var(--ink);color:var(--bg)}
 .phrase{font-size:14.5px;margin:2px 0 12px;color:var(--ink)}
 .tabbar .plus{width:44px;height:44px;border-radius:50%;background:var(--acc);color:var(--on-acc);display:flex;align-items:center;justify-content:center;margin-top:-6px}
+
+/* клиент — центр (28.11) */
+.money1{display:flex;gap:6px;flex-wrap:wrap;font-size:14px;margin:0 2px 14px;color:var(--mut)}
+.money1 b{color:var(--ink)}
+.jobc{background:var(--surf);border-radius:var(--r);padding:14px 14px 6px;box-shadow:var(--sh)}
+.jobc .h{display:flex;justify-content:space-between;align-items:center}
+.jobc .h b{font-size:17px}
+.jobc .lg{background:transparent;margin:10px -14px 0;border-top:1px solid var(--bd);border-radius:0}
+.jobc.closed{padding:12px 14px;box-shadow:none;margin-top:8px}
+.over{position:absolute;inset:24px 0 0 0;background:var(--ov-solid);border-radius:22px 22px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.35);padding:10px 16px;z-index:6}
+.dim{position:absolute;inset:0;background:var(--scrim);z-index:5}
+.pdf{background:#F6F5F1;color:#17181B;border-radius:12px;padding:14px;font-size:12.5px;margin-top:10px}
+.pdf h4{margin:0 0 6px;font-size:15px}
+.pdf .l{display:flex;justify-content:space-between;padding:3px 0}
 </style>
 </head>
 <body>
@@ -180,6 +194,7 @@ const st = (cls, ic, word) => `<span class="st ${cls}">${svg(ic,2)}${word}</span
 const row = (ic, nm, ds, val, sub) => `<div class="row"><span class="ic">${svg(ic)}</span><div class="mid"><div class="nm">${nm}</div>${ds?`<div class="ds">${ds}</div>`:""}</div><div class="val">${val}${sub?`<small>${sub}</small>`:""}</div><span class="chev">${svg("chev")}</span></div>`;
 const subrow = (ic, nm, ds, val) => `<div class="row sub"><span class="ic">${svg(ic)}</span><div class="mid"><div class="nm" style="font-size:14px;font-weight:500">${nm}</div><div class="ds">${ds}</div></div><div class="val" style="font-size:14px;font-weight:600">${val}</div><span class="chev">${svg("chev")}</span></div>`;
 const add = (nm) => `<div class="row add"><span class="ic">${svg("plus")}</span><span>${nm}</span></div>`;
+const tabbarK = (on = "Клиенты") => `<div class="tabbar">${[["home","Главная"],["cal","План"],["people","Клиенты"],["target","Лиды",2],["more","Ещё"]].map(([k,l,n])=>`<div class="${l===on?"on":""}">${svg(k)}${n?`<span class="badge">${n}</span>`:""}<span>${l}</span></div>`).join("")}</div>`;
 const docsHead = (n) => `<div class="gt"><h3>Документы <span class="cnt">${n}</span></h3></div>`;
 
 /* Шапка и «Сейчас» работы JOB-0001 — как в приложении (снимок /job/j1); суммы на обзоре — целыми долларами (#3029) */
@@ -424,6 +439,55 @@ const S = {
     <div class="lg">${row("doc","Tom Baker — новый лид","нет ответа 2 ч","", st("bad","x","Ответить"))}${row("doc","Bathroom remodel","выезд сегодня 8:30","", st("info","half","Выезд"))}</div>
     </div>
     <div class="tabbar">${[["home","Главная",1],["cal","План"],["people","Клиенты"],["target","Лиды"],["more","Ещё"]].map(([k,l,on])=>`<div class="${on?"on":""}">${svg(k)}<span>${l}</span></div>`).join("")}</div>` },
+
+  /* ===== Клиент — центр: всё по клиенту в одной карточке ===== */
+  K1: { cap: "Клиент: деньги одной строкой, активная работа раскрыта", html: `<div class="scroll">
+    <div class="hdr">${circ("back")}<span class="who">Клиенты</span><span class="demo">• Демо</span><span class="sp"></span>${circ("plus")}${circ("more")}</div>
+    <div class="title" style="margin:8px 0 10px"><h1>Sarah Mitchell</h1></div>
+    <div class="qa" style="margin:0 0 12px">${[["phone","Позвонить"],["sms","SMS"],["route","Маршрут"],["doc","Почта"]].map(([k,l])=>`<div>${circ(k)}${l}</div>`).join("")}</div>
+    <div class="money1"><span>Ждём <b>$1,000</b></span>·<span>оплачено <b>$1,440</b></span>·<span>долга нет</span></div>
+    <div class="jobc">
+      <div class="h"><b>Bathroom remodel</b>${st("info","half","В работе")}</div>
+      <div class="phrase" style="margin:6px 0 10px;font-size:13.5px;color:var(--mut)">Предоплата 2 ждёт оплаты до 25 нояб. · выезд пт 8:30</div>
+      <span class="b acc" style="width:100%;flex:none">Взять оплату</span>
+      <div class="lg">
+        ${row("doc","Смета","подписана 12 нояб.","$3,420", st("ok","ok","Подписана"))}
+        ${row("inv","Предоплата 1","наличные $500 · Zelle $700","$1,200", st("ok","ok","Оплачено"))}
+        ${row("inv","Предоплата 2","ссылка отправлена · до 25 нояб.","$1,000", st("warn","half","Ждём"))}
+        ${row("inv","Остаток","после работы","$1,220", st("neutral","minus","Не выставлен"))}
+      </div>
+    </div>
+    <div class="jobc closed"><div class="h"><span><b style="font-size:15px">TV mount + shelves</b><br><span style="color:var(--mut);font-size:12.5px">$240 · закрыта 20 нояб.</span></span><span style="display:inline-flex;gap:8px;align-items:center">${st("ok","ok","Оплачено")}<span class="chev" style="width:14px;color:var(--mut)">${svg("chev")}</span></span></div></div>
+    </div>${tabbarK()}` },
+  K2: { cap: "«Взять оплату» — шторка поверх клиента", html: `<div class="scroll">
+    <div class="hdr">${circ("back")}<span class="who">Клиенты</span><span class="sp"></span>${circ("plus")}${circ("more")}</div>
+    <div class="title" style="margin:8px 0 10px"><h1>Sarah Mitchell</h1></div></div>${tabbarK()}
+    <div class="sheet"><div class="in"><span class="grab"></span>
+      <h2>Взять оплату</h2><p>Bathroom remodel · Sarah Mitchell</p>
+      <div class="opt"><span class="rad"></span><div class="mid"><div class="nm">Предоплата 2 · INV-0106</div><div class="ds">уже отправлена, ждём до 25 нояб.</div></div><b>$1,000.00</b></div>
+      <div class="opt sel"><span class="rad"></span><div class="mid"><div class="nm">Новая предоплата</div><div class="ds">предоплата 3 · ещё не выставлено $1,220.00</div></div></div>
+      <div class="fld">$700.00<span>не больше $1,220.00</span></div>
+      <div class="seg"><span class="on">Отправить ссылку</span><span>Записать оплату</span></div>
+      <span class="b acc" style="flex:none;height:44px">${svg("send")} Отправить ссылку на $700.00</span>
+    </div></div>` },
+  K3: { cap: "Документ открывается поверх клиента; «Готово» — назад в клиента", html: `<div class="scroll">
+    <div class="hdr">${circ("back")}<span class="who">Клиенты</span></div>
+    <div class="title" style="margin:8px 0 10px"><h1>Sarah Mitchell</h1></div></div>
+    <div class="dim"></div><div class="over">
+      <div style="display:flex;align-items:center;justify-content:space-between;height:44px"><span style="color:var(--acc-text);font-weight:600">Готово</span><b>Предоплата 2</b>${circ("more")}</div>
+      <div style="display:flex;gap:8px;align-items:center;margin:4px 0 8px">${st("warn","half","Ждём оплаты")}<span style="color:var(--mut);font-size:13px">INV-0106 · до 25 нояб.</span></div>
+      <div class="btns"><span class="b sec">Напомнить</span><span class="b sec">Записать оплату</span></div>
+      <div class="pdf"><h4>Invoice INV-0106 · Deposit 2</h4><div style="color:#585B63;margin-bottom:8px">Bathroom remodel · Sarah Mitchell</div>
+        <div class="l"><span>This invoice</span><b>$1,000.00</b></div><div class="l"><span>Contract total</span><span>$3,420.00</span></div><div class="l"><span>Paid so far</span><span>$1,200.00</span></div><div class="l"><span>Left after this</span><b>$1,220.00</b></div></div>
+    </div>` },
+  K4: { cap: "Главная: «Требует внимания» и деньги — нажатие ведёт в клиента", html: `<div class="scroll">
+    <div class="hdr"><span class="av">AP</span><span class="sp"></span>${circ("plus")}</div>
+    <div class="bigt" style="margin-bottom:10px">Главная</div>
+    <div class="gt"><h3>Требует внимания</h3></div>
+    <div class="lg">${row("doc","Tom Baker","новый лид · нет ответа 2 ч","", st("bad","x","Ответить"))}${row("inv","David Kim","Kitchen faucet · счёт просрочен 9 дн","$1,840", st("bad","x","Просрочен"))}</div>
+    <div class="gt" style="margin-top:14px"><h3>Ждём денег</h3></div>
+    <div class="lg">${row("inv","Sarah Mitchell","Bathroom remodel · предоплата 2","$1,000", st("warn","half","Ждём"))}${row("inv","Robert Chen","Interior painting · срок 23 нояб.","$960", st("warn","half","Ждём"))}</div>
+    </div>${tabbarK("Главная")}` },
 
 };
 
