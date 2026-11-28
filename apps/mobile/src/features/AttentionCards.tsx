@@ -20,6 +20,7 @@ import { enRouteSms } from "./jobHistory";
 import { useConsentQuestion } from "./LocationParts";
 import { smsWithBody } from "./sms";
 import { formatDayKey, minuteIn } from "./zone";
+import { greetingFor } from "./greeting";
 import { headDay, todayKey } from "./calendar";
 import { useFabItems } from "@/nav/Fab";
 import { useSearchIcon } from "@/nav/HeaderIcons";
@@ -236,10 +237,7 @@ export function useGreeting() {
   const { db } = useStore();
   const { t } = useI18n();
   const me = db.members.find((m) => m.id === db.me);
-  const name = (me?.name ?? "").split(/\s+/)[0] ?? "";
-  const m = minuteIn(Date.now());
-  const key = m < 12 * 60 ? "proto.home.hello.morning" : m < 18 * 60 ? "proto.home.hello.day" : "proto.home.hello.evening";
-  return name ? t(key, { name }) : t("nav.home");
+  return greetingFor(me?.name ?? "", minuteIn(Date.now()), t);
 }
 
 /** «Triage»: the rest of the queue — one reason per card, every card opens its record (it did not before). */

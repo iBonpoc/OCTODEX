@@ -5,6 +5,8 @@
 # - a PR without the label: only the specs it added or changed, at all 6 views in one job; none — no e2e (stop of 18.11,
 #   rule 26: 9 PRs × the full matrix held every runner). Putting the label on («labeled») starts the full run; the lead
 #   merges only after it.
+# - a DRAFT PR without the label (#3117 А): no e2e and no bundle — only pause, fast, numbers, rule22, scenarios.
+#   «Ready for review» («ready_for_review») starts the usual run; «к-влитию» the full one, draft or not.
 # The job "checks" is green only when all of them are — that is the one branch protection requires, and the release
 # (release.yml) starts only after it is green on main.
 # Docs-only changes (every changed file is under docs/ or ends in .md) skip the browser runs: they cannot change the app
@@ -14,8 +16,9 @@ name: Checks
 
 on:
   pull_request:
-    # «labeled»: putting «к-влитию» on starts the full e2e matrix (scripts/e2eScope.cjs)
-    types: [opened, synchronize, reopened, labeled]
+    # «labeled»: putting «к-влитию» on starts the full e2e matrix (scripts/e2eScope.cjs); «ready_for_review»: a draft
+    # (quick checks only) becomes ready — the usual run with e2e and the bundle (#3117 А)
+    types: [opened, synchronize, reopened, labeled, ready_for_review]
   push:
     branches: [main]
   # Nightly on main: every spec at all 3 widths × 2 themes (docs/ai/CHECKS.md §1). 10:17 UTC = 2:17 AM in Los Angeles,
@@ -79,6 +82,7 @@ jobs:
       views: ${{ steps.views.outputs.views }}
       parts: ${{ steps.views.outputs.parts }}
       specs: ${{ steps.views.outputs.specs }}
+      draft: ${{ steps.views.outputs.draft }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -109,6 +113,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_DRAFT: ${{ github.event.pull_request.draft }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: node scripts/e2eScope.cjs
@@ -171,10 +176,10 @@ jobs:
 
   bundle:
     # CHECKS §3а п.2: the iOS and Android bundles build (Metro, Hermes) and the dependencies match the Expo SDK.
-    # Not EAS: no account, no network beyond npm. Skipped for docs-only, like e2e.
+    # Not EAS: no account, no network beyond npm. Skipped for docs-only, like e2e, and for a draft PR (#3117 А).
     name: iOS + Android bundle, Expo checks
     needs: changes
-    if: needs.changes.outputs.app == 'true'
+    if: needs.changes.outputs.app == 'true' && needs.changes.outputs.draft != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -274,6 +279,9 @@ jobs:
         working-directory: apps/mobile
         env:
           SPECS: ${{ needs.changes.outputs.specs }}
+          # CHECKS §9 №87: a failed run of these specs keeps a Playwright trace in the artifact (e2e/traceOnFail.cjs); only the
+          # specs whose red is not understood yet — tracing costs CPU. Take a spec off once its cause is found
+          E2E_TRACE_SPECS: 37-service-categories.cjs
         run: |
           bash ../../scripts/aptRetries.sh
           bash ../../scripts/playwrightInstall.sh
@@ -380,6 +388,9 @@ jobs:
           if [ "${{ needs.changes.outputs.e2e }}" = "none" ] && [ "$e2e" = "skipped" ] && [ "${{ needs.build-web.result }}" = "skipped" ]; then e2e=success; fi
           echo "e2e mode: ${{ needs.changes.outputs.e2e }}"
           if [ "$docs" = true ] && [ "$bundle" = "skipped" ]; then bundle=success; fi
+          # a draft PR without «к-влитию» (#3117 А): no bundle, no e2e (mode none above) — green on the quick checks
+          if [ "${{ needs.changes.outputs.draft }}" = "true" ] && [ "$bundle" = "skipped" ]; then bundle=success; fi
+          echo "draft: ${{ needs.changes.outputs.draft }}"
           # rule22 runs on pull requests only: "skipped" on push/schedule is fine, failure is not
           [ "${{ needs.rule22.result }}" != "failure" ] && [ "${{ needs.rule22.result }}" != "cancelled" ] || { echo "::error::rule22=${{ needs.rule22.result }}"; exit 1; }
           # scenarios (#2068) runs on pull requests only, like rule22

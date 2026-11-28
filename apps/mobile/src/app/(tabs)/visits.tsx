@@ -13,7 +13,7 @@ import { isAssigned, visitEnd, visitWhen } from "@/features/schedule";
 import { quietStatuses } from "@/features/planSlots";
 import { timeLead } from "@/features/planFeed";
 import { isoDayKey, todayKey } from "@/features/calendar";
-import { startsIn, useEnRoute, useGreeting, useHomeHeader } from "@/features/AttentionCards";
+import { startsIn, useEnRoute, useHomeHeader } from "@/features/AttentionCards";
 import { GroupRow, ListGroup } from "@/ui/groupedList";
 import { mapsUrl } from "@/ui/listCardLayout";
 import type { NowCardProps } from "@/ui/nowCard";
@@ -36,7 +36,6 @@ export default function Visits() {
   useTick();
   const { t, tn, time, day, moneyWhole, duration } = useI18n();
   const { db, queue, online } = useStore();
-  const greeting = useGreeting();
   const header = useHomeHeader();
   const d = techDay(db, db.me);
   // the next not over: a visit whose window has ended without him is «Пропущен» in the rest of the day, never «Дальше · В пути»
@@ -125,7 +124,7 @@ export default function Visits() {
   return (
     <OverviewScreen
       testID="visits"
-      title={greeting}
+      title={t("nav.home")}
       greeting={header.greeting}
       headerIcons={header.icons}
       create={header.create}

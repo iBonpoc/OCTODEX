@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
+import { offerNewClient, splitTyped } from "@/features/estimate/newClientHandoff";
 import { useStore } from "@/data/store";
 import { companyState } from "@/features/companySetup";
 import type { BillingAddress, PhoneLabel } from "@/data/types";
@@ -41,22 +42,25 @@ import { EditorScreen } from "@/ui/templates";
  * Without `id` — a new client entered by hand (repeat customer, neighbor, phone call); it is active at once.
  */
 export default function EditClient() {
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  // `for` (#2887): opened from an estimate's client sheet — once made, the client goes back to that estimate
+  // `name`: what was typed in that sheet's search — a name goes to the name, digits to the phone (#2887, crm-reviewer №2)
+  const { id, for: forKey, name: typedName } = useLocalSearchParams<{ id?: string; for?: string; name?: string }>();
+  const typed = splitTyped(typedName);
   const store = useStore();
   const { t } = useI18n();
   const toast = useToast();
   const creating = !id;
   const c = id ? store.db.customers.find((x) => x.id === id) : undefined;
   const p = id ? store.db.properties.find((x) => x.customerId === id) : undefined;
-  const [name, setName] = useState<NameParts>(c ? namePartsOf(c) : { first: "", last: "", company: "" });
+  const [name, setName] = useState<NameParts>(c ? namePartsOf(c) : { first: typed.first, last: typed.last, company: "" });
   // each line has its own key: a line keeps its field when one above it goes
   const seq = useRef(0);
   const line = (x: PhoneLine, k: string): PhoneLine & { k: string } => ({ ...x, k });
-  const [phones, setPhones] = useState<(PhoneLine & { k: string })[]>(() => (c && mainPhonesOf(c).length ? mainPhonesOf(c) : [{ number: "", label: "mobile" as const }]).map((x, i) => line(x, `p${i}`)));
-  const [emails, setEmails] = useState<{ k: string; address: string }[]>(() => (c && mainEmailsOf(c).length ? mainEmailsOf(c) : [""]).map((address, i) => ({ k: `e${i}`, address })));
+  const [phones, setPhones] = useState<(PhoneLine & { k: string })[]>(() => (c && mainPhonesOf(c).length ? mainPhonesOf(c) : [{ number: typed.phone, label: "mobile" as const }]).map((x, i) => line(x, `p${i}`)));
+  const [emails, setEmails] = useState<{ k: string; address: string }[]>(() => (c && mainEmailsOf(c).length ? mainEmailsOf(c) : [typed.email]).map((address, i) => ({ k: `e${i}`, address })));
   const nextKey = (pre: string) => `${pre}n${++seq.current}`;
   const [sourceOpen, setSourceOpen] = useState(false);
-  const [address, setAddress] = useState(p?.address ?? "");
+  const [address, setAddress] = useState(p?.address ?? (c ? "" : typed.street));
   const [city, setCity] = useState(p?.city ?? "");
   const [sourceId, setSourceId] = useState(c?.sourceId ?? store.db.sources.find((x) => x.active && x.name === "Referral")?.id ?? store.db.sources[0]?.id ?? "");
   const [billingOwn, setBillingOwn] = useState(!!c?.billing);
@@ -101,8 +105,18 @@ export default function EditClient() {
         undos.push(store.saveCustomerPeople(r.id, withMainContactsAll(made, lines, emails.map((e) => e.address))));
       }
       // all or nothing (DS §15.2): the client and its name parts go back together, or neither
-      toast.show(store.online ? t("clients.created", { name: shown }) : t("offline.queued"), store.undoTogether(undos));
-      router.replace(`/client/${r.id}`);
+      // #2887: made from an estimate — back to it (it takes the client and its property). No «Вернуть» there (crm-reviewer №1):
+      // the estimate holds the client at once, and an undo would leave it on a client that is gone; a creation is not
+      // irreversible (rule 5) — the client is deleted from its card. With no estimate under the form — the client's card.
+      const toEstimate = !!forKey && router.canGoBack() && offerNewClient(forKey, { customerId: r.id, propertyId: r.propertyId });
+      const said = store.online ? t("clients.created", { name: shown }) : t("offline.queued");
+      if (toEstimate) {
+        toast.show(said);
+        router.back();
+      } else {
+        toast.show(said, store.undoTogether(undos));
+        router.replace(`/client/${r.id}`);
+      }
       return;
     }
     // «Без налога» (П-2a): only when it changed — a signed document never changes, new ones get the exempt profile

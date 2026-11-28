@@ -68,6 +68,13 @@ export const ru = {
   "fab.list.plan": "В план",
   "fab.list.calls": "Звонок",
   "fab.list.messages": "Сообщение",
+  // DS §12.13 «Шапка» (#2841, ревью design/crm): «＋» has no word — VoiceOver says the action
+  "fab.a11y.clients": "Новый клиент",
+  "fab.a11y.tasks": "Новая задача",
+  "fab.a11y.plan": "Добавить в план",
+  "fab.a11y.calls": "Новый звонок",
+  "fab.a11y.messages": "Новое сообщение",
+  "money.newExpense": "Новый расход",
   // #1395: the short object on the card of an address, two buttons in a row on the phone («＋ Смета», not the long path.*New)
   "fab.obj.estimate": "Смета",
   "fab.obj.job": "Работа",
@@ -371,7 +378,7 @@ export const ru = {
   "offline.synced": "Сеть есть. Очередь отправлена: {n}",
   "offline.toggle": "Проверка: режим без сети",
 
-  "triage.title": "Разбор дел",
+  "triage.title": "Требует внимания",
   "triage.of": "{i} из {n}",
   "triage.done": "Всё разобрано",
   "triage.doneHint": "Новые дела появятся здесь сами.",
@@ -1682,6 +1689,8 @@ export const ru = {
   "task.saved": "Задача сохранена",
   "task.noDate": "Без срока",
   "task.none": "Открытых задач нет",
+  // DS §12.13 «Шапка» (#2841, ревью design/crm): the count of a list with no chips — a line under the title
+  "task.openN": "Открытых: {n}",
   "task.overdue": "Просрочено",
   "task.what": "Что сделать",
   "task.whatPh": "Например: перезвонить и уточнить объём",
@@ -2834,6 +2843,8 @@ export const ru = {
   "ds.btn.pairLong": "Длинная надпись — кнопки столбцом",
   "ds.btn.secondary": "Вторичная",
   "ds.btn.secondaryNote": "Рядом с главной: surf2 и рамка",
+  "ds.btn.outline": "Обводка",
+  "ds.btn.outlineNote": "Без заливки, тонкая рамка `dash`: вторая рядом с главной на ячейке `surf2` («Готово» в низу сметы)",
   "ds.btn.ghost": "Тихая",
   "ds.btn.ghostNote": "Без заливки: «Отменить», «Назад»",
   "ds.btn.danger": "Опасная",
@@ -5568,6 +5579,9 @@ export const ru = {
   "proto.est.depositShort": "депозит {amount}",
   "proto.est.done": "Готово",
   "proto.est.saveSend": "Сохранить и отправить",
+  // #2935 (founder 27.11, «как у Джобер»): the main step of the estimate editor's bar
+  "est.bar.send": "Отправить",
+  "ds.proto.sendBar": "Низ сметы: Готово · Отправить",
   "proto.est.add": "Добавить в смету",
   "proto.est.rowsFull": "Позиции подробно",
   "proto.est.help": "Нажать — правка · удержать — порядок",
