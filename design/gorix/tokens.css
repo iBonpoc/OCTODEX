@@ -172,6 +172,13 @@
   --component-mode-row-field-w: 96px;
   --component-mode-row-sum-w: 80px;
   --component-mode-row-title-w: 112px;
+  --component-mode-toggle-cell: 30;
+  --component-mode-toggle-h: 30px;
+  --component-mode-toggle-knob: 24px;
+  --component-mode-toggle-dot: 4px;
+  --component-mode-toggle-title-min-w: 64;
+  --component-mode-toggle-field-narrow-w: 80;
+  --component-mode-toggle-sum-min-w: 60;
   --component-tab-h: 30px;
   --component-tab-fade-w: 32;
   --component-switch-w: 42px;
