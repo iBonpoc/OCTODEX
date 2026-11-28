@@ -147,6 +147,18 @@ describe("applyOp — photo.add and photo.retry tell the phone back", () => {
     expect(r).toEqual({ photo: { id: "f1", failed: "type" } });
     expect(writes[0]).toMatchObject({ table: "files", op: "upsert" });
   });
+  it("#3085 file.add: the client's files row (customer_id, no visit), then the file the photo's way; the answer marks it", async () => {
+    const r = await applyOp({ k: "file.add", id: "f9", customerId: "cu1", uri: "file:///c.jpg" }, "c1", "u1");
+    expect(writes[0]).toMatchObject({ table: "files", op: "upsert", row: { id: "f9", company_id: "c1", kind: "photo", customer_id: "cu1" } });
+    expect(writes[0]!.row).not.toHaveProperty("visit_id");
+    expect(storage.uploads).toBe(1);
+    expect(statusOf()).toEqual(["uploaded"]);
+    expect(r).toEqual({ photo: { id: "f9", failed: null } });
+  });
+  it("#3085 file.add refused by the storage: the reason comes back (shown on the photo, «Повторить»)", async () => {
+    storage.error = storageError(413, "413", "The object exceeded the maximum allowed size");
+    expect(await applyOp({ k: "file.add", id: "f9", customerId: "cu1", uri: "file:///c.jpg" }, "c1", "u1")).toEqual({ photo: { id: "f9", failed: "tooBig" } });
+  });
   it("photo.add without a file: nothing to tell", async () => {
     expect(await applyOp({ k: "photo.add", id: "f1", visitId: "v1", stage: "before" }, "c1", "u1")).toBeUndefined();
   });

@@ -10,6 +10,7 @@ import { collectedPayments } from "./payments/collected";
 import { clientMoney } from "@octo/estimating-engine";
 import { isOverdue } from "@/data/selectors";
 import { getZone, minuteIn } from "./zone";
+import { sentOnceAt } from "@/features/estimateStatus";
 
 export type Period = "today" | "week" | "month";
 
@@ -50,7 +51,8 @@ export interface PeriodNumbers {
 export function periodNumbers(db: DB, p: Period, today?: DayKey): PeriodNumbers {
   const r = periodRange(p, today);
   const leads = db.leads.filter((l) => inRange(l.receivedAt, r)).length;
-  const sent = db.estimates.filter((e) => inRange(e.sentAt, r)).length;
+  // #3059: an estimate edited after it went out (a draft again) still counts as sent — the one rule (features/estimateStatus)
+  const sent = db.estimates.filter((e) => inRange(sentOnceAt(e), r)).length;
   const signedList = db.estimates.filter((e) => e.status === "approved" && inRange(e.approvedAt, r));
   const pays = collectedPayments(db).filter((x) => inRange(x.at, r));
   return {

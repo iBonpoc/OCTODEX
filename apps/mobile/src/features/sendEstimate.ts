@@ -10,6 +10,7 @@ import { docMoney } from "./docPdf";
 import { mailtoHref, smsHref } from "./contactLinks";
 import { canServe } from "./clients";
 import { exemptDoc, issueCount, sendIssues, type SendIssues } from "./estimateDoc";
+import { sentOnceAt } from "./estimateStatus";
 import type { DB, Estimate, EstimateDoc } from "@/data/types";
 
 export function clientLink(token: string): string {
@@ -75,10 +76,10 @@ export type BeforeSend =
   | { ok: false; reason: "no_service" }
   | { ok: false; reason: "lines"; issues: SendIssues; canForce: boolean }
   | { ok: true; resave?: EstimateDoc };
-export function beforeSend(db: Pick<DB, "customers">, e: Pick<Estimate, "customerId" | "status" | "doc">, opts: { force?: boolean } = {}): BeforeSend {
+export function beforeSend(db: Pick<DB, "customers">, e: Pick<Estimate, "customerId" | "status" | "doc" | "sentAt" | "lastSentAt">, opts: { force?: boolean } = {}): BeforeSend {
   if (!canServe(db, e.customerId)) return { ok: false, reason: "no_service" };
   if (e.doc) {
-    const issues = sendIssues(e.doc, { firstSend: e.status === "draft" });
+    const issues = sendIssues(e.doc, { firstSend: e.status === "draft" && !sentOnceAt(e) });
     const canForce = issues.noPrice.length === 0;
     if (!canForce || (!opts.force && issueCount(issues) > 0)) return { ok: false, reason: "lines", issues, canForce };
   }

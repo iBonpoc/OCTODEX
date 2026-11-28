@@ -26,7 +26,11 @@ export function isCompact(scrollY: number, at: number): boolean {
  * Sideways past the slop is not ours (a QuickAction, a horizontal strip); the other direction — the page's own scroll.
  */
 export function expandSwipeStart(dx: number, dy: number, slop: number, open: boolean): "activate" | "fail" | "wait" {
-  const along = open ? -dy : dy;
+  // #3060 (founder 27.11: «листаю — оно все время возвращается назад… не могу доскроллить до „Изменить“»): an OPEN panel is read by
+  // scrolling the page — a finger up there is the scroll's, never «close» (it took the drag and pulled the panel back). It closes
+  // by «Свернуть» / «⌄» (iOS Contacts: the card scrolls, nothing under the finger folds it)
+  if (open) return "fail";
+  const along = dy;
   if (Math.abs(dx) > slop && Math.abs(dx) * 2 >= Math.abs(dy)) return "fail";
   if (along > slop && along > Math.abs(dx) * 2) return "activate";
   if (-along > slop) return "fail";

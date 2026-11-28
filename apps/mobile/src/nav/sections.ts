@@ -103,8 +103,8 @@ export function sectionHref(id: SectionId, role: Role): string {
       // a section of its own for every role (founder 07.11, spec 31 §7а); /leads holds the leads only
       return "/estimates";
     case "finance":
-      // visual v2 №6 (#2344): the tab opens its overview; the tech has no «Деньги» tab (his estimates are in «Ещё»)
-      return role === "tech" ? "/estimates" : "/finance";
+      // #3025: ONE «Деньги» — the tab opens the lists on «Счета» (the overview repeated «Главная»); the tech has no «Деньги» tab
+      return role === "tech" ? "/estimates" : "/invoice";
     case "invoices":
       // the one path to debts (18 §1): the list opens on «Не оплачен · Просрочен»
       return "/invoice";

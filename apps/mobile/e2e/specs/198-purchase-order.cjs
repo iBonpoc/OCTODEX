@@ -79,7 +79,9 @@ exports.run = async (h) => {
 
   // cancel asks first
   await h.go(`/purchase-order/${ord.id}`);
-  await tap("po-cancel");
+  // DS §7.5 (#3065): «Отменить заказ» lives in «⋯» of the header, not as a third button under the order
+  await tap("po-more");
+  await p.getByTestId("po-cancel").locator("visible=true").first().click();
   await tap("po-cancel-yes", h.sheet());
   db = await dbWhen((d) => d.purchaseOrders.find((o) => o.id === ord.id)?.status === "cancelled");
   h.expect(db.purchaseOrders.find((o) => o.id === ord.id).status === "cancelled", "cancelled after «Да, отменить»");
