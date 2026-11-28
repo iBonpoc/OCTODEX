@@ -11,6 +11,7 @@ import { T } from "@/ui/primitives";
 import { Sheet, SheetScroll } from "@/ui/overlays";
 import { Divider, ListRow } from "@/ui/surfaces";
 import { canServe } from "@/features/clients";
+import { ActionRow } from "@/ui/multiValueField";
 
 const KINDS: (CatalogKind | "all")[] = ["all", "service", "labor", "material", "kit"];
 export const kindLabel = (k: CatalogKind | "all"): DictKey => (k === "all" ? "cat.all" : (`cat.kind.${k}` as DictKey));
@@ -63,8 +64,11 @@ export function CatalogPicker({ visible, onClose, onPick, exclude }: { visible: 
   );
 }
 
-/** Pick a client and one of their properties. */
-export function ClientPicker({ visible, onClose, onPick, onExited }: { visible: boolean; onClose: () => void; onPick: (customerId: string, propertyId: string) => void; onExited?: () => void }) {
+/**
+ * Pick a client and one of their properties. `onNew` (#2887): «⊕ Новый клиент» the first row over the list (as «New Contact» in
+ * iOS; ActionRow, DS §9 А14а) — the client is made without leaving the estimate.
+ */
+export function ClientPicker({ visible, onClose, onPick, onNew, onExited }: { visible: boolean; onClose: () => void; onPick: (customerId: string, propertyId: string) => void; onNew?: (typed: string) => void; onExited?: () => void }) {
   const { db } = useStore();
   const { t } = useI18n();
   const [q, setQ] = useState("");
@@ -76,6 +80,8 @@ export function ClientPicker({ visible, onClose, onPick, onExited }: { visible: 
       <View style={{ gap: space[3] }}>
         <TextField type="search" value={q} onChangeText={setQ} placeholder={t("clients.title")} icon="search" />
         <SheetScroll style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
+          {onNew ? <ActionRow icon="plusCircle" label={t("clients.new")} onPress={() => onNew(q.trim())} testID="est-client-new" /> : null}
+          {onNew ? <Divider /> : null}
           {rows.length === 0 ? <StatusChip status="neutral" label={t("clients.empty")} /> : null}
           {rows.map(({ p, c }, i) => (
             <View key={p.id} testID={`est-client-pick-${p.id}`}>
