@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { DS_OWN_FT_MAX, dsOwnFt } from "../src/modules/gutters/draw/dsOwnFt";
 
-describe("dsOwnFt", () => {
+describe("С5 (spec 33-windows #2978): dsOwnFt — своя высота трубы", () => {
   it("empty — by the storey", () => {
     expect(dsOwnFt("")).toBeNull();
     expect(dsOwnFt("  ")).toBeNull();

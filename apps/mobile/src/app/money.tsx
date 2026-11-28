@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { HeaderButton } from "@/ui/headerIcon";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
@@ -69,7 +70,7 @@ export default function Money() {
       help={t("help.money")}
       hintKey="money"
       back={back}
-      right={<Button label={t("money.addExpense")} icon="plus" size="sm" variant="secondary" onPress={() => router.push("/expense/new")} />}
+      right={<HeaderButton icon="plus" label={t("money.newExpense")} testID="expense-new" onPress={() => router.push("/expense/new")} />}
     >
       {db.expenses.length === 0 ? <Empty icon="wallet" title={t("money.expenses")} /> : null}
       {db.expenses.length ? (

@@ -9,9 +9,9 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
-type Scope = { mode: string; views: string[]; parts: number[]; specs: string[]; message: string };
+type Scope = { mode: string; views: string[]; parts: number[]; specs: string[]; draft: boolean; message: string };
 const { decide, specsFrom, helperChanged, MERGE_LABEL, ALL_VIEWS } = require("../../../scripts/e2eScope.cjs") as {
-  decide: (a: { event: string; labels: string[]; changedSpecs: string[] | null; helper?: boolean }) => Scope;
+  decide: (a: { event: string; labels: string[]; changedSpecs: string[] | null; helper?: boolean; draft?: boolean }) => Scope;
   helperChanged: (p: unknown) => boolean;
   specsFrom: (p: unknown) => string[];
   MERGE_LABEL: string;
@@ -59,9 +59,27 @@ describe("e2eScope.decide: the full matrix only with «к-влитию» (and al
   });
 });
 
+describe("e2eScope.decide: a draft PR runs only the quick checks (#3117 А)", () => {
+  it("a draft without the label: no e2e (mode none) and draft=true (no bundle), even with changed specs or a helper", () => {
+    for (const a of [{ changedSpecs: ["68-a.cjs"] }, { changedSpecs: [], helper: true }, { changedSpecs: null }]) {
+      expect(decide({ event: "pull_request", labels: ["стенд"], draft: true, ...a })).toMatchObject({ mode: "none", views: [], parts: [], specs: [], draft: true });
+    }
+  });
+  it("a draft labelled «к-влитию»: the full matrix and the bundle (draft=false)", () => {
+    expect(decide({ event: "pull_request", labels: ["к-влитию"], draft: true, changedSpecs: [] })).toMatchObject({ mode: "full", views: SIX, draft: false });
+  });
+  it("ready for review (draft false): the usual scope, the bundle runs", () => {
+    expect(decide({ event: "pull_request", labels: [], draft: false, changedSpecs: ["68-a.cjs"] })).toMatchObject({ mode: "changed", specs: ["68-a.cjs"], draft: false });
+    expect(decide({ event: "pull_request", labels: [], changedSpecs: [] }).draft).toBe(false);
+  });
+  it("push to main is never a draft", () => {
+    expect(decide({ event: "push", labels: [], changedSpecs: [], draft: true })).toMatchObject({ mode: "full", draft: false });
+  });
+});
+
 describe("checks.yml wiring", () => {
   it("putting a label on a PR starts a run («labeled» in the pull_request types)", () => {
-    expect(yml).toMatch(/pull_request:\s*\n(?:\s*#.*\n)*\s*types: \[opened, synchronize, reopened, labeled\]/);
+    expect(yml).toMatch(/pull_request:\s*\n(?:\s*#.*\n)*\s*types: \[opened, synchronize, reopened, labeled, ready_for_review\]/);
   });
   it("the «changes» job asks scripts/e2eScope.cjs with the PR's labels, base and head, and passes mode/views/parts/specs on", () => {
     const c = job("changes");
@@ -78,6 +96,15 @@ describe("checks.yml wiring", () => {
     expect(e).toContain("part: ${{ fromJSON(needs.changes.outputs.parts) }}");
     expect(e).toContain("needs.changes.outputs.e2e != 'none'");
     expect(job("build-web")).toContain("needs.changes.outputs.e2e != 'none'");
+  });
+  it("draft (#3117 А): e2eScope gets PR_DRAFT and gives «draft»; the bundle is skipped on it and «checks» reads that as green", () => {
+    const c = job("changes");
+    expect(c).toContain("PR_DRAFT: ${{ github.event.pull_request.draft }}");
+    expect(c).toContain("draft: ${{ steps.views.outputs.draft }}");
+    expect(job("bundle")).toContain("if: needs.changes.outputs.app == 'true' && needs.changes.outputs.draft != 'true'");
+    expect(job("checks")).toContain(`if [ "\${{ needs.changes.outputs.draft }}" = "true" ] && [ "$bundle" = "skipped" ]; then bundle=success; fi`);
+    // the quick checks do not look at the draft state
+    for (const j of ["pause", "fast", "numbers", "rule22", "scenarios"]) expect(job(j)).not.toContain("draft");
   });
   it("view «all» runs only the PR's specs at all 6 views (--all-layouts); other views keep width/theme/shard", () => {
     const e = job("e2e");

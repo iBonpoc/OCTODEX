@@ -33,10 +33,11 @@ import { HeaderAvatar, HeaderBack, HeaderBar, HeaderBig, HeaderClose, HeaderPare
 import { panelCloses, pauseTarget, settleTarget, stickShift, type HeaderKind } from "./templates/headerMath";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useStore } from "@/data/store";
-import { useI18n } from "@/i18n";
+import { useI18n, type DictKey } from "@/i18n";
 import { Icon, Press, T, type IconKey } from "./primitives";
 import { HelpButton, Menu, Scrim } from "./overlays";
 import type { IconAction } from "./templates/types";
+import { backLabel, type BackKind } from "./templates/templateRules";
 import { useHints } from "./hints";
 
 /* ---------- Background: --bg, or the ground gradient (--ground), + soft glows (--glow) ---------- */
@@ -512,6 +513,15 @@ export function useFooterShown(): boolean {
 const ScrollLockCtx = createContext<(locked: boolean) => void>(() => {});
 export const useScrollLock = () => useContext(ScrollLockCtx);
 
+const BACK_WORD: Record<BackKind, DictKey> = {
+  job: "job.card", estimate: "est.detail", invoice: "inv.title", client: "client.card", lead: "lead.card",
+  property: "prop.card", visit: "visit.title", receipt: "rcpt.title", order: "po.order",
+};
+function backWord(label: string, href: string, t: (k: DictKey) => string): string {
+  const b = backLabel(label, href);
+  return "label" in b ? b.label : t(BACK_WORD[b.kind]);
+}
+
 export function Screen({
   title,
   help,
@@ -626,7 +636,8 @@ export function Screen({
   /** a ☰ root (Leads, Jobs, Catalog…, docs/specs/13а §3): a root like a tab — ☰, not the screen's own «back» */
   const menuRoot = !up && !!nav.section;
   const hasUp = !!(up || (back && !menuRoot));
-  const upLabel = up ? ("key" in up.label ? t(up.label.key) : up.label.text) : undefined;
+  // DS §12.13 «Шапка» (#2841): a parent's title longer than BACK_MAX is said by its kind word, never cut with «…»
+  const upLabel = up ? backWord("key" in up.label ? t(up.label.key) : up.label.text, up.href, t) : undefined;
   const trail = up ? breadcrumbs(pathname, params, store.db, store.role) : [];
   const go = goTo;
   const goUp = () => {
@@ -848,9 +859,12 @@ export function Screen({
       {big}
       <UpdateBar />
       {subtitle && kind !== "editor" ? (
-        <T v="body" tone="mut">
-          {subtitle}
-        </T>
+        // the line under the title («Открытых: 5», Д-шапка-7): its own testID — the tests read it, not its words
+        <View testID={testID ? `${testID}-subtitle` : undefined}>
+          <T v="body" tone="mut">
+            {subtitle}
+          </T>
+        </View>
       ) : null}
       {/* spec 42 S34: the company's name ▾ (two or more companies); a company not loaded here yet, offline — what to do */}
       {home ? <CompanyLine /> : null}
@@ -1121,7 +1135,9 @@ export function Screen({
       <View style={{ flex: 1 }}>
         <Background />
         {pinned ? (
+          // 820/1280 with a parent: the pinned address bar IS the screen's one header (its row) — the same testID as HeaderBar's
           <View
+            testID="screen-head"
             onLayout={(e) => setBarH(e.nativeEvent.layout.height)}
             style={{ paddingTop: navInsets.safeTop + space[3], paddingBottom: space[1], paddingLeft: navInsets.left, paddingRight: navInsets.right, gap: space[2], borderBottomWidth: component.hairline, borderBottomColor: c.bd }}
           >

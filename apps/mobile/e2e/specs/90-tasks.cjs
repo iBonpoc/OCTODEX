@@ -4,7 +4,7 @@ const { objMore, objSection } = require("../objectScreen.cjs");
 const { pressUndo } = require("../gutters.cjs");
 const { dayKey } = require("../companyTime.cjs");
 /**
- * Wave 6-1 «Задачи» (docs/specs/20 §7, §9; 13 §3.7): «Ещё» → «Задачи» opens the list «Задачи · n» (v2 #2350, the List template:
+ * Wave 6-1 «Задачи» (docs/specs/20 §7, §9; 13 §3.7): «Ещё» → «Задачи» opens the list «Задачи», «Открытых: n» under it (Д-шапка-7, #2922; the List template:
  * groups by the day, no «% готово» and no status chips — «Показать выполненные» is an item of «⋯»);
  * «＋» asks «к чему» first (nothing loose, 13 §2.4), then a task with a time is saved, shows in the list and in the Plan;
  * the row's done circle with «Отменить» (rule 5); «Показать выполненные» and the search; the task's subject opens the client.
@@ -19,7 +19,12 @@ exports.run = async (h) => {
   const wide = h.layout.width > 390;
   const m = menuApi(h);
   const plus = () => listCreate(p, "tasks", "tasks-create-new");
-  const count = async (n, what) => h.expectText(new RegExp(`Задачи · ${n}( |\\||$)`), what);
+  // DS §12.13 Д-шапка-7 (#2841, #2922): the title has no number — the open count is the line under it («Открытых: n»), read by its testID
+  const count = async (n, what) => {
+    const line = p.getByTestId("tasks-subtitle").locator("visible=true").first();
+    await line.filter({ hasText: new RegExp(`^Открытых: ${n}$`) }).waitFor({ timeout: 5000 });
+    h.expect(((await line.innerText()) || "").trim() === `Открытых: ${n}`, what);
+  };
 
   // «Ещё» → «Задачи»
   await h.go("/today");

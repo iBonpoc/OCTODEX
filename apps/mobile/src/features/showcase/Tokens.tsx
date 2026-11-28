@@ -31,7 +31,8 @@ const MODULE_ONLY = /^(drawing|tape)\b|\.(drawing|tape)\b/;
 /** the group of `tokens` the section draws; themes show the active theme only */
 function groupRows(group: string, themeName: string): [string, string | number][] {
   const v = (tokens as Record<string, unknown>)[group];
-  if (group === "themes") return flatten((v as Record<string, unknown>)[themeName]);
+  // themes and GoRix «Повышение контраста» (highContrast) — the active theme only
+  if (group === "themes" || group === "highContrast") return flatten((v as Record<string, unknown>)[themeName]);
   return flatten(v);
 }
 
