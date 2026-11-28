@@ -110,6 +110,14 @@ describe.each(names)("%s input frame (DS §8.1, #1594: ≥ 3:1 to the screen, WC
   });
 });
 
+describe.each(names)("%s outline button edge (#2935 п.3: «Готово» on the estimate bar, WCAG 1.4.11)", (name) => {
+  const c = themes[name];
+  it("`dash` stands out ≥ 3:1 from the bar's cell `surf2` and from the screen", () => {
+    expect(ratio(parse(c.dash), parse(c.surf2))).toBeGreaterThanOrEqual(3);
+    expect(ratio(parse(c.dash), parse(c.bg))).toBeGreaterThanOrEqual(3);
+  });
+});
+
 describe.each(names)("%s solid glass (DS §6.4, #1467: the tab bar's fallback panel hides the content)", (name) => {
   const c = themes[name];
   it("ovSolid is opaque; ink and mut on it ≥ 4.5:1", () => {

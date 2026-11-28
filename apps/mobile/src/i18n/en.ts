@@ -2844,6 +2844,8 @@ export const en: Dict = {
   "ds.btn.pairLong": "A long label — the buttons in a column",
   "ds.btn.secondary": "Secondary",
   "ds.btn.secondaryNote": "Next to the main one: surf2 and a border",
+  "ds.btn.outline": "Outline",
+  "ds.btn.outlineNote": "No fill, a thin `dash` edge: the second one beside the main on a `surf2` cell («Done» on the estimate bar)",
   "ds.btn.ghost": "Quiet",
   "ds.btn.ghostNote": "No fill: «Cancel», «Back»",
   "ds.btn.danger": "Danger",
@@ -5577,6 +5579,9 @@ export const en: Dict = {
   "proto.est.depositShort": "deposit {amount}",
   "proto.est.done": "Done",
   "proto.est.saveSend": "Save and send",
+  // #2935 (founder 27.11, «как у Джобер»): the main step of the estimate editor's bar
+  "est.bar.send": "Send",
+  "ds.proto.sendBar": "Estimate bottom: Done · Send",
   "proto.est.add": "Add to estimate",
   "proto.est.rowsFull": "Detailed items",
   "proto.est.help": "Tap to edit · hold to reorder",
