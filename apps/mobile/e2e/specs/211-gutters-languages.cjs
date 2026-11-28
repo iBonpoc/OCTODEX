@@ -71,14 +71,10 @@ exports.run = async (h) => {
     await tid("attr-panel").waitFor({ timeout: 5000 });
     await openAttrMore(p);
     await clean("a downspout's menu", lang);
-    // the kind (#929; #2412 G1: a field, its menu): four, and no item's words run over its frame in this language
-    await tid("attr-ds-kind-button").click();
-    const kinds = p.getByRole("menu").locator('[data-testid^="attr-ds-kind-"]').locator("visible=true");
-    await kinds.first().waitFor({ timeout: 5000 });
-    await clean("the downspout's kinds", lang);
+    // the kind (#929; #2980: tiles with icons): four, and no tile's words run over its frame in this language
+    const kinds = tid("attr-ds-kind").locator('[data-testid^="attr-ds-kind-"][role="radio"]');
     const over = await kinds.evaluateAll((es) => es.filter((e) => e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1).map((e) => e.getAttribute("data-testid")));
     h.expect(over.length === 0 && (await kinds.count()) === 4, `${lang}: four kinds, none overflows (${over.join(",")})`);
-    await attrClose(p, "attr-ds-kind");
     await closePanel();
 
     // a corner's sheet
