@@ -8,7 +8,7 @@
  */
 import { View } from "react-native";
 import { router, type Href } from "expo-router";
-import { space } from "@octo/design-tokens";
+import { layout, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { ID } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
@@ -39,10 +39,12 @@ export function useStepItem() {
   return (s: JobLineStep): StepLineItem => ({
     key: s.id,
     title: t(LINE_KIND[s.kind]),
-    sub: s.at ? day(s.at) : undefined,
+    // a visit's sum is what it takes on site — said so (the bare figure read as the whole contract)
+    sub: [s.at ? day(s.at) : null, s.kind === "visit" && s.cents !== undefined ? t("line.dueOnVisit") : null].filter(Boolean).join(" · ") || undefined,
     value: s.cents !== undefined ? money(s.cents) : undefined,
     state: s.state,
-    status: s.state === "done" ? { status: "ok", label: t("line.done") } : s.state === "current" ? { status: "info", label: t("line.now") } : undefined,
+    // an expense has no state of its own: no word on it
+    status: s.kind === "expense" ? undefined : s.state === "done" ? { status: "ok", label: t("line.done") } : s.state === "current" ? { status: "info", label: t("line.now") } : undefined,
     onPress: s.href ? () => router.push(s.href as Href) : undefined,
     testID: `line-step-${s.id.replace(":", "-")}`,
   });
@@ -62,10 +64,11 @@ export function JobLine({ jobId, showMoney, main, add, onAdd }: {
   const line = jobLineOf(db, jobId, showMoney);
   const item = useStepItem();
   return (
-    <View testID="job-line" style={{ gap: space[3] }}>
+    // 820/1280: one column of a form's width — the sums stay beside their steps, not 1000 pt away
+    <View testID="job-line" style={{ gap: space[3], maxWidth: layout.formMax }}>
       {line.money ? (
         <View testID="job-line-money">
-          <T v="caption" w="medium" tone="mut">
+          <T v="body" w="semibold">
           {[t("line.paidOf", { paid: money(line.money.paidCents), total: money(line.money.totalCents) }), line.money.dueCents > 0 ? t("line.waiting", { due: money(line.money.dueCents) }) : null].filter(Boolean).join(" · ")}
           </T>
         </View>

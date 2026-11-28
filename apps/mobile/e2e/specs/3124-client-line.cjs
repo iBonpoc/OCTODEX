@@ -26,8 +26,10 @@ exports.run = async (h) => {
   const row = vis("client-line-job-j1");
   await row.waitFor({ timeout: 5000 });
   h.expect(/Bathroom remodel/.test(await row.innerText()), `«Идут» has the job j1: ${await row.innerText()}`);
-  h.expect(/шаг \d+ из \d+|Все шаги закрыты/.test(await row.innerText()), `the row says its step: ${await row.innerText()}`);
+  h.expect(/шаг\s\d+\sиз\s\d+|Все шаги закрыты/.test(await row.innerText()), `the row says its step: ${await row.innerText()}`);
   h.expect((await count("client-line-going")) === 1, "the group «Идут»");
+  h.expect((await count("client-now")) === 0, "the line look: no «Сейчас» card (its job is a row of «Идут»)");
+  h.expect(/Оплачено \$[\d,.]+ · (должен|долга нет)/.test(await vis("client-line-money").innerText()), `the client's money in one line: ${await vis("client-line-money").innerText()}`);
   await settle(p);
   await h.shot(1);
 

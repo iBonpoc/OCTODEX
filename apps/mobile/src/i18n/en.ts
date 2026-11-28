@@ -5782,7 +5782,7 @@ export const en: Dict = {
   "line.noJob": "Without a job",
   "line.awaitSign": "Awaiting signature",
   "line.cancelled": "Cancelled",
-  "line.stepOf": "step {i} of {n}",
+  "line.stepOf": "step {i} of {n}",
   "line.allClosed": "All steps closed",
   "line.noSteps": "No steps yet",
   "line.steps": "Job steps",
@@ -5801,4 +5801,8 @@ export const en: Dict = {
   "line.kind.visit": "Visit",
   "line.kind.expense": "Expense",
   "line.kind.order": "Supplier order",
+  "line.dueOnVisit": "due at the visit",
+  "line.paidAll": "Paid {paid}",
+  "line.owes": "owes {due}",
+  "line.noDebt": "no balance",
 };

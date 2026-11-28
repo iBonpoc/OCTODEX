@@ -1,7 +1,8 @@
 /**
  * #3124 В1 (spec 71 §16): «Линия работы» — the steps of one job built from what the app already has (no new data,
  * the base does not change): its estimate, contract invoices (deposit / progress / final) and extra ones, payments and
- * refunds, visits, expenses and purchase orders. Oldest first; the current step is the first one not closed. Money only
+ * refunds, visits, expenses and purchase orders. Oldest first; the current step is the first one not closed on the work's path
+ * (an order or an expense is never current). Money only
  * for roles that see the contract (`showMoney`); the sums go through @octo/estimating-engine (rule 8).
  * Pure: no react-native, so the rule is tested on its own (test/jobLine.test.ts).
  */
@@ -96,7 +97,10 @@ export function jobLineOf(d: D, jobId: ID, showMoney: boolean): JobLine {
 
   // oldest first; a step without a time goes first (an estimate never saved has no time yet), the id keeps the order stable
   raw.sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id));
-  const firstOpen = cancelled ? -1 : raw.findIndex((s) => !closed.has(s.id));
+  // the current step is the work's own path — the estimate, the invoices, the visits; an order or an expense runs beside it and is
+  // never «now» (design review: «Заказ поставщику · Сейчас» under the button «Начать выезд» read as two answers)
+  const onPath = (k: JobLineKind) => k !== "order" && k !== "expense";
+  const firstOpen = cancelled ? -1 : raw.findIndex((s) => !closed.has(s.id) && onPath(s.kind));
   const steps: JobLineStep[] = raw.map((s, i) => ({
     ...s,
     state: closed.has(s.id) || cancelled ? "done" : i === firstOpen ? "current" : "todo",

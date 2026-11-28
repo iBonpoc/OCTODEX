@@ -36,6 +36,12 @@ describe("jobLine (#3124 В1)", () => {
     expect(line.steps.find((s) => s.id === "estimate:e1")?.state).toBe("done");
   });
 
+  it("an order not received runs beside the path: never the current step (design review: «Заказ · Сейчас» under «Начать выезд»)", () => {
+    const line = jobLineOf(base({ purchaseOrders: [{ id: "po1", jobId: "j1", status: "sent", createdAt: "2026-11-01T09:00:00Z", sentAt: "2026-11-01T09:00:00Z" }] as DB["purchaseOrders"] }), "j1", true);
+    expect(line.steps.find((s) => s.id === "order:po1")?.state).toBe("todo");
+    expect(line.current?.id).toBe("invoice:i2");
+  });
+
   it("an estimate not signed yet is the current step", () => {
     const line = jobLineOf(base({ estimates: [{ id: "e1", customerId: "c1", propertyId: "p1", title: "B", totalCents: 342_000, status: "sent", sentAt: "2026-11-01T10:00:00Z" }] as DB["estimates"] }), "j1", true);
     expect(line.current?.kind).toBe("estimate");

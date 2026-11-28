@@ -244,7 +244,8 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
           labels: { expand: t("hdr.contacts"), collapse: t("hdr.contactsHide"), more: (n) => t("cw4.moreTags", { n }), edit: t("ue.edit") },
         }}
         actions={quick}
-        now={<ClientNowCard f={f} main={mainStep} />}
+        // the line look: no «Сейчас» card — its job is a row of «Идут» (two answers about one job, design review); the money is a line
+        now={look === "line" ? undefined : <ClientNowCard f={f} main={mainStep} />}
         sections={look === "line" ? [] : sections}
         section={current}
         onSection={onSection}

@@ -7,13 +7,14 @@
  */
 import { router, type Href } from "expo-router";
 import { View } from "react-native";
-import { space } from "@octo/design-tokens";
+import { layout, space } from "@octo/design-tokens";
+import { T } from "@/ui/primitives";
 import type { Customer, Job, Property } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { estView } from "@/features/boards";
 import { jobStatusView } from "@/features/jobs";
 import { jobLineOf, unsignedWithoutJob } from "@/features/job/jobLine";
-import { LINE_KIND } from "@/features/job/JobLine";
+import { LINE_KIND } from "@/features/job/JobLineView";
 import { ClientLog, ClientPlaces, type ClientFacts } from "@/features/client/ClientSections";
 import { invoiceTitle } from "@/features/invoiceTitle";
 import { GroupRow, ListGroup } from "@/ui/groupedList";
@@ -66,7 +67,14 @@ export function ClientLine({ c, f, panel, onPanel, onRoute }: {
   };
 
   return (
-    <View testID="client-line" style={{ gap: space[4] }}>
+    <View testID="client-line" style={{ gap: space[4], maxWidth: layout.formMax }}>
+      {office ? (
+        <View testID="client-line-money">
+          <T v="body" w="semibold">
+            {[t("line.paidAll", { paid: money(f.m.paidTotalCents) }), f.m.owesCents > 0 ? t("line.owes", { due: money(f.m.owesCents) }) : t("line.noDebt")].join(" · ")}
+          </T>
+        </View>
+      ) : null}
       <ListGroup title={t("line.going")} count={going.length + waiting.length} testID="client-line-going">
         {going.map((j) => jobRow(j, false))}
         {waiting.map((e) => (

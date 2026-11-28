@@ -54,7 +54,7 @@ import { jobFigures } from "@/features/client/nextStep";
 import { jobHeadParts } from "@/features/job/headName";
 import { NowCard } from "@/ui/nowCard";
 import { lookItems, useClientLook } from "@/features/client/clientLook";
-import { JobLine } from "@/features/job/JobLine";
+import { JobLine } from "@/features/job/JobLineView";
 
 /** the job's sections, in the strip under the header (BUILD-SPEC §2.5) */
 type Section = "overview" | "visits" | "estimates" | "invoices" | "expenses" | "orders" | "photos" | "notes";

@@ -5783,7 +5783,7 @@ export const ru = {
   "line.noJob": "Без работы",
   "line.awaitSign": "Ждёт подписи",
   "line.cancelled": "Отменена",
-  "line.stepOf": "шаг {i} из {n}",
+  "line.stepOf": "шаг {i} из {n}",
   "line.allClosed": "Все шаги закрыты",
   "line.noSteps": "Шагов пока нет",
   "line.steps": "Шаги работы",
@@ -5802,6 +5802,10 @@ export const ru = {
   "line.kind.visit": "Выезд",
   "line.kind.expense": "Расход",
   "line.kind.order": "Заказ поставщику",
+  "line.dueOnVisit": "к оплате на выезде",
+  "line.paidAll": "Оплачено {paid}",
+  "line.owes": "должен {due}",
+  "line.noDebt": "долга нет",
 } as const;
 
 export type DictKey = keyof typeof ru;
