@@ -24,7 +24,9 @@ exports.run = async (h) => {
   const late = owed.filter((i) => dueKey(i.dueDate) < today);
   const sum = owed.reduce((s, i) => s + owes(i), 0);
   const tile = (await tid("tile-owed").innerText()).replace(/\n/g, " | ");
-  h.expect(tile.includes(usd.format(sum / 100)), `«Должны» = ${usd.format(sum / 100)}: ${tile}`);
+  // #3029/#3030: a tile is an overview — whole dollars (half up); the figure stands whole, not as a prefix of «$2,800.50»
+  const whole = (c) => (Math.abs(c) < 100 ? `$${(Math.abs(c) / 100).toFixed(2)}` : `$${Math.floor((Math.abs(Math.round(c)) + 50) / 100).toLocaleString("en-US")}`);
+  h.expect(new RegExp(`${whole(sum).replace(/[$.]/g, "\\$&")}(?![.\\d])`).test(tile), `«Должны» = ${whole(sum)}: ${tile}`);
   if (late.length) h.expect(new RegExp(`${late.length} просроч`).test(tile), `«${late.length} просроч.» on the tile: ${tile}`);
   h.expect(!/…|\.\.\./.test(await tid("today-attention").innerText()), "no «…» in «Требует действия»");
   await h.shot("today");
