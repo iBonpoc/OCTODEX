@@ -1,0 +1,26 @@
+# The stand (#3117 Б): a PR gets or loses the label «стенд», or is closed → stand.yml rebuilds the stand. This workflow only
+# passes the event on (stand.yml starts on its completion, from main, with the key the deploy needs): it checks out nothing,
+# runs no code of the PR and holds no key. A push to a PR with the label reaches stand.yml through Preview the same way.
+name: Stand trigger
+
+on:
+  pull_request:
+    types: [labeled, unlabeled, closed]
+
+permissions: {}
+
+jobs:
+  pass:
+    # only the label «стенд», or closing a PR that had it; anything else — skipped, and stand.yml does not start
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository && (
+        ((github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name == 'стенд') ||
+        (github.event.action == 'closed' && contains(github.event.pull_request.labels.*.name, 'стенд')))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Pass the event to stand.yml
+        env:
+          ACTION: ${{ github.event.action }}
+          PR: ${{ github.event.pull_request.number }}
+        run: echo "PR #$PR $ACTION → stand.yml rebuilds the stand"
