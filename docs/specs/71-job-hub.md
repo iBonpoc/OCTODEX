@@ -205,3 +205,30 @@
 - **§3, шаг «Работа»:** дописать «доп. работы (S8c)».
 - **§4 S11 (устарело):** «запрет на сервере — после решения основателя» → «запрет на сервере есть (миграция 20261112090000_invoice_cap_void)».
 - Согласовать пометку CO в `docs/specs/33-gutters-module.md:29` (зона Gutters).
+
+## 14. Концепция 3 — Live Activity и Dynamic Island: правила Apple (проверено 28.11.2026)
+
+Основатель выбрал «Линию работы» и вторым шагом — плашку выезда на экране блокировки и в Dynamic Island (#3124, слова руководителя №10 от 28.11). Источники — текущие страницы Apple, прочитаны 28.11.2026 (JSON-версии документации, цитаты дословно):
+- HIG Live Activities — https://developer.apple.com/design/human-interface-guidelines/live-activities
+- ActivityKit, Displaying live data — https://developer.apple.com/documentation/activitykit/displaying-live-data-with-live-activities
+- WidgetKit, Adding interactivity — https://developer.apple.com/documentation/widgetkit/adding-interactivity-to-widgets-and-live-activities
+- ActivityKit push notifications — https://developer.apple.com/documentation/activitykit/starting-and-updating-live-activities-with-activitykit-push-notifications
+
+| Правило Apple | Цитата | Что это значит для нас |
+|---|---|---|
+| Для чего | «Offer Live Activities for tasks and events that have a defined beginning and end… short to medium duration activities that don't exceed eight hours» (HIG) | Плашка — **только на время выезда**: «Еду → На объекте → Закончил». Не на всю работу (недели) и не «вечная» карточка клиента. |
+| Чего нельзя | «Don't use a Live Activity to display ads or promotions» (HIG) | Никакой рекламы, советов, «оцените приложение». |
+| Личное | «Avoid displaying sensitive information… could be viewed by casual observers… on the Lock Screen» (HIG) | **Сумм, долга и имени клиента на плашке нет.** Только работа, улица, шаг, таймер. Деньги — в приложении. |
+| Срок жизни | «can be active for up to eight hours… remains on the Lock Screen… for up to four additional hours… a maximum of 12 hours» (ActivityKit) | Выезд длиннее 8 ч — плашка закончится сама; приложение запускает её заново при следующем шаге. |
+| Конец | «Always end a Live Activity immediately when the task or event ends… In most cases, 15 to 30 minutes is adequate» (HIG) | «Закончил выезд» сразу закрывает плашку; сводка висит 15 минут. |
+| Кнопки | «adopt the App Intents framework and use the initializers for Button and Toggle that take an app intent» (ActivityKit); «Live Activities can include buttons or toggles in the expanded and the Lock Screen presentation» (WidgetKit) | Кнопки — только в раскрытом острове и на экране блокировки. |
+| Кнопка делает дело | «An interaction with a button or toggle should do more than open the app» (WidgetKit) | Кнопка одна — **следующий шаг выезда** («На объекте», «Закончил выезд»). «Фото» и «Заметка» — нажатием на саму плашку: она открывает выезд в приложении (ссылка, а не кнопка). |
+| Одна кнопка | «prefer limiting it to a single element to help people avoid accidentally tapping the wrong control» (HIG) | Одна кнопка на плашке. |
+| Заблокированный телефон | «On a locked device, buttons and toggles are inactive and the system doesn't perform actions unless a person authenticates and unlocks their device» (WidgetKit) | «Закончил выезд» с экрана блокировки — после Face ID. Оплаты с плашки нет совсем: деньги только в приложении. |
+| Машина | «In CarPlay, the system deactivates interactive elements» (HIG) | В CarPlay только шаг и таймер. |
+| Данные | «a Live Activity can't access the network or receive location updates»; «can't exceed a combined size of 4 KB» (ActivityKit) | Плашку обновляет приложение или push ActivityKit (бюджет push в час — HIG/ActivityKit push); фото и заметки в плашке не хранятся. |
+| Вид острова | Compact — «two separate elements… read as a single piece of information»; Minimal — когда активностей несколько; Expanded — «When people touch and hold» (HIG) | Компактно: значок шага + таймер. Раскрыто: работа, шаг, полоса «Еду ✓ · На объекте ● · Закончил ○», кнопка следующего шага. |
+
+**Не проверено и вне этой задачи:** съёмка камерой прямо с заблокированного экрана — это отдельная возможность iOS 18 (Locked Camera Capture), не Live Activity; проверить отдельно перед тем, как обещать.
+
+**Цена:** виджет-расширение и модуль Expo — нативный код, новая сборка в App Store (правило 28 г), задача после «Линии работы».

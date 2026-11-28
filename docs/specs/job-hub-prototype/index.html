@@ -196,6 +196,10 @@ body.all .note{display:block}
 .mini{display:flex;gap:2px;margin-top:5px;width:120px}.mini i{flex:1;height:5px;border-radius:3px;background:var(--surf2);display:block}.mini i.p{background:var(--ink);opacity:.75}.mini i.c{background:var(--ink)}
 .jr{display:flex;gap:10px;align-items:center;padding:12px;border-top:1px solid var(--bd)}.jr:first-child{border-top:0}
 .jr .mid{flex:1;min-width:0}.jr .nm{font-weight:600;font-size:15px}.jr .ds{font-size:12.5px;color:var(--mut)}
+
+.di{background:#000;color:#fff;border-radius:999px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;height:37px;width:250px;margin:0 auto;font-size:13px;font-weight:600}
+.die{background:#000;color:#fff;border-radius:40px;padding:14px 16px;margin:0 6px}
+.cap2{font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;opacity:.6;margin:14px 6px 6px}
 </style>
 </head>
 <body>
@@ -634,20 +638,22 @@ const S = {
     </div></div>
     <div class="pinbar"><span class="circ">${svg("camera")}</span><span class="circ">${svg("mic")}</span><span class="b acc" style="flex:1;height:44px">Взять предоплату 2 · $1,000</span></div>` },
 
-  /* Концепция 3 одной картинкой: на выезде фото с экрана блокировки ложится на шаг линии */
-  P3: { cap: "Выезд: снял с экрана блокировки — фото уже на шаге «Выезд» в линии", html: `<div class="lock" style="padding:14px 12px"><div style="text-align:center;font-size:13px;opacity:.8">пятница, 20 ноября</div><div class="tm" style="font-size:48px;margin-top:6px">9:41</div>
-    <div class="la" style="margin-top:14px"><div style="display:flex;justify-content:space-between;font-size:12.5px;opacity:.85"><span>GoRix · на объекте</span><span>с 8:34</span></div>
-      <div style="font-weight:700;font-size:16px;margin-top:4px">Sarah Mitchell · Bathroom remodel</div>
-      <div class="segbar" style="margin:8px 0 4px"><i class="p" style="flex:12;background:#fff"></i><i style="flex:10;background:rgba(255,255,255,.25)"></i><i style="flex:12.2;background:rgba(255,255,255,.25)"></i></div>
-      <div style="font-size:12.5px;opacity:.85">шаг «Выезд» · оплачено $1,200 из $3,420</div>
-      <div class="btn3"><span>${svg("camera").replace("<svg","<svg width=18 height=18")}&nbsp;Фото</span><span>${svg("mic").replace("<svg","<svg width=18 height=18")}&nbsp;Заметка</span><span>${svg("usd").replace("<svg","<svg width=18 height=18")}&nbsp;Оплата</span></div></div>
-    <div style="text-align:center;font-size:22px;opacity:.6;margin:10px 0">↓</div>
-    <div style="background:rgba(30,32,38,.92);border-radius:18px;padding:12px 14px">
-      <div style="font-size:12.5px;opacity:.75;margin-bottom:6px">В приложении, линия работы — шаг «Выезд»</div>
-      <div style="display:flex;justify-content:space-between;align-items:center"><b>Выезд · начало работ</b><span style="font-size:12.5px;opacity:.8">сегодня 8:34</span></div>
-      <div style="display:flex;gap:5px;margin-top:8px"><i style="width:56px;height:56px;border-radius:10px;background:linear-gradient(135deg,#8a7a5c,#4c5560)"></i><i style="width:56px;height:56px;border-radius:10px;background:linear-gradient(135deg,#6b7a8c,#3c4550)"></i><i style="width:56px;height:56px;border-radius:10px;background:linear-gradient(135deg,#8c6b5c,#50403c)"></i></div>
-      <div style="font-size:12.5px;opacity:.85;margin-top:8px">+ 3 фото и заметка «старый вентиль течёт» — с экрана блокировки, без поиска клиента</div></div></div>` },
-
+  /* Концепция 3 по правилам Apple: плашка живёт только на время выезда; без денег; одна кнопка — следующий шаг выезда */
+  P3: { cap: "Выезд: остров и экран блокировки — без денег, одна кнопка «Закончил»", html: `<div class="lock" style="padding:12px 12px">
+    <div class="cap2">Dynamic Island · компактно</div>
+    <div class="di"><span style="display:flex;gap:6px;align-items:center">${svg("route").replace("<svg","<svg width=14 height=14")} На объекте</span><span style="font-variant-numeric:tabular-nums">0:42</span></div>
+    <div class="cap2">Dynamic Island · раскрыт (долгое нажатие)</div>
+    <div class="die"><div style="display:flex;justify-content:space-between;font-size:13px;opacity:.85"><span>Выезд · Bathroom remodel</span><span>0:42</span></div>
+      <div style="font-weight:700;font-size:17px;margin:4px 0 2px">На объекте с 8:34</div>
+      <div style="font-size:12.5px;opacity:.8">Еду ✓ · На объекте ● · Закончил ○</div>
+      <div style="display:flex;gap:8px;margin-top:10px"><span style="flex:1;background:rgba(255,255,255,.16);border-radius:999px;height:40px;display:flex;align-items:center;justify-content:center;font-weight:700">Закончил выезд</span></div></div>
+    <div class="cap2">Экран блокировки</div>
+    <div class="la" style="margin-top:0"><div style="display:flex;justify-content:space-between;font-size:12.5px;opacity:.85"><span>GoRix · выезд</span><span>с 8:34 · 0:42</span></div>
+      <div style="font-weight:700;font-size:16px;margin-top:4px">Bathroom remodel · Oak Grove Ave</div>
+      <div style="font-size:12.5px;opacity:.8;margin-top:2px">Еду ✓ · На объекте ● · Закончил ○</div>
+      <div style="display:flex;gap:8px;margin-top:10px"><span style="flex:1;background:rgba(255,255,255,.16);border-radius:999px;height:40px;display:flex;align-items:center;justify-content:center;font-weight:700">Закончил выезд</span></div>
+      <div style="font-size:12px;opacity:.7;margin-top:8px">Нажмите на плашку — откроется выезд: фото, заметка голосом</div></div>
+    <div style="font-size:11.5px;opacity:.55;text-align:center;margin-top:10px">Сумм и имени клиента на экране блокировки нет — правило Apple</div></div>` },
 };
 
 // экран работы с нижней панелью своего варианта
