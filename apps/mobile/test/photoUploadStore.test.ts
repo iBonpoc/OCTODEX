@@ -93,6 +93,9 @@ type Value = {
   preparePhotoAgain: (ref: { visitId?: string; photoId: string } | { expenseId: string }) => void;
   addExpense: (x: object, receipt?: Picked) => () => void;
   removePhoto: (v: string, p: string) => () => boolean | void;
+  addClientFile: (customerId: string, uri: string) => () => boolean | void;
+  retryClientFile: (id: string) => () => boolean | void;
+  removeClientFile: (id: string) => () => boolean | void;
 };
 type P = { children: null };
 const valueOf = (r: Root<P>) => (r.out as { props: { value: Value } }).props.value;
@@ -414,5 +417,69 @@ describe("unit:photoUploadStore — a measurement's refused photo (#1441)", () =
     third.d.resolve({ photo: { id: "mp1", failed: null } });
     await settle();
     expect(fileOf(r, "mp1").upload).toBeUndefined();
+  });
+});
+
+describe("unit:photoUploadStore — #3161 a client's photo without a visit: «Повторить» and «Удалить»", () => {
+  const fileOf = (r: Root<P>, id: string) => (valueOf(r).db.files ?? []).find((f) => f.id === id);
+  it("file.add refused → marked; «Повторить» → file.add again with its file, the mark off; «Удалить» → photo.remove, «Вернуть» brings it back", { timeout: 20_000 }, async () => {
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    (server.loads[0] as { done?: boolean }).done = true;
+    server.loads[0]!.resolve(makeSeed());
+    await settle();
+    const cid = valueOf(r).db.customers[0]!.id;
+    valueOf(r).addClientFile(cid, "file:///c.jpg");
+    await settle();
+    const id = (valueOf(r).db.files ?? []).find((f) => f.customerId === cid && f.uri === "file:///c.jpg")!.id;
+    const add = await sent(1);
+    expect(add.op).toMatchObject({ k: "file.add", id, customerId: cid, uri: "file:///c.jpg" });
+    add.d.resolve({ photo: { id, failed: "refused" } });
+    await settle();
+    expect(fileOf(r, id)?.upload?.failed).toBe("refused");
+
+    // «Вернуть» on «Повторить»: the mark is back, nothing is sent
+    const back = valueOf(r).retryClientFile(id);
+    await settle();
+    expect(fileOf(r, id)?.upload).toBeUndefined();
+    back();
+    await settle();
+    expect(fileOf(r, id)?.upload?.failed).toBe("refused");
+    await wait(300);
+    expect(server.sends.length).toBe(1);
+    // «Повторить»: the mark goes at once, the same file.add (the row is ignored if there, the bytes go again)
+    valueOf(r).retryClientFile(id);
+    await settle();
+    expect(fileOf(r, id)?.upload).toBeUndefined();
+    const again = await sent(2);
+    expect(again.op).toMatchObject({ k: "file.add", id, customerId: cid, uri: "file:///c.jpg" });
+    again.d.resolve({ photo: { id, failed: null } });
+    await settle();
+    expect(fileOf(r, id)?.upload).toBeUndefined();
+    // nothing to retry now (not refused): a no-op, nothing queued
+    valueOf(r).retryClientFile(id);
+    await settle();
+    await wait(300);
+    expect(server.sends.length).toBe(2);
+
+    // «Удалить»: off the client at once; «Вернуть» brings it back and nothing is sent
+    const undo = valueOf(r).removeClientFile(id);
+    await settle();
+    expect(fileOf(r, id)).toBeUndefined();
+    undo();
+    await settle();
+    expect(fileOf(r, id)?.uri).toBe("file:///c.jpg");
+    await wait(300);
+    expect(server.sends.length).toBe(2);
+    // deleted for good: photo.remove of that row
+    valueOf(r).removeClientFile(id);
+    await settle();
+    const rm = await sent(3);
+    expect(rm.op).toEqual({ k: "photo.remove", id });
+    // a second tap on a photo already gone: nothing more is queued
+    valueOf(r).removeClientFile(id);
+    await settle();
+    await wait(300);
+    expect(server.sends.length).toBe(3);
   });
 });

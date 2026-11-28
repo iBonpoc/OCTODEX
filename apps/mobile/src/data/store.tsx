@@ -309,6 +309,11 @@ interface StoreCtx {
   addPhoto: (visitId: ID, kind: "before" | "after", photo?: string | PickedPhoto) => Undo;
   /** #3085: a photo of the client (from the client by SMS or mail): on the client, no visit; only a file made anew here (`prepPicked`) */
   addClientFile: (customerId: ID, uri: string) => Undo;
+  /** #3161 «Повторить» on a client's photo without a visit the cloud refused: its row and bytes are sent again (file.add —
+   *  the insert ignores a row already there); nothing to send (no file on this phone, not refused) — no-op */
+  retryClientFile: (id: ID) => Undo;
+  /** #3161 «Удалить» a client's photo without a visit (photo.remove: deleted_at of the file row); «Вернуть» for 5 s */
+  removeClientFile: (id: ID) => Undo;
   toggleCheck: (visitId: ID, itemId: ID) => Undo;
   removePhoto: (visitId: ID, photoId: ID) => Undo;
   /** #1431 «Повторить»: a photo the cloud refused is sent again — made anew first (#1558: the file on this phone may be
@@ -1869,6 +1874,15 @@ export function StoreProvider({
         const file: FileItem = { id, kind: "photo", customerId, at: new Date().toISOString(), uri };
         return mutate("file.add", (d) => ({ ...d, files: [...(d.files ?? []), file] }), { k: "file.add", id, customerId, uri });
       },
+      retryClientFile: (id) => {
+        const f = (dbRef.current.files ?? []).find((x) => x.id === id);
+        if (!f || !f.customerId || f.visitId || f.upload?.failed !== "refused" || !f.uri) return noop;
+        return mutate("file.add", (d) => markPhoto(d, id, null, new Date().toISOString()), { k: "file.add", id, customerId: f.customerId, uri: f.uri });
+      },
+      removeClientFile: (id) =>
+        (dbRef.current.files ?? []).some((x) => x.id === id && !!x.customerId && !x.visitId)
+          ? mutate("photo.remove", (d) => ({ ...d, files: (d.files ?? []).filter((x) => x.id !== id) }), { k: "photo.remove", id })
+          : noop,
       toggleCheck: (visitId, itemId) => {
         const item = dbRef.current.visits.find((x) => x.id === visitId)?.checklist.find((c) => c.id === itemId);
         return checkItemFn(visitId, itemId, !item?.done);
