@@ -20,9 +20,13 @@ exports.run = async (h) => {
 
   // receipt → invoice
   await h.go(`/receipt/${pay.id}`);
-  h.expect((await rel(new RegExp(`^Связано: Клиент ${esc(cust.name)}$`)).count()) === 1, "receipt: «Клиент …»");
+  // #3065: on the receipt «Связано» is a group of rows under the sum — read by testID (the client's row is its name)
+  const row = (kind) => p.getByTestId(`related-${kind}`).locator("visible=true");
+  await row("invoice").first().waitFor({ timeout: 8000 });
+  h.expect((await row("customer").count()) === 1 && (await row("customer").first().innerText()).includes(cust.name), "receipt: «Клиент …»");
   await h.shot("receipt");
-  await rel(new RegExp(`^Связано: Счёт ${esc(inv.number ?? "")}`)).click();
+  h.expect((await row("invoice").first().innerText()).includes(inv.number ?? ""), "receipt: «Счёт INV-…»");
+  await row("invoice").first().click();
   await p.waitForTimeout(700);
   h.expect(p.url().endsWith(`/invoice/${inv.id}`), `receipt → its invoice (${p.url()})`);
 

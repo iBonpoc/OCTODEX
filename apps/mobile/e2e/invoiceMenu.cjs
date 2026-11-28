@@ -43,13 +43,16 @@ async function invHas(p, key) {
   return has;
 }
 
-// «Напомнить»: the main step under the header when it is the invoice's next step (`invoice-remind-main`), else the icon of the row
-// (`invoice-remind`) — v2 never shows both (InvoiceCard). `invRemind(p)` presses the one there; `invRemindCount(p)` — how many are shown.
+// «Напомнить»: the main or second step under the header when it is one of the invoice's steps (`invoice-remind-main`), else an
+// item of «⋯» (`invoice-remind`, #3012: «Принять оплату» is the step, the reminder is in «⋯») — never both (InvoiceCard).
+// `invRemind(p)` presses the one there; `invRemindCount(p)` — how many are shown on the page (the closed «⋯» is not counted).
 const REMIND = '[data-testid="invoice-remind-main"], [data-testid="invoice-remind"]';
 async function invRemind(p) {
-  const b = p.locator(REMIND).locator("visible=true").first();
-  await b.waitFor({ timeout: 8000 });
-  await b.click();
+  await p.locator('[data-testid="invoice-screen-more"], [data-testid="invoice-more"], [data-testid="invoice-remind-main"]').locator("visible=true").first().waitFor({ timeout: 8000 });
+  const step = p.getByTestId("invoice-remind-main").locator("visible=true").first();
+  if (await step.count()) return step.click();
+  await openMenu(p);
+  await vis(p, "invoice-remind").click();
 }
 const invRemindCount = (p) => p.locator(REMIND).count();
 

@@ -51,8 +51,8 @@ exports.run = async (h) => {
   await rows.first().click();
   await p.waitForURL(/\/receipt\//, { timeout: 5000 });
   h.expect(/\/receipt\//.test(p.url()), `the row opens the receipt (${p.url()})`);
-  // the receipt links to its invoice through «Связано» (PR-3)
-  await p.getByRole("button", { name: /^Связано: Счёт / }).locator("visible=true").first().click();
+  // the receipt links to its invoice through «Связано» (PR-3) — a row of the group, by its testID (#3065)
+  await p.getByTestId("related-invoice").locator("visible=true").first().click();
   await p.waitForTimeout(600);
   h.expect(/\/invoice\//.test(p.url()), `receipt opens its invoice (${p.url()})`);
 
