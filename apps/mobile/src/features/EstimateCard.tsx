@@ -175,8 +175,9 @@ export function EstimateCardBody({ e, openSend, frame }: { e: Estimate; openSend
   const sendButton = (bar: boolean) =>
     canSend ? (
       <View testID="est-send" style={bar ? undefined : { alignSelf: "flex-start" }}>
-        {/* a sent estimate is sent again (not «Отправить клиенту» — it reads as not sent yet); from 820 as wide as its words */}
-        <Button label={t(e.status === "sent" ? "est.view.sendAgain" : "ue.send")} icon="send" size={bar ? "bar" : undefined} full={bar} onPress={() => setSendOpen(true)} />
+        {/* a sent estimate is sent again (not «Отправить клиенту» — it reads as not sent yet); a draft that went out — «Отправить
+            изменения» (#3160, as the object's step); from 820 as wide as its words */}
+        <Button label={t(e.status === "sent" ? "est.view.sendAgain" : draftWentOut(e) ? "r1.est.sendChanges" : "ue.send")} icon="send" size={bar ? "bar" : undefined} full={bar} onPress={() => setSendOpen(true)} />
       </View>
     ) : null;
 

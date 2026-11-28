@@ -65,12 +65,11 @@ describe("#3160: the card's step of a draft that went out", () => {
     expect(draftWentOut({ status: "sent", sentAt: SENT })).toBe(false);
     expect(draftWentOut({ status: "approved", sentAt: SENT })).toBe(false);
   });
-  it("the card uses the rule and the words of the editor (the step never says «ещё не видел» to a draft that went out)", () => {
+  it("both looks of the card use the rule and the editor's words: the object's step and the panel's button (1280)", () => {
     const card = readFileSync(new URL("../src/features/EstimateCard.tsx", import.meta.url), "utf8");
-    const at = card.indexOf("draftWentOut(e)");
-    expect(at).toBeGreaterThan(0);
-    const branch = card.slice(at, card.indexOf("proto.est.reason.notSeen", at));
-    expect(branch).toContain('t("r1.est.sendChanges")');
-    expect(branch).not.toContain("notSeen");
+    // each `draftWentOut(e)` is followed (within its branch) by the editor's words
+    const at = [...card.matchAll(/draftWentOut\(e\)/g)].map((m) => m.index!);
+    expect(at.length).toBe(2);
+    for (const i of at) expect(card.slice(i, i + 260)).toContain('"r1.est.sendChanges"');
   });
 });
