@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PanResponder, Platform, View, type LayoutChangeEvent } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { SignatureInk } from "./SignatureInkView";
@@ -13,6 +13,7 @@ import { T } from "@/ui/primitives";
 import { RowView, useScrollLock } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { SIG_BOX, fitSignature, normalizeSignature } from "./signaturePath";
+import { padScrollLock } from "./signatureLock";
 
 /** Finger signature. Output is SVG path data (stored with the visit; PDF in wave 3). */
 export function SignaturePad({ onConfirm, disabled, confirmLabel, label, consent = "visit.signConsent" }: { onConfirm: (path: string) => void; disabled?: boolean; confirmLabel?: string; /** who signs: «Клиент расписывается здесь» by default */ label?: string; /** the line under the pad — what the signature confirms: the visit's completed work by default; the estimate — its own; null — none (#1104 п.5) */ consent?: DictKey | null }) {
@@ -35,13 +36,16 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label, consent
   const lockScroll = useScrollLock();
   const lockRef = useRef(lockScroll);
   lockRef.current = lockScroll;
+  // #3156: on with the stroke, off with its end — and off when the pad leaves the screen mid-stroke (else the screen stays locked)
+  const padLock = useRef(padScrollLock(() => lockRef.current)).current;
+  useEffect(() => () => padLock.unmount(), [padLock]);
   const pan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: (e) => {
-        lockRef.current(true);
+        padLock.grant();
         const { locationX: x, locationY: y } = e.nativeEvent;
         dRef.current += `M${x.toFixed(1)} ${y.toFixed(1)} `;
         setD(dRef.current);
@@ -51,8 +55,8 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label, consent
         dRef.current += `L${x.toFixed(1)} ${y.toFixed(1)} `;
         setD(dRef.current);
       },
-      onPanResponderRelease: () => lockRef.current(false),
-      onPanResponderTerminate: () => lockRef.current(false),
+      onPanResponderRelease: () => padLock.release(),
+      onPanResponderTerminate: () => padLock.terminate(),
     }),
   ).current;
   const clear = () => {
