@@ -16,7 +16,8 @@ name: Checks
 
 on:
   pull_request:
-    # «labeled»: putting «к-влитию» on starts the full e2e matrix (scripts/e2eScope.cjs); «ready_for_review»: a draft
+    # «labeled»: putting «к-влитию» on starts the full e2e matrix (scripts/e2eScope.cjs); any other label — a light run with
+    # no jobs whose «checks» repeats the commit's last result (scripts/labelRun.cjs, #3130); «ready_for_review»: a draft
     # (quick checks only) becomes ready — the usual run with e2e and the bundle (#3117 А)
     types: [opened, synchronize, reopened, labeled, ready_for_review]
   push:
@@ -55,10 +56,23 @@ jobs:
       contents: read
       issues: read
       pull-requests: read
+    outputs:
+      light: ${{ steps.light.outputs.light }}
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      # #3130: a label other than «к-влитию» (стенд, принято, …) starts no jobs; «checks» repeats the commit's last result
+      - id: light
+        name: A light run (a label other than к-влитию)?
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+          LABEL: ${{ github.event.label.name }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: node scripts/labelRun.cjs light
       - name: No open stop (or the PR is a fix)
         env:
           GH_TOKEN: ${{ github.token }}
@@ -70,6 +84,7 @@ jobs:
   changes:
     name: What changed
     needs: pause
+    if: needs.pause.outputs.light != 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -121,6 +136,7 @@ jobs:
   fast:
     name: Types, unit and database tests
     needs: pause
+    if: needs.pause.outputs.light != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -308,7 +324,7 @@ jobs:
   numbers:
     name: Unique numbers (migrations, e2e, T)
     needs: pause
-    if: github.event_name == 'pull_request'
+    if: needs.pause.outputs.light != 'true' && github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -331,7 +347,7 @@ jobs:
   rule22:
     name: Rule 22 (PR names a до-1.0 task)
     needs: pause
-    if: github.event_name == 'pull_request'
+    if: needs.pause.outputs.light != 'true' && github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -352,7 +368,7 @@ jobs:
   scenarios:
     name: Scenarios in specs (С1 ДАНО/КОГДА/ТОГДА)
     needs: pause
-    if: github.event_name == 'pull_request'
+    if: needs.pause.outputs.light != 'true' && github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -372,8 +388,23 @@ jobs:
     needs: [pause, changes, fast, bundle, build-web, e2e, rule22, scenarios, numbers]
     if: always()
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      checks: read
     steps:
+      # #3130: a light run (a label other than к-влитию) did no work: green only when the commit's last finished «checks» is
+      - uses: actions/checkout@v4
+        if: needs.pause.outputs.light == 'true'
+        with:
+          persist-credentials: false
+      - name: A light run repeats the last result of this commit
+        if: needs.pause.outputs.light == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/labelRun.cjs reflect
       - name: All checks green
+        if: needs.pause.outputs.light != 'true'
         run: |
           # the pipeline pause (#1087): a stopped PR is RED — «skipped» jobs behind a failed pause must never read as green
           [ "${{ needs.pause.result }}" = "success" ] || { echo "::error::пауза конвейера (pause=${{ needs.pause.result }}): влить нельзя, пока открыта остановка"; exit 1; }
