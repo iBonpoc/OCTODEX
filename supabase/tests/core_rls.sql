@@ -19754,4 +19754,91 @@ select tst.ok(has_function_privilege('authenticated', 'public.reopen_signed_esti
 rollback;
 \echo 'T473 «don''t sign — change it» takes off only the signature the phone saw ok'
 
+-- T475 (#3162): a client who owes is not made inactive by hand — the server, not only the app (spec 04 §4, #3044): a person's
+-- update of customers.status to «archived» while a live invoice of the client is not paid is refused for good (22023, hint
+-- client_owes), for the office and for sales (who does not see the invoices: the debt is read by a definer helper). A client with
+-- no invoices, only a void one or a $0 one is made inactive; «не обслуживаем» → inactive and an upsert are asked
+-- too; the server's own moves (merge_customers, a superuser) are not stopped. Its own people and clients. Red before 20261117710000.
+\set as_off475 'reset role; set request.jwt.claim.sub = ''a4750000-0000-4000-8000-000000000001''; set role authenticated;'
+\set as_sal475 'reset role; set request.jwt.claim.sub = ''a4750000-0000-4000-8000-000000000002''; set role authenticated;'
+begin;
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a4750000-0000-4000-8000-000000000001', 'office475@a.test', '{"full_name":"Olive Office"}'),
+  ('a4750000-0000-4000-8000-000000000002', 'sales475@a.test', '{"full_name":"Sal Sales"}');
+insert into public.memberships (company_id, user_id, role, status) values
+  ('ca000000-0000-0000-0000-000000000000', 'a4750000-0000-4000-8000-000000000001', 'office', 'active'),
+  ('ca000000-0000-0000-0000-000000000000', 'a4750000-0000-4000-8000-000000000002', 'sales', 'active');
+insert into public.customers (id, company_id, display_name, status) values
+  ('c4750000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T475 owes', 'active'),
+  ('c4750000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T475 no invoices', 'active'),
+  ('c4750000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T475 only void', 'active'),
+  ('c4750000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'T475 owes, server', 'active'),
+  ('c4750000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'T475 a $0 invoice', 'active'),
+  ('c4750000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', 'T475 merge keeps', 'active'),
+  ('c4750000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', 'T475 merge drops (owes)', 'active');
+insert into public.invoices (id, company_id, customer_id, kind, total_cents) values
+  ('14750000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c4750000-0000-4000-8000-000000000001', 'standalone', 184000),
+  ('14750000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c4750000-0000-4000-8000-000000000003', 'standalone', 50000),
+  ('14750000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'c4750000-0000-4000-8000-000000000004', 'standalone', 9900),
+  ('14750000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', 'c4750000-0000-4000-8000-000000000005', 'standalone', 0),
+  ('14750000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', 'c4750000-0000-4000-8000-000000000007', 'standalone', 12000);
+-- a $0 invoice owes nothing (an invoice is never soft-deleted — void or refund; the helper's deleted_at is only a guard)
+update public.invoices set status = 'sent', sent_at = now() where id in ('14750000-0000-4000-8000-000000000001', '14750000-0000-4000-8000-000000000003', '14750000-0000-4000-8000-000000000004');
+update public.invoices set status = 'void', void_reason = 'T475 test' where id = '14750000-0000-4000-8000-000000000003';
+select tst.ok((select status from public.invoices where id = '14750000-0000-4000-8000-000000000003') = 'void', 'T475 the fixture: a void invoice');
+:as_off475
+select tst.fails_like($q$update public.customers set status = 'archived' where id = 'c4750000-0000-4000-8000-000000000001'$q$, 'client_owes%',
+                      'T475 the office does not make a client who owes inactive');
+:as_sal475
+select tst.fails_like($q$update public.customers set status = 'archived' where id = 'c4750000-0000-4000-8000-000000000001'$q$, 'client_owes%',
+                      'T475 nor sales (who does not see the invoices)');
+-- an upsert of the status (insert … on conflict do update) is the same update: refused
+select tst.fails_like($q$insert into public.customers (id, company_id, display_name, status) values ('c4750000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T475 owes', 'archived') on conflict (id) do update set status = excluded.status$q$, 'client_owes%',
+                      'T475 nor by an upsert');
+:as_super
+select tst.ok((select status from public.customers where id = 'c4750000-0000-4000-8000-000000000001') = 'active', 'T475 the debtor stays active');
+-- «не обслуживаем» → «неактивный» while he owes: refused too
+update public.customers set status = 'do_not_service', do_not_service_reason = 'T475' where id = 'c4750000-0000-4000-8000-000000000001';
+:as_off475
+select tst.fails_like($q$update public.customers set status = 'archived', do_not_service_reason = null where id = 'c4750000-0000-4000-8000-000000000001'$q$, 'client_owes%',
+                      'T475 from «не обслуживаем» to inactive while he owes: refused');
+-- a $0 invoice: nothing owed — made inactive
+update public.customers set status = 'archived' where id = 'c4750000-0000-4000-8000-000000000005';
+select tst.ok(tst.cnt($q$select 1 from public.customers where id = 'c4750000-0000-4000-8000-000000000005' and status = 'archived'$q$) = 1,
+              'T475 a $0 invoice does not stop it');
+:as_off475
+update public.customers set status = 'archived' where id in ('c4750000-0000-4000-8000-000000000002', 'c4750000-0000-4000-8000-000000000003');
+select tst.ok(tst.cnt($q$select 1 from public.customers where id in ('c4750000-0000-4000-8000-000000000002', 'c4750000-0000-4000-8000-000000000003') and status = 'archived'$q$) = 2,
+              'T475 no invoices or only a void one: made inactive');
+-- back from inactive by hand (map §5: «active — вручную», #3044): not stopped
+update public.customers set status = 'active' where id = 'c4750000-0000-4000-8000-000000000002';
+select tst.ok(tst.cnt($q$select 1 from public.customers where id = 'c4750000-0000-4000-8000-000000000002' and status = 'active'$q$) = 1,
+              'T475 back to active by hand');
+-- another field of the debtor changes as before (only the move to «archived» is asked)
+update public.customers set display_name = 'T475 owes (renamed)' where id = 'c4750000-0000-4000-8000-000000000001';
+select tst.ok(tst.cnt($q$select 1 from public.customers where id = 'c4750000-0000-4000-8000-000000000001' and display_name = 'T475 owes (renamed)'$q$) = 1,
+              'T475 the debtor''s other fields change as before');
+:as_owner_a
+-- the server's own move is not stopped: merge_customers (a definer, S3d) archives the dropped card that owed — its invoice moved
+-- to the kept one first
+select public.merge_customers('c4750000-0000-4000-8000-000000000006', 'c4750000-0000-4000-8000-000000000007');
+:as_super
+select tst.ok((select status from public.customers where id = 'c4750000-0000-4000-8000-000000000007') = 'archived'
+          and (select customer_id from public.invoices where id = '14750000-0000-4000-8000-000000000007') = 'c4750000-0000-4000-8000-000000000006',
+  'T475 merge_customers archives the dropped card, its unpaid invoice moved to the kept one');
+-- a superuser's own update (a server job) is not stopped
+update public.customers set status = 'archived' where id = 'c4750000-0000-4000-8000-000000000004';
+select tst.ok((select status from public.customers where id = 'c4750000-0000-4000-8000-000000000004') = 'archived', 'T475 the server''s own move is not stopped');
+select tst.ok(not has_function_privilege('anon', 'app.customer_owes(uuid, uuid)', 'EXECUTE')
+          and not has_function_privilege('public', 'app.customer_owes(uuid, uuid)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'app.tg_customer_archive_owes()', 'EXECUTE'),
+  'T475 rule 18: the helper not for anon / public, the trigger function for nobody');
+:as_tech_a
+-- the helper answers only the staff (a tech asking about a client gets «no»)
+select tst.ok(not app.customer_owes('ca000000-0000-0000-0000-000000000000', 'c4750000-0000-4000-8000-000000000001'), 'T475 the helper says nothing to a tech');
+:as_super
+rollback;
+\echo 'T475 a client who owes is not made inactive by hand — the server ok'
+
 \echo 'ALL TESTS PASSED'
