@@ -15,6 +15,14 @@ exports.run = async (h) => {
     return !!b && b.y >= -1 && b.y + b.height <= vp().height + 1;
   };
   const input = (id) => vis(id).locator("input, textarea").first();
+  // #3163: «Сохранить» on a wrong form puts the focus into the first wrong field LATER (requiredForm: a timer, then the scroll,
+  // then the focus — DS §11 п.3–4). Typing into another field before it lands loses the text to that field (a `fill` is a focus
+  // and then an insert into whatever has the focus). Wait for the focus where the form puts it, then type.
+  const focusIn = (id) =>
+    p.waitForFunction((t) => {
+      const a = document.activeElement;
+      return !!a && [...document.querySelectorAll(`[data-testid="${t}"]`)].some((f) => f.offsetParent !== null && f.contains(a));
+    }, id, { timeout: 3000 });
 
   // ---- lead: phone and name wrong, the button is at the bottom, the phone is above it
   await h.go("/lead/new");
@@ -27,6 +35,8 @@ exports.run = async (h) => {
   await vis("field-phone-error").waitFor({ timeout: 3000 });
   await vis("field-name-error").waitFor({ timeout: 3000 });
   h.expect(/10 цифр/.test(await vis("field-phone-error").innerText()), "lead: the phone error says what to enter");
+  // the first wrong field (the phone) takes the focus — only then is it typed into (#3163)
+  await focusIn("field-phone");
   h.expect((await p.getByTestId("field-source-error").count()) === 0, "lead: the source has a default — no error");
   await p.waitForFunction(() => {
     const el = document.querySelector('[data-testid="field-phone"]');
@@ -69,6 +79,9 @@ exports.run = async (h) => {
   await saveSup.click();
   await vis("field-name-error").waitFor({ timeout: 3000 });
   await vis("field-email-error").waitFor({ timeout: 3000 });
+  // the focus goes to the first wrong field (the name) after a timer: typed into the email before it lands, the text went to
+  // the name (#3163, main 6c443cfd @390 dark) — wait for it first
+  await focusIn("field-name");
   h.expect(/\/suppliers\/new/.test(p.url()), "supplier: the screen stays");
   h.expect((((await h.db()).suppliers ?? []).length) === supBefore, "supplier: nothing saved");
   // a symbol more, still wrong: the email error stays; right: it goes
