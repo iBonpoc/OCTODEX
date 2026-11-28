@@ -4,7 +4,7 @@
  * в самом документе чисел нет, только имена токенов). Руками эти два файла не правят: `test/generated.test.ts`
  * краснеет, если они разошлись с `index.ts`; перестроить — `npm run gen -w @octo/design-tokens`.
  */
-import { breakpoint, component, font, layout, motion, radius, rhythm, size, space, spaceHalf, themes, z, type ThemeName } from "./index";
+import { breakpoint, component, font, highContrast, layout, motion, radius, rhythm, size, space, spaceHalf, themes, z, type ThemeName } from "./index";
 
 type Leaf = string | number;
 type Row = [path: string, value: Leaf];
@@ -89,6 +89,9 @@ export function renderTable(): string {
   const light = new Map(flatten(themes.light, "c"));
   for (const [p, v] of flatten(themes.dark, "c")) out.push(`| \`${p}\` | ${md(light.get(p) ?? "—")} | ${md(v)} |`);
   for (const [p, v] of light) if (!flatten(themes.dark, "c").some(([d]) => d === p)) out.push(`| \`${p}\` | ${md(v)} | — |`);
+  out.push("", "## Повышение контраста (`highContrast`) — когда в системе включено «Повышение контраста»", "", "| Токен | Светлая | Тёмная |", "| --- | --- | --- |");
+  const hl = new Map(flatten(highContrast.light, "hc"));
+  for (const [p, v] of flatten(highContrast.dark, "hc")) out.push(`| \`${p}\` | ${md(hl.get(p) ?? "—")} | ${md(v)} |`);
   for (const g of GROUPS) {
     out.push("", `## ${g.title} (\`${g.name}\`)`, "", "| Токен | Значение |", "| --- | --- |");
     for (const [p, v] of flatten(g.value, g.name)) out.push(`| \`${p}\` | ${md(v)} |`);
