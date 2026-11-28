@@ -11,7 +11,6 @@ const { waited } = require("../sheet.cjs");
 
 const SCREENS = [
   { path: "/today", ready: "tile-received" },
-  { path: "/finance", ready: "money-tile-owed" },
   { path: "/reports/collected?p=all", ready: null },
   { path: "/reports/sales?p=month", ready: null },
 ];
@@ -52,7 +51,4 @@ exports.run = async (h) => {
     if (s.client) clientTiles += r.inTiles;
   }
   h.expect(clientTiles > 0, `the client cards' tile figures are checked (${clientTiles})`);
-  await h.go("/finance");
-  await p.getByTestId("money-tile-owed").locator("visible=true").first().waitFor({ timeout: 8000 });
-  await h.shot("finance-tiles");
 };

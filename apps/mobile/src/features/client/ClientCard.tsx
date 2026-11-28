@@ -16,7 +16,7 @@ import { useStore } from "@/data/store";
 import { peopleOf } from "@/data/people";
 import type { Customer, CustomerStatus, Person, Property } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
-import { canServe, clientStatusChip, noLateCallsNow, statusChoices, tagLabel, tagsOf } from "@/features/clients";
+import { archiveOwes, canArchive, canServe, clientStatusChip, noLateCallsNow, statusChoices, tagLabel, tagsOf } from "@/features/clients";
 import { CallSheet, type CallPreset } from "@/features/comms/CallSheet";
 import { useDialThenAsk } from "@/features/comms/dial";
 import { MessageSheet, type MessagePreset } from "@/features/comms/MessageSheet";
@@ -24,6 +24,7 @@ import { callPlaceForClient } from "@/features/comms/comms";
 import { PeopleSheet, StatusSheet, TagsSheet } from "@/features/client/ClientSheets";
 import { newProperty, PropertySheet } from "@/features/client/PropertySheets";
 import { clientSectionKeys, jobChain, type ClientMainStep, type ClientSectionKey } from "@/features/client/nextStep";
+import { clientMeasureHref, clientPlaceCtx } from "@/features/client/clientMeasure";
 import { ClientContacts } from "@/features/client/ClientContacts";
 import { ClientDetails, ClientEstimates, ClientLog, ClientMoney, ClientNowCard, ClientOverview, ClientPlaces, ClientVisits, ClientWork, clientStepOf, useClientFacts } from "@/features/client/ClientSections";
 import { TaskSheet, type TaskDraft } from "@/features/tasks/TaskSheet";
@@ -56,7 +57,7 @@ export const stepTestID = (s: ClientMainStep | null) => (s?.kind === "estimate" 
 export function ClientObject({ c, section, onSection, back }: { c: Customer; section: ClientSectionKey; onSection: (k: ClientSectionKey) => void; back: () => void }) {
   const store = useStore();
   const { db, role } = store;
-  const { t } = useI18n();
+  const { t, money } = useI18n();
   const toast = useToast();
   const f = useClientFacts(c);
   const { r, office, status } = f;
@@ -79,19 +80,23 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
   const call = () => tel && dial(tel, () => callDone());
   const sms = (p?: Person) => (tel || p ? setWriting({ owner: { type: "customer", id: c.id }, person: p ?? main }) : mail ? Linking.openURL(mail).catch(() => {}) : undefined);
   const route = (p: Property) => Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(propertyMapQuery(p))}`).catch(() => {});
-  // the measure starts a new estimate for the client (where the module's drawing lives): the office's, when the client is served
-  const estimateHref = fabItems("client", role, { customerId: c.id }).find((i) => i.id === "estimate")?.href;
-  /** v2 «быстрые действия»: five icons 44 with their words; what cannot be done is dimmed with the reason (VoiceOver) */
+  // #2996: «Замер» is the measuring module's measurement (never a new estimate); no such module — no icon
+  const measureHref = canServe(db, c.id) ? clientMeasureHref(db, role, clientPlaceCtx(db, c.id, r.leadIds, r.properties)) : undefined;
+  /** v2 «быстрые действия»: five icons 44 with their words — one order on every object (#2995): Позвонить · SMS · Почта · Маршрут · Замер;
+   *  what cannot be done is dimmed with the reason (VoiceOver) */
   const quick: IconRowItem[] = [
     { icon: "phone", label: t("client.call"), a11y: `${t("client.call")} ${c.name}`, onPress: call, testID: "client-call", disabled: !tel, reason: t("w2b.client.noPhone") },
     { icon: "message", label: t("cc.sms"), a11y: `${t("cc.sms")} ${c.name}`, onPress: () => sms(), testID: "client-write", disabled: !tel || !main, reason: t("w2b.client.noPhone") },
-    { icon: "route", label: t("client.route"), a11y: place ? `${t("client.route")}: ${place.address}` : t("client.route"), onPress: () => place && route(place), testID: "client-route", disabled: !place, reason: t("w2b.client.noPlace") },
     { icon: "mail", label: t("cl6.writeMail"), a11y: `${t("cl6.writeMail")} ${c.name}`, onPress: () => mail && Linking.openURL(mail).catch(() => {}), testID: "client-mail", disabled: !mail, reason: t("w2b.client.noMail") },
-    ...(estimateHref && canServe(db, c.id) ? [{ icon: "measure" as const, label: t("w2b.client.measure"), a11y: `${t("w2b.client.measure")}: ${c.name}`, onPress: () => router.push(estimateHref as Href), testID: "client-measure" }] : []),
+    { icon: "route", label: t("client.route"), a11y: place ? `${t("client.route")}: ${place.address}` : t("client.route"), onPress: () => place && route(place), testID: "client-route", disabled: !place, reason: t("w2b.client.noPlace") },
+    ...(measureHref ? [{ icon: "measure" as const, label: t("w2b.client.measure"), a11y: `${t("w2b.client.measure")}: ${c.name}`, onPress: () => router.push(measureHref as Href), testID: "client-measure" }] : []),
   ];
 
   /* ---------- status ---------- */
   const statusOptions = statusChoices(status, role);
+  // #3044: a client who owes is not made inactive — the office sees the sum, the others only that a balance is open
+  const owes = archiveOwes(db, c.id);
+  const archiveWhy = owes > 0 ? (office ? t("oc.client.archiveOwes", { amount: money(owes) }) : t("oc.client.archiveOwesNoSum")) : undefined;
   const chooseStatus = (st: CustomerStatus) => {
     setPicking(false);
     if (st === status) return;
@@ -168,7 +173,8 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
 
   /* ---------- the strip ---------- */
   const keys = clientSectionKeys(role, f.hasMoney, r.properties.length > 1);
-  const current: ClientSectionKey = keys.includes(section) ? section : "overview";
+  // a tech has no «Выезды» of their own: an address `?tab=visits` opens «Работы», where the visits are (#3060 п.3)
+  const current: ClientSectionKey = keys.includes(section) ? section : section === "visits" && keys.includes("work") ? "work" : "overview";
   const workN = office ? r.jobs.length : f.visits.length;
   const sections = useMemo(
     () =>
@@ -190,7 +196,7 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
     ) : current === "money" ? (
       <ClientMoney c={c} f={f} />
     ) : current === "visits" ? (
-      <ClientVisits f={f} />
+      <ClientVisits f={f} customerId={c.id} />
     ) : current === "places" ? (
       <ClientPlaces c={c} f={f} onRoute={route} />
     ) : current === "log" ? (
@@ -211,10 +217,11 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
           title: c.name,
           avatar: initials(c.name),
           // v2 макет 3: «◷ Активный» — the clock for an active client
-          status: { name: chip.s, label: statusWord, icon: status === "active" ? "clock" : undefined, onPress: office && statusOptions.length ? () => setPicking(true) : undefined },
+          // #3023: the status changes from here — the word with «⌄» (HeadStatus); an active client — the ok mark (the clock read «ждёт»)
+          status: { name: chip.s, label: statusWord, onPress: office && statusOptions.length ? () => setPicking(true) : undefined },
           // the line right of the rule (v2 «Клиент · VIP», the founder 21.11 «нет разделения Клиент · VIP»): what it is and its first
           // tag — never «VIP · Постоя…»; all of them are in «⋯ Метки»
-          kindWord: t("client.card"),
+          // #3023 (founder: «дублируется слово клиент»): no kind word — «‹ Клиенты» says it; the first tag only
           meta: headTags([...tags.map((x) => ({ id: x.id, label: tagLabel(x, t) })), ...(noLateCallsNow(db, c) ? [{ id: "late", label: t("client.lateCalls") }] : [])]).slice(0, 1),
           details: <ClientDetails c={c} f={f} onCall={(p) => callDone(p)} onSms={(p) => sms(p)} onRoute={route} />,
           // v2 «⌄ в свёрнутой»: the contacts, one row 48 each, over the page
@@ -241,7 +248,7 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
         visible={picking}
         onClose={() => setPicking(false)}
         title={t("client.statusTitle")}
-        options={statusOptions.map((x) => ({ key: x, tone: clientStatusChip[x].s, label: t(clientStatusChip[x].l), current: x === status, enabled: true, form: x === "do_not_service" }))}
+        options={statusOptions.map((x) => ({ key: x, tone: clientStatusChip[x].s, label: t(clientStatusChip[x].l), current: x === status, enabled: x !== "archived" || canArchive(db, c.id), reason: x === "archived" ? archiveWhy : undefined, form: x === "do_not_service", hint: t(`client.stHint.${x}` as DictKey) }))}
         onPick={(k) => chooseStatus(k as CustomerStatus)}
       />
       <PeopleSheet visible={sheet === "people"} customer={c} onClose={() => setSheet(null)} />

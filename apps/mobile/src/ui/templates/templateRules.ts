@@ -127,8 +127,8 @@ export function moreItems(items: MenuItem<string>[] | undefined, second?: (MainA
   return [...all.filter((i) => !i.destructive), ...all.filter((i) => i.destructive)];
 }
 
-/** a dangerous item asks first (the template's confirm sheet); the rest run at once */
-export const asksFirst = (item: MenuItem<string> | undefined) => !!item?.destructive;
+/** a dangerous item asks first (the template's confirm sheet); the rest run at once; one that asks its own question (`ownAsk`) — not twice */
+export const asksFirst = (item: MenuItem<string> | undefined) => !!item?.destructive && !item.ownAsk;
 
 /** «Нужно внимание» on an Overview: at most three rows, the rest behind «Все ›» (BUILD-PLAN §1 Г) */
 export const ATTENTION_MAX = 3;

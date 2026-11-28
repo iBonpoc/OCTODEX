@@ -1,7 +1,7 @@
 /** Every screen (all routes in src/app) at 390 / 820 / 1280 in dark and light: no horizontal overflow; screenshots in e2e/out. */
 const SCREENS = [
   "/today", "/figures/leads?period=month", "/triage", "/leads", "/visits", "/plan", "/messages", "/messages/c-c1", "/calls", "/tasks", "/clients", "/more", "/notifications", "/search?q=mitchell",
-  "/lead/l1", "/lead/new", "/client/c1", "/property/p1", "/client/edit?id=c1", "/client/edit", "/client/import", "/client/imports",
+  "/lead/l1", "/lead/new", "/client/c1", "/client/files/c1", "/property/p1", "/client/edit?id=c1", "/client/edit", "/client/import", "/client/imports",
   "/module/gutters/draw", "/module/gutters/list", "/module/gutters/start?customer=c1", "/module/gutters/view", "/module/gutters/settings", "/module/gutters/prices", "/estimate/new?id=e6", "/estimate/e5", "/estimate/signature", "/estimates", "/p/demo0handyman0estimate0000000001", "/f/f00000000000000000000000000000000",
   "/jobs", "/job/j1", "/job/new", "/job/schedule?jobId=j1", "/visit/v1",
   "/money", "/finance", "/invoice", "/invoice?f=paid", "/payments", "/reports", "/reports/owed", "/reports/collected?p=all", "/reports/sales", "/reports/sources?p=all", "/reports/categories?p=all", "/invoice/i5", "/receipt/pay5", "/expense/new",
@@ -9,7 +9,7 @@ const SCREENS = [
 ];
 /** screens that redirect by design: screen → the path it ends on (empty: nothing yet — filled from the first run, #800) */
 // by design: the «Графит» sheet is behind the pilot switch (off by default) — its address goes back to the list; the sheet itself is e2e 520 on all 6 views
-const REDIRECTS = { "/settings/design-system/graphite": true };
+const REDIRECTS = { "/settings/design-system/graphite": true, "/finance": true }; // #3025: /finance → /invoice (one «Деньги»)
 /** a screen's words for a record or page that is missing (the app shows them instead of a crash) */
 const NOT_THERE = /не найден[аоы]?|не существует|Такого документа нет|not found|doesn't exist|404/i;
 /** screens where such words are by design (an empty search, an empty list) */

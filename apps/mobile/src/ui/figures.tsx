@@ -39,7 +39,8 @@ function PlainFig({ f }: { f: Fig }) {
       <T v="micro" w="semibold" tone="mut" numberOfLines={1}>
         {f.label}
       </T>
-      <T v="title" w="semibold" numberOfLines={1}>
+      {/* #2995 (layout review 27.11): «$3,420.…» was cut at 390 by the 22 figure in a 103 cell — the job's cells' size, sums whole */}
+      <T v="heading" w="bold" numberOfLines={1}>
         {f.value}
       </T>
     </View>

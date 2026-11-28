@@ -25,8 +25,20 @@ export function ButtonPair({ main, second, icon, testID, ids }: { main: ButtonPr
   const how = buttonPairLayout(both.map((b) => ({ label: b.label, icon: !!b.icon })), w ? w - reserve : w);
   const square = icon ? <IconButton icon={icon.icon} label={icon.a11y} onPress={icon.onPress} testID={icon.testID} /> : null;
   return (
-    <View testID={testID} onLayout={(e) => setW(e.nativeEvent.layout.width)} style={{ flexDirection: how === "row" ? "row" : "column", alignItems: how === "row" ? "center" : "stretch", gap: space[2] }}>
-      {how === "row" && second ? (
+    <View testID={testID} onLayout={(e) => setW(e.nativeEvent.layout.width)} style={{ flexDirection: how === "column" ? "column" : "row", alignItems: how === "column" ? "stretch" : "center", gap: space[2] }}>
+      {how === "words" ? (
+        <>
+          <View testID={ids?.main}>
+            <Button {...main} />
+          </View>
+          {second ? (
+            <View testID={ids?.second}>
+              <Button {...second} variant={second.variant ?? "secondary"} />
+            </View>
+          ) : null}
+          {square}
+        </>
+      ) : how === "row" && second ? (
         <>
           <View testID={ids?.main} style={{ flex: 1, minWidth: 0 }}>
             <Button {...main} full />

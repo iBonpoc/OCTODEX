@@ -20,6 +20,8 @@ import { applyOp, catalogCostChange, catalogItemChange, renewSession, sendVisitP
 import { callNext, callOp, leadTouchNext, leadTouchOp, messageNext, messageOp, type LeadTouch } from "@/features/comms/contactEvents";
 import { defaultLeadAssignee } from "@/features/leadAssignee";
 import { keepLast, stepPending } from "@/features/location";
+import { canArchive } from "@/features/clients";
+import { laterIso } from "@/features/estimateStatus";
 import { canChangeEstimateClient } from "@/features/estimateStatus";
 import { changeConsent, withConsent, type ConsentChange } from "@/features/locationConsent";
 import { leadCols, type LeadPatch } from "@/cloud/leadCols";
@@ -132,6 +134,7 @@ import {
   type PurchaseOrder,
   type ItemVariant,
   type Photo,
+  type FileItem,
 } from "./types";
 import { cleanEstimateTemplate, canEditEstimateTemplates } from "@/features/estimateTemplate";
 import { cleanName } from "@/features/nameAsk";
@@ -304,6 +307,8 @@ interface StoreCtx {
   advanceVisit: (id: ID) => Undo;
   /** #1558: only a file made anew here (`prepPicked`) — or the original kept on this phone as «preparing» (never sent) */
   addPhoto: (visitId: ID, kind: "before" | "after", photo?: string | PickedPhoto) => Undo;
+  /** #3085: a photo of the client (from the client by SMS or mail): on the client, no visit; only a file made anew here (`prepPicked`) */
+  addClientFile: (customerId: ID, uri: string) => Undo;
   toggleCheck: (visitId: ID, itemId: ID) => Undo;
   removePhoto: (visitId: ID, photoId: ID) => Undo;
   /** #1431 «Повторить»: a photo the cloud refused is sent again — made anew first (#1558: the file on this phone may be
@@ -1859,6 +1864,11 @@ export function StoreProvider({
         );
       },
       addPhoto: addPhotoFn,
+      addClientFile: (customerId, uri) => {
+        const id = uid();
+        const file: FileItem = { id, kind: "photo", customerId, at: new Date().toISOString(), uri };
+        return mutate("file.add", (d) => ({ ...d, files: [...(d.files ?? []), file] }), { k: "file.add", id, customerId, uri });
+      },
       toggleCheck: (visitId, itemId) => {
         const item = dbRef.current.visits.find((x) => x.id === visitId)?.checklist.find((c) => c.id === itemId);
         return checkItemFn(visitId, itemId, !item?.done);
@@ -2630,6 +2640,8 @@ export function StoreProvider({
               // «don't sign — change it»: the client signs the new version again (the old signature stays on the server)
               ...(prev?.status === "awaiting_countersign" ? { approval: undefined, signature: undefined } : {}),
               sentAt: prev?.status === "draft" ? prev.sentAt : undefined,
+              // #3058: an estimate that went out remembers it after an edit (the server keeps sent_version_id; the version's sent_at goes)
+              lastSentAt: laterIso(prev?.lastSentAt, prev?.sentAt),
               // a new estimate takes the direction of its lead / client / company (S16); an existing one keeps its own
               serviceCategoryId: prev ? prev.serviceCategoryId : inheritCategory(d, { kind: "estimate", leadId: leadId0, customerId }),
             };
@@ -2763,8 +2775,11 @@ export function StoreProvider({
       saveCustomerPeople,
       setCustomerTags: (id, tagIds) =>
         mutate("customer.tags", (d) => ({ ...d, customers: d.customers.map((c) => (c.id === id ? { ...c, tagIds } : c)) }), { k: "customer.tags", id, tagIds }),
+      // #3044: a client who owes is never made inactive — whatever screen asks (the header, the list's swipe); the screen says why
       setCustomerStatus: (id, status, reason) =>
-        mutate(
+        status === "archived" && !canArchive(dbRef.current, id)
+          ? NO_UNDO
+          : mutate(
           "customer.status",
           (d) => ({ ...d, customers: d.customers.map((c) => (c.id === id ? { ...c, status, statusReason: status === "do_not_service" ? reason : undefined } : c)) }),
           { k: "customer.status", id, status, reason: status === "do_not_service" ? reason : undefined },

@@ -1,10 +1,11 @@
 /**
  * e2e 384 — the estimate's screen: the icons under the header, ONE main step and «⋯» (prototype v2 #2350, the Object template;
  * before it — founder 14.11, #1412), a sent estimate (EST-0006) as the director, every view, by testID:
- * - the icon row under the header: SMS · Почта · Ссылка · PDF · Изменить (`est-act-*`, `estimate-screen-actions`);
- * - the main step «Напомнить» (the estimate is sent already) stands under the header, above the sections — no pinned bar
- *   (П3, founder 21.11);
- * - «⋯» of the header: Как видит клиент · Сохранить как шаблон… · Подписать здесь · Отозвать ссылку — the dangerous one last;
+ * - the icon row under the header (#2995/#2997, design + crm review 27.11): the person first — Позвонить · SMS · Почта, then PDF;
+ *   nothing in it sends the estimate (SMS / Почта open the phone's app to the client);
+ * - the main step «Напомнить» (the estimate is sent already) stands under the header, ABOVE the sections strip, on both sections
+ *   (спека 68 В1 (а)) — the strip never moves; quiet (outline) before the company's term, «Отправлена N дн. назад» under it (В8);
+ * - «⋯» of the header: Изменить · Показать клиенту · Сохранить как шаблон… · Ссылка · Подписать здесь · Отозвать ссылку — the dangerous one last;
  *   no icon of the row is repeated in it;
  * - «Отозвать ссылку» asks first (the template's confirm), then runs with the toast «Отменить» (rule 5).
  */
@@ -15,19 +16,24 @@ exports.run = async (h) => {
 
   await h.go("/estimate/e6");
   await tid("estimate-screen-more").waitFor({ timeout: 8000 });
-  const row = ["est-act-edit", "est-act-pdf", "est-act-client"];
+  const row = ["est-call", "est-client-sms", "est-client-mail", "est-act-pdf"];
   for (const id of row) h.expect((await tid("estimate-screen-actions").getByTestId(id).count()) === 1, `«${id}» is an icon of the row under the header`);
+  const ys = [];
+  for (const id of row) ys.push((await tid("estimate-screen-actions").getByTestId(id).first().boundingBox()).x);
+  h.expect(ys.every((x, i) => i === 0 || x > ys[i - 1]), `the row reads Позвонить · SMS · Почта · PDF (${ys.join(", ")})`);
+  for (const id of ["est-act-edit", "est-act-client"]) h.expect((await tid("estimate-screen-actions").getByTestId(id).count()) === 0, `«${id}» is not in the row (it lives in «⋯»)`);
   for (const id of ["est-act-sms", "est-act-email", "est-act-copy"]) h.expect((await p.getByTestId(id).count()) === 0, `«${id}» is gone: nothing goes out by one tap`);
   for (const id of ["est-act-template", "est-act-revoke"]) h.expect(!(await visible(id)), `«${id}» is not on the page (it lives in «⋯»)`);
 
-  // the main step: the first thing of «Смета», UNDER the sections strip — the strip stands still when «Подпись на месте» has no
-  // step (#2363, founder 21.11: «кнопка сдвигает контент»); no pinned bar
+  // the main step: under the header's icons, ABOVE the sections strip (спека 68 В1 (а), #2997); it stays on «Подпись на месте» too,
+  // so the strip never moves (#2363, founder 21.11: «кнопка сдвигает контент»); no pinned bar
   await tid("est-send").waitFor({ timeout: 3000 });
   h.expect(/Напомнить/.test((await tid("est-send").textContent()) || ""), "a sent estimate: «Напомнить», not «Отправить клиенту»");
+  h.expect(/Отправлена (сегодня|\d+ дн\. назад)|Без ответа · \d+ дн\.|Клиент открыл/.test((await tid("estimate-screen").textContent()) || ""), "the reason counts the days since sending (В8)");
   const btn = await tid("est-send").boundingBox();
   const head = await tid("estimate-screen-actions").boundingBox();
   const secs = await tid("estimate-screen-sections").boundingBox();
-  h.expect(btn && head && secs && btn.y > head.y && btn.y > secs.y, `the main step stands under the sections strip (${btn && btn.y} / ${head && head.y} / ${secs && secs.y})`);
+  h.expect(btn && head && secs && btn.y > head.y && btn.y < secs.y, `the main step stands under the icons, above the sections strip (${btn && btn.y} / ${head && head.y} / ${secs && secs.y})`);
   // the strip does not move between «Смета» and «Подпись на месте»
   await tid("estimate-screen-sections-sign").click();
   await tid("sign-client-doc").waitFor({ timeout: 3000 });
@@ -45,7 +51,7 @@ exports.run = async (h) => {
   const order = await tid("menu-items").evaluate((m) =>
     [...m.querySelectorAll('[role="menuitem"]')].filter((e) => e.getBoundingClientRect().height > 0).map((e) => ({ id: e.getAttribute("data-testid"), y: e.getBoundingClientRect().y })).sort((a, b) => a.y - b.y).map((x) => x.id),
   );
-  h.expect(JSON.stringify(order) === JSON.stringify(["est-act-template", "est-act-copy-link", "est-sign-here", "est-call", "est-act-revoke"]), `the menu: ${order.join(", ")}`);
+  h.expect(JSON.stringify(order) === JSON.stringify(["est-act-edit", "est-act-client", "est-act-template", "est-act-copy-link", "est-sign-here", "est-act-revoke"]), `the menu: ${order.join(", ")}`);
   await h.shot("menu");
 
   // «Скопировать ссылку» (#2652): a plain copy — the link is copied, nothing is sent again, the status and the date stay

@@ -35,7 +35,7 @@ import { FieldError, useRequiredForm, useScreenScroll } from "@/ui/requiredForm"
 import { MainStep } from "@/ui/mainStep";
 import { CreateButton, MoreButton } from "@/ui/templates/parts";
 import type { MainAction } from "@/ui/templates";
-import { canChangeEstimateClient, estimateStatusView } from "@/features/estimateStatus";
+import { canChangeEstimateClient, changedAfterSend as changedAfterSendRule, estimateStatusView, estimateView, sentOnceAt } from "@/features/estimateStatus";
 import { useReducedMotion } from "react-native-reanimated";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { PickerSheet } from "@/ui/pickerSheet";
@@ -1062,7 +1062,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const dw = useDayWord();
   // #2363 F46 (founder 21.11): «сохранено 8:19» today, «сохранено вчера» the day before, else «сохранено пт, 19 нояб.» — no «позавчера»
   // #2363 F33: saved after it went to the client — the client has not seen these edits
-  const changedAfterSend = !!existing && existing.status !== "draft" && !!existing.sentAt && !!savedIso && savedIso > existing.sentAt;
+  // #3058: the one rule (features/estimateStatus) — also a draft that went out before and was saved since («Готово», a module's write)
+  const changedAfterSend = !!existing && changedAfterSendRule(existing);
   const savedWord = savedIso
     ? t("px3.est.saved", { time: dayKeyIn(savedIso) === todayKey() ? time(savedIso) : dw(savedIso, true) })
     : undefined;
@@ -1077,7 +1078,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // bottom is «Отправить» (the same press the header's ➤ had: save, then the send of the estimate — the way and the queue offline as
   // before) and «Готово» is the second, unfilled, beside it; «Отменить» then goes into «⋯» (editSession.barSteps)
   // CRM review 27.11: an estimate the client already has — «Отправить изменения» (as the header's ➤ said), a draft — «Отправить»
-  const sentBefore = !!existing && existing.status !== "draft";
+  // #3058: «Отправить изменения» for an estimate that ever went out (sentOnceAt) — also one back in draft after a send
+  const sentBefore = !!existing && (existing.status !== "draft" || !!sentOnceAt(existing));
   const bar = barSteps({ mayShare: canSend && !tplEdit, signed, hasLines: hasContent(doc), dirty, sent: sentBefore });
   const doneStep: MainAction = { label: t("proto.est.done"), onPress: () => void save(false), testID: "ue-save" };
   const step: MainAction =
@@ -1167,7 +1169,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       head={{ kind: "editor" }}
       title={tplEdit ? t("est.tpl.editTitle") : existing ? [t("ue.title"), existing.number].filter(Boolean).join(" ") : t("ue.newTitle")}
       // visual v2 №5: «Черновик · сохранено 8:19» (the version's own save time), «Демо» joins it in the header; no «?» by the title
-      subtitle={tplEdit ? undefined : existing ? [t(estimateStatusView(existing.status).l), changedAfterSend ? t("r1.est.changedAfterSend") : null, savedWord].filter(Boolean).join(" · ") : t("proto.est.autosave")}
+      subtitle={tplEdit ? undefined : existing ? [changedAfterSend && existing.status === "draft" ? t(estimateView(existing).l) : t(estimateStatusView(existing.status).l), changedAfterSend && existing.status !== "draft" ? t("r1.est.changedAfterSend") : null, savedWord].filter(Boolean).join(" · ") : t("proto.est.autosave")}
       back={back}
       onLeave={(proceed) => void close(proceed)}
       hintKey="estimate-builder"

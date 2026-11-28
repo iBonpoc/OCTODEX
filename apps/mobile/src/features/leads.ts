@@ -13,6 +13,7 @@ import { DECLINE_REASONS, LOST_REASONS, type Customer, type DB, type Lead, type 
 import { memberName } from "./team";
 import type { DictKey } from "@/i18n";
 import { leadPeopleOf, peopleForLead, peopleOf, phonesOfPeople } from "@/data/people";
+import { sentOnceAt } from "@/features/estimateStatus";
 
 export const leadStatusView: Record<LeadStatus, { status: StatusName; label: DictKey }> = {
   new: { status: "info", label: "st.new" },
@@ -172,7 +173,8 @@ export function leadTurn(db: DB, l: Lead, st: LeadSettings = LEAD_SETTINGS_DEFAU
     const overdue = workDaysAfter(ended, st.inspectionNoEstimateDays, businessHoursOf(db.company), tz) <= now;
     return { kind: "step", dueAt: visit.start, status: overdue ? "bad" : "warn" };
   }
-  const sentAt = db.estimates.filter((e) => e.leadId === l.id && e.status === "sent" && e.sentAt).map((e) => e.sentAt!).sort().pop();
+  // #3059: an estimate edited after it went out (a draft again) — the client still has the sent one: the lead waits on it
+  const sentAt = db.estimates.filter((e) => e.leadId === l.id && (e.status === "sent" || (e.status === "draft" && !!e.lastSentAt))).map((e) => sentOnceAt(e)).filter((x): x is string => !!x).sort().pop();
   // we wrote last: the last thing we did was a message (SMS / email / marketplace / "I replied"), not a conversation
   const lastOut = db.activities
     .filter((a) => a.subjectType === "lead" && a.subjectId === l.id && ["call", "sms", "email", "marketplace", "reply"].includes(a.kind))
