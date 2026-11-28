@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { router, useGlobalSearchParams, usePathname, useRootNavigationState, useSegments, type Href } from "expo-router";
 import { View, useWindowDimensions } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
-import { component, radius, size, space, spaceHalf } from "@octo/design-tokens";
+import { component, radius, size, space, spaceHalf, themes } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
@@ -93,7 +93,9 @@ export function TabBar() {
 function NavPill({ current: sectionNow, onGo, onGoHref, path }: { current: SectionId | undefined; onGo: (id: SectionId) => void; onGoHref: (href: Href) => void; path: string }) {
   const { role, db } = useStore();
   const { t } = useI18n();
-  const { c } = useTheme();
+  const { c, name } = useTheme();
+  // правило 2, исключение 4 («красное число… пусть будет красное»): кружок «Лиды» всегда красный темы — «Повышение контраста» его не меняет
+  const leadsRed = themes[name].status.bad.text;
   const { wide } = useDevice();
   const nav = useNavInsets();
   const { width } = useWindowDimensions();
@@ -163,7 +165,7 @@ function NavPill({ current: sectionNow, onGo, onGoHref, path }: { current: Secti
                   <View
                     testID="leads-badge"
                     pointerEvents="none"
-                    style={{ position: "absolute", top: -space[1], left: component.tabBar.icon - space[2], minWidth: component.tabBar.badge, height: component.tabBar.badge, paddingHorizontal: spaceHalf.tight, borderRadius: radius.pill, backgroundColor: c.status.bad.text, alignItems: "center", justifyContent: "center" }}
+                    style={{ position: "absolute", top: -space[1], left: component.tabBar.icon - space[2], minWidth: component.tabBar.badge, height: component.tabBar.badge, paddingHorizontal: spaceHalf.tight, borderRadius: radius.pill, backgroundColor: leadsRed, alignItems: "center", justifyContent: "center" }}
                   >
                     <T v="micro" w="bold" tabular style={{ color: c.bg, fontSize: component.tabBar.badgeText, lineHeight: component.tabBar.badge }}>
                       {badgeText(leadsN)}
