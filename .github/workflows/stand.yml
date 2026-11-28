@@ -1,0 +1,264 @@
+# The stand (#3117 Б, #3120): one web copy at a fixed link (alias «stand») = fresh main + every open PR labelled «стенд».
+# The branch stand/auto is rebuilt from origin/main every time, only by the job «merge» below — nobody writes it by hand.
+# scripts/stand.cjs decides the order (dependencies, then number) and what is left out (a conflict — git merge-tree, a PR
+# that depends on one left out, a PR changing .github/workflows, a PR that breaks the build — found by halving the list).
+# What went in and what did not, with the reason — the body of the pinned task #3123 «Стенд — ссылка и состав».
+#
+# Runs from main only (workflow_run, push, workflow_dispatch): a PR cannot change this file. Jobs:
+#   merge  — contents: write, no npm: git merge-tree / commit-tree, push stand/auto; no code of a PR is run
+#   build  — contents: read, no key, no cache: npm ci, typecheck, expo export (the code of the PRs runs only here)
+#   merge-again — only when build dropped a PR: the same merges without it, the SHA must be the one build built
+#   deploy — environment preview-web (the key), static files only, checked like preview-deploy.yml; eas deploy --alias stand
+# eas-cli pinned as in preview-deploy.yml (27.4.1).
+name: Stand
+
+on:
+  # a push to a PR (Preview builds it) and the label put on / taken off / a PR closed (stand-trigger.yml)
+  workflow_run:
+    workflows: [Preview, Stand trigger]
+    types: [completed]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# one stand: a newer event stops the older build (its result would be stale anyway)
+concurrency:
+  group: stand
+  cancel-in-progress: true
+
+jobs:
+  # Is this event about the stand? A push to main, a run by hand, the stand trigger — yes; a Preview of a PR — only when the PR
+  # has the label «стенд» now.
+  should:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      go: ${{ steps.go.outputs.go }}
+    steps:
+      - id: go
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          WF_PATH: ${{ github.event.workflow_run.path }}
+          HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+          REPO: ${{ github.repository }}
+          WF_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          WF_EVENT: ${{ github.event.workflow_run.event }}
+          PR: ${{ github.event.workflow_run.pull_requests[0].number }}
+          REF: ${{ github.ref }}
+        run: |
+          go=false
+          case "$EVENT" in
+            push|workflow_dispatch) [ "$REF" = "refs/heads/main" ] && go=true ;;
+            workflow_run)
+              # by the file, not the name (a fork may call its workflow «Stand trigger»), and only runs of this repository's branches
+              if [ "$WF_EVENT" = "pull_request" ] && [ "$HEAD_REPO" = "$REPO" ] && [ "$WF_CONCLUSION" != "skipped" ] && [ "$WF_CONCLUSION" != "cancelled" ]; then
+                # the file of the trigger comes from the PR's branch, so its word is not enough (review 2 of #3125): the PR has
+                # «стенд» now, or (label taken off, PR closed) it is on the stand now — a merge «stand: #N» in stand/auto
+                if [ "$WF_PATH" != ".github/workflows/stand-trigger.yml" ] && [ "$WF_PATH" != ".github/workflows/preview.yml" ]; then go=false
+                elif ! [[ "$PR" =~ ^[0-9]+$ ]]; then go=false
+                elif gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq '.labels[].name' | grep -qx 'стенд'; then go=true
+                elif [ "$WF_PATH" = ".github/workflows/stand-trigger.yml" ] && gh api "repos/$GITHUB_REPOSITORY/compare/main...stand/auto" --jq '.commits[].commit.message' 2>/dev/null | grep -q "^stand: #$PR "; then go=true; fi
+              fi ;;
+          esac
+          echo "go=$go" | tee -a "$GITHUB_OUTPUT"
+
+  merge:
+    needs: should
+    if: needs.should.outputs.go == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: read
+    outputs:
+      stand: ${{ steps.merge.outputs.stand }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - id: merge
+        name: main + the PRs labelled «стенд» → stand/auto (no checkout of a PR, no npm)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/stand.cjs merge --out manifest.json --push
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stand-manifest
+          path: manifest.json
+          retention-days: 7
+          if-no-files-found: error
+
+  build:
+    needs: merge
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    outputs:
+      stand: ${{ steps.build.outputs.stand }}
+      changed: ${{ steps.build.outputs.changed }}
+    steps:
+      # the script from main; the code of the PRs only in the worktree it builds
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      # NO cache here, ever (neither the npm one of setup-node nor the cache action): this job builds the code of the PRs in main, and a cache
+      # written here would be read by the checks of main and of every PR (security review of #3125 п.1; stand.test.ts guards it)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # artifacts never land next to scripts/ (review of #3125 п.5)
+      - uses: actions/download-artifact@v4
+        with:
+          name: stand-manifest
+          path: ${{ runner.temp }}/trusted
+      - id: build
+        name: Typecheck + web build (a broken combination → the PR found by halving the list is dropped)
+        run: node scripts/stand.cjs build --manifest "$RUNNER_TEMP/trusted/manifest.json" --out "$RUNNER_TEMP/manifest-build.json" --dist "$RUNNER_TEMP/stand-dist" --worktree "$RUNNER_TEMP/stand-wt"
+      # again before upload-artifact follows anything (security review 2 of #3125): only plain files and directories
+      - name: The dist holds only plain files and directories
+        run: |
+          [ -d "$RUNNER_TEMP/stand-dist" ] && [ ! -L "$RUNNER_TEMP/stand-dist" ] || { echo "::error::no real dist directory"; exit 1; }
+          [ -z "$(find "$RUNNER_TEMP/stand-dist" ! -type f ! -type d)" ] || { echo "::error::the dist holds something that is not a plain file"; exit 1; }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stand-dist
+          path: ${{ runner.temp }}/stand-dist
+          retention-days: 1
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stand-build
+          path: ${{ runner.temp }}/manifest-build.json
+          retention-days: 7
+          if-no-files-found: error
+
+  merge-again:
+    needs: [merge, build]
+    if: needs.build.outputs.changed == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    outputs:
+      stand: ${{ steps.again.outputs.stand }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: stand-manifest
+          path: ${{ runner.temp }}/trusted
+      # from the job that ran the code of the PRs: only its numbers are read, and only those that were in (stand.cjs)
+      - uses: actions/download-artifact@v4
+        with:
+          name: stand-build
+          path: ${{ runner.temp }}/untrusted
+      - id: again
+        name: The same merges without the PRs that break the build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILT: ${{ needs.build.outputs.stand }}
+        run: |
+          [[ "$BUILT" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::bad commit from the build"; exit 1; }
+          node scripts/stand.cjs merge --from "$RUNNER_TEMP/trusted/manifest.json" --exclude "$RUNNER_TEMP/untrusted/manifest-build.json" --expect "$BUILT" --out "$RUNNER_TEMP/manifest-final.json" --push
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stand-manifest-final
+          path: ${{ runner.temp }}/manifest-final.json
+          retention-days: 7
+          if-no-files-found: error
+
+  deploy:
+    needs: [merge, build, merge-again]
+    if: ${{ !cancelled() && needs.build.result == 'success' && (needs.merge-again.result == 'success' || needs.merge-again.result == 'skipped') }}
+    environment: preview-web
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+    # what goes online is decided here from the write jobs (review of #3125 п.4): the stand of merge-again when it ran, else
+    # the stand of merge; the build job's word («changed», its stand) is only checked against it
+    env:
+      CHANGED: ${{ needs.merge-again.result == 'success' }}
+      STAND: ${{ needs.merge-again.result == 'success' && needs.merge-again.outputs.stand || needs.merge.outputs.stand }}
+      BUILT: ${{ needs.build.outputs.stand }}
+    steps:
+      - name: The built commit is the stand of the write job
+        run: |
+          [[ "$STAND" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::no stand from the write job"; exit 1; }
+          [ "$BUILT" = "$STAND" ] || { echo "::error::the build job built $BUILT, the write job made $STAND"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Take the built files (static files only, checked before they go next to the app)
+        uses: actions/download-artifact@v4
+        with:
+          name: stand-dist
+          path: ${{ runner.temp }}/untrusted/dist
+      # the manifest of the write job (not the build job's: that one ran code of the PRs)
+      - uses: actions/download-artifact@v4
+        if: env.CHANGED != 'true'
+        with:
+          name: stand-manifest
+          path: ${{ runner.temp }}/trusted
+      - uses: actions/download-artifact@v4
+        if: env.CHANGED == 'true'
+        with:
+          name: stand-manifest-final
+          path: ${{ runner.temp }}/trusted
+      - name: The built files are a plain static site
+        working-directory: ${{ runner.temp }}/untrusted
+        run: |
+          # as preview-deploy.yml: only static files go online (no server code, no links, an index page, a sane size)
+          [ -f dist/index.html ] || { echo "::error::dist has no index.html"; exit 1; }
+          [ ! -e dist/server ] || { echo "::error::dist has server files"; exit 1; }
+          [ -z "$(find dist -type l)" ] || { echo "::error::dist has symbolic links"; exit 1; }
+          size_mb="$(du -sm dist | cut -f1)"
+          [ "$size_mb" -le 300 ] || { echo "::error::dist is $size_mb MB"; exit 1; }
+          mkdir -p "$GITHUB_WORKSPACE/apps/mobile/dist"
+          cp -R dist/. "$GITHUB_WORKSPACE/apps/mobile/dist/"
+      - name: Deploy the stand (the fixed alias «stand»)
+        id: web
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          set -o pipefail
+          npx eas-cli@27.4.1 deploy --non-interactive --alias stand | tee deploy.log
+          # the alias URL: https://<project>--stand.expo.app
+          url="$(grep -oE 'https://[a-z0-9-]+--stand\.expo\.app' deploy.log | head -1)"
+          [ -n "$url" ] || { echo "::error::eas deploy printed no stand URL"; exit 1; }
+          for i in $(seq 1 12); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' "$url")"; [ "$code" = "200" ] && break; sleep 5
+          done
+          [ "$code" = "200" ] || { echo "::error::$url answers $code"; exit 1; }
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: The link and what is on the stand → the pinned task (an edit, no e-mail)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          URL: ${{ steps.web.outputs.url }}
+        run: |
+          f="$RUNNER_TEMP/trusted/manifest.json"; [ "$CHANGED" = "true" ] && f="$RUNNER_TEMP/trusted/manifest-final.json"
+          [ "$(node -p 'require(process.argv[1]).stand' "$f")" = "$STAND" ] || { echo "::error::the manifest is not of $STAND"; exit 1; }
+          node scripts/stand.cjs issue --manifest "$f" --url "$URL"
