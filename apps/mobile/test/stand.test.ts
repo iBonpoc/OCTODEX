@@ -420,7 +420,10 @@ describe("stand.yml: who writes, where the code of the PRs runs, where the key i
     expect(s).toMatch(/push:\n\s+branches: \[main\]/);
     expect(s).toContain("workflow_dispatch:");
     expect(s).not.toMatch(/^ {2}pull_request/m);
-    expect(s).toMatch(/concurrency:\n\s+group: stand\n\s+cancel-in-progress: true/);
+    // #3173: the group is on the jobs after «should», never on the workflow — an event that is not the stand's cancels nothing
+    expect(s).not.toMatch(/^concurrency:/m);
+    expect(job("should")).not.toMatch(/concurrency:/);
+    for (const j of ["merge", "build", "merge-again", "deploy"]) expect(job(j), j).toMatch(/concurrency:\n\s+group: stand\n\s+cancel-in-progress: true/);
   });
   it("the trigger takes only the label «стенд» (put on / off) or closing such a PR, and runs nothing of the PR", () => {
     const t = wf("stand-trigger.yml");

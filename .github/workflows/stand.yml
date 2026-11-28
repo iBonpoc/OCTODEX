@@ -24,10 +24,10 @@ on:
 permissions:
   contents: read
 
-# one stand: a newer event stops the older build (its result would be stale anyway)
-concurrency:
-  group: stand
-  cancel-in-progress: true
+# one stand: a newer stand event stops the older build (its result would be stale anyway). NOT on the workflow (#3173): every
+# Preview / Stand trigger of ANY pull request starts this workflow, and a workflow-level group cancelled the build in progress
+# before «should» could say «not ours». The group is on the jobs after «should»: an event that is not the stand's skips them
+# and cancels nothing.
 
 jobs:
   # Is this event about the stand? A push to main, a run by hand, the stand trigger — yes; a Preview of a PR — only when the PR
@@ -73,6 +73,9 @@ jobs:
     needs: should
     if: needs.should.outputs.go == 'true'
     runs-on: ubuntu-24.04
+    concurrency:
+      group: stand
+      cancel-in-progress: true
     timeout-minutes: 15
     permissions:
       contents: write
@@ -100,6 +103,9 @@ jobs:
   build:
     needs: merge
     runs-on: ubuntu-24.04
+    concurrency:
+      group: stand
+      cancel-in-progress: true
     timeout-minutes: 90
     permissions:
       contents: read
@@ -148,6 +154,9 @@ jobs:
     needs: [merge, build]
     if: needs.build.outputs.changed == 'true'
     runs-on: ubuntu-24.04
+    concurrency:
+      group: stand
+      cancel-in-progress: true
     timeout-minutes: 15
     permissions:
       contents: write
@@ -188,6 +197,9 @@ jobs:
     if: ${{ !cancelled() && needs.build.result == 'success' && (needs.merge-again.result == 'success' || needs.merge-again.result == 'skipped') }}
     environment: preview-web
     runs-on: ubuntu-24.04
+    concurrency:
+      group: stand
+      cancel-in-progress: true
     timeout-minutes: 30
     permissions:
       contents: read
