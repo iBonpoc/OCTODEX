@@ -20,7 +20,7 @@ import { ListRow } from "@/ui/surfaces";
 const THUMB = component.photoThumb;
 
 /** Before/after photos. Camera on a phone; library/file picker on web. Tap a photo to view it or delete it. */
-export function PhotoStrip({ grid, caption, photos, onAdd, onAddPreparing, onRemove, onRetry, onPrepare, title }: { /** #3082: a line under the viewer's title — where the photos are from («выезд · дата · мастер») */ caption?: string; /** #3076: the thumbnails wrap into rows (a grid, as iOS «Фото») instead of one strip that scrolls sideways — the client's «Фото и файлы» */ grid?: boolean; photos: Photo[]; /** none: the photos are only shown (no «Добавить фото» tile). Only a file made anew here (#1558) — never the original */ onAdd?: (uri: string, small?: true) => void; /** #1558: a photo that could not be made anew yet — kept on this phone as «preparing»; none: it is not added (a toast says to add it again) */ onAddPreparing?: (p: Extract<PickedPhoto, { preparing: unknown }>) => void; /** #1558 «Подготовить снова» on an «unreadable» photo (none: the store finds the visit by the photo) */ onPrepare?: (id: string) => void; onRemove?: (id: string) => void; /** #1431 «Повторить» on a photo the cloud did not take (its file is on this phone) */ onRetry?: (id: string) => void; /** the viewer's title when the photos are not a visit's before / after (a module's measurement) */ title?: string }) {
+export function PhotoStrip({ grid, caption, photos, onAdd, onAddPreparing, onRemove, canRemove, onRetry, onPrepare, title }: { /** #3082: a line under the viewer's title — where the photos are from («выезд · дата · мастер») */ caption?: string; /** #3076: the thumbnails wrap into rows (a grid, as iOS «Фото») instead of one strip that scrolls sideways — the client's «Фото и файлы» */ grid?: boolean; photos: Photo[]; /** none: the photos are only shown (no «Добавить фото» tile). Only a file made anew here (#1558) — never the original */ onAdd?: (uri: string, small?: true) => void; /** #1558: a photo that could not be made anew yet — kept on this phone as «preparing»; none: it is not added (a toast says to add it again) */ onAddPreparing?: (p: Extract<PickedPhoto, { preparing: unknown }>) => void; /** #1558 «Подготовить снова» on an «unreadable» photo (none: the store finds the visit by the photo) */ onPrepare?: (id: string) => void; onRemove?: (id: string) => void; /** #3161: «Удалить» only for these photos (none: every photo) — a client's grid mixes his own with the office's */ canRemove?: (id: string) => boolean; /** #1431 «Повторить» on a photo the cloud did not take (its file is on this phone) */ onRetry?: (id: string) => void; /** the viewer's title when the photos are not a visit's before / after (a module's measurement) */ title?: string }) {
   const { c } = useTheme();
   const { t } = useI18n();
   const store = useStore();
@@ -152,12 +152,13 @@ export function PhotoStrip({ grid, caption, photos, onAdd, onAddPreparing, onRem
             <ListRow title={t("photoUp.next", { i: failedAt + 1, n: failed })} left={<Icon name="image" />} onPress={() => setOpen(nextFailed)} />
           </View>
         ) : null}
-        {onRemove && open ? (
+        {onRemove && open && (!canRemove || canRemove(open.id)) ? (
           <Button
             label={t("photo.delete")}
             icon="trash"
             variant="secondary"
             full
+            testID="photo-delete"
             onPress={() => {
               onRemove(open.id);
               setOpen(null);

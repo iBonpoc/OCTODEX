@@ -6,7 +6,8 @@
  * without a visit (#3085) is in `loose`: no property or job — shown only while nothing is filtered (unless it names a job).
  */
 import { visitPropertyId } from "@/data/selectors";
-import type { DB, FileItem, ID, Job, Photo, Property, Visit } from "@/data/types";
+import type { DB, FileItem, ID, Job, Photo, Property, Role, Visit } from "@/data/types";
+import { techVisitCounts } from "@/features/comms/comms";
 
 export interface MediaGroup {
   visit: Visit;
@@ -73,4 +74,32 @@ export function mediaChoices(m: ClientMedia, properties: readonly Property[], jo
     properties: properties.filter((p) => propIds.has(p.id)),
     jobs: jobs.filter((j) => jobIds.has(j.id) && (!propertyId || j.propertyId === propertyId)),
   };
+}
+
+/**
+ * #3161: who may add a photo to the client here («＋» of «Фото и файлы») — the database's rule (files_insert, 20261115170000;
+ * T474): the office (director, dispatcher, sales) — any client; a tech — only a client of his: a visit of his that counts
+ * (techVisitCounts = app.tech_visit_counts) on the client's job, lead or property (app.is_customer_assignee); a subcontractor —
+ * never (app.sub_file_ok: no customer_id). The tech who may not is not shown «＋»: the photo would be on the phone and refused.
+ * One difference, to the safe side: the app folds a job «completed» and «closed» into «done» (statusMap) and does not count either,
+ * the database stops counting only at «closed» — a tech whose job was completed today is not shown «＋» though it would be taken.
+ */
+export function canAddClientPhoto(db: Pick<DB, "me" | "jobs" | "visits" | "properties" | "members"> & { leads?: DB["leads"] }, role: Role, customerId: ID, now = Date.now()): boolean {
+  if (role !== "tech") return true;
+  if (db.members.some((m) => m.id === db.me && m.kind === "sub")) return false;
+  const customerOf = (v: Visit): ID | undefined =>
+    (v.jobId ? db.jobs.find((j) => j.id === v.jobId)?.customerId : undefined) ??
+    (v.leadId ? db.leads?.find((l) => l.id === v.leadId)?.customerId : undefined) ??
+    db.properties.find((p) => p.id === visitPropertyId(db as Pick<DB, "jobs" | "properties">, v))?.customerId;
+  return db.visits.some((v) => customerOf(v) === customerId && techVisitCounts(db, v, now));
+}
+
+/**
+ * #3161: who may «Удалить» a client's photo without a visit here — the database's files_update: the office; the row's author while
+ * the client is still his. The phone knows a photo is his own while its file is on this phone (`uri`: taken here, not yet sent or
+ * refused); a photo the client sent (from the server, no file here) or the office added is not his.
+ */
+export function canRemoveClientPhoto(db: Parameters<typeof canAddClientPhoto>[0], role: Role, customerId: ID, f: Pick<FileItem, "uri">, now = Date.now()): boolean {
+  if (role !== "tech") return true;
+  return !!f.uri && canAddClientPhoto(db, role, customerId, now);
 }
