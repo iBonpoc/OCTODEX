@@ -140,6 +140,23 @@ body.all .note{display:block}
 .doc .pay{background:#1C1A12;color:#fff;border-radius:999px;height:48px;display:flex;align-items:center;justify-content:center;font-weight:700;margin-top:14px}
 .doc .sm{font-size:12px;color:#585B63;margin-top:10px}
 .doc .tag{display:inline-block;background:#ECEAE3;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;margin-bottom:6px}
+
+/* перестройка (28.11): схема разделов, лента денег, список работ */
+.sch{padding:14px 16px;font-size:13.5px}
+.sch h2{font-size:22px;margin:4px 0 12px}
+.sch .blk{background:var(--surf);border-radius:16px;padding:10px 12px;margin-bottom:8px}
+.sch .blk b{display:block;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--mut);margin-bottom:4px}
+.sch .tb{display:flex;gap:4px;flex-wrap:wrap}
+.sch .tb span{background:var(--surf2);border-radius:8px;padding:4px 8px;font-weight:600;font-size:12.5px}
+.sch .tb span.x{text-decoration:line-through;opacity:.55}
+.sch .tb span.n{outline:1.5px solid var(--acc);outline-offset:-1.5px}
+.ladder .big{font-size:26px;font-weight:700}
+.bar2{height:8px;border-radius:999px;background:var(--surf2);overflow:hidden;margin:8px 0 2px}.bar2 i{display:block;height:100%;background:var(--ink);opacity:.75}
+.chips{display:flex;gap:6px;overflow:hidden;margin:2px -16px 12px;padding:0 16px}
+.chips span{background:var(--surf);border-radius:999px;padding:7px 12px;font-size:13.5px;font-weight:600;white-space:nowrap;color:var(--mut)}
+.chips span.on{background:var(--ink);color:var(--bg)}
+.phrase{font-size:14.5px;margin:2px 0 12px;color:var(--ink)}
+.tabbar .plus{width:44px;height:44px;border-radius:50%;background:var(--acc);color:var(--on-acc);display:flex;align-items:center;justify-content:center;margin-top:-6px}
 </style>
 </head>
 <body>
@@ -336,8 +353,84 @@ const S = {
       ${add("Взять оплату")}
     </div></div>${tabbar}` },
 
+  /* ===== Перестройка: схемы разделов ===== */
+  SCH0: { cap: "Сейчас: схема разделов", html: `<div class="sch"><h2>Сейчас</h2>
+    <div class="blk"><b>Нижняя панель</b><div class="tb"><span>Главная</span><span>План</span><span>Клиенты</span><span>Деньги</span><span>Лиды</span></div></div>
+    <div class="blk"><b>Деньги</b><div class="tb"><span>Сметы</span><span>Счета</span><span>Оплаты</span><span>4 плитки</span></div></div>
+    <div class="blk"><b>Работы</b>в меню «Ещё» и на «Плане»</div>
+    <div class="blk"><b>Карточка работы — 8 вкладок со счётчиками</b><div class="tb"><span>Обзор</span><span>Выезды</span><span>Сметы</span><span>Счета</span><span>Расходы</span><span>Заказы</span><span>Фото</span><span>Заметки</span></div></div>
+    <div class="blk"><b>Карточка клиента — 7 вкладок</b><div class="tb"><span>Обзор</span><span>Работы</span><span>Сметы</span><span>Счета</span><span>Выезды</span><span>Объекты</span><span>Журнал</span></div></div>
+    <div class="blk"><b>Где документы одной сделки</b>смета — в «Сметах», счета — в «Счетах», оплаты — внутри каждого счёта или в «Оплатах». Связь держит память.</div></div>` },
+  SCH1: { cap: "Вариант 1: всё — «Работа» от лида до денег", html: `<div class="sch"><h2>Вариант 1</h2>
+    <div class="blk"><b>Нижняя панель</b><div class="tb"><span>Сегодня</span><span class="n">Работы</span><span class="n">＋</span><span>Клиенты</span><span>Ещё</span></div><div style="margin-top:6px" class="tb"><span class="x">Деньги</span><span class="x">Лиды</span><span class="x">План</span></div></div>
+    <div class="blk"><b>Работа — одна вещь от первого звонка</b>Лид → Смета → Подписано → В работе → Ждём денег → Закрыта. Это этапы одной работы, не разные папки.</div>
+    <div class="blk"><b>Работы</b>один список, фильтр по этапу. Поиск по имени, телефону, номеру EST / INV.</div>
+    <div class="blk"><b>Карточка работы — без вкладок</b>одна лента: что дальше → деньги (лестница оплат) → объём работ и доп. работы → выезды → фото → журнал и PDF.</div>
+    <div class="blk"><b>Клиент</b>контакты, объекты, список его работ. Без вкладок «Сметы» и «Счета».</div>
+    <div class="blk"><b>Суммы по всем работам</b>«Сегодня» — кто должен; «Ещё → Отчёты».</div></div>` },
+  SCH2: { cap: "Вариант 2: «Работа» с подписи, панель почти как сейчас", html: `<div class="sch"><h2>Вариант 2</h2>
+    <div class="blk"><b>Нижняя панель</b><div class="tb"><span>Главная</span><span>План</span><span>Клиенты</span><span>Лиды</span><span class="n">Ещё</span></div><div style="margin-top:6px" class="tb"><span class="x">Деньги</span></div></div>
+    <div class="blk"><b>До подписи — как сейчас</b>лид и смета живут у лида и клиента. Подпись создаёт работу.</div>
+    <div class="blk"><b>После подписи — всё в работе</b>смета, доп. работы, предоплаты, оплаты, финальный счёт — одной лентой в карточке работы.</div>
+    <div class="blk"><b>Карточка работы — без вкладок</b>та же лента, что в варианте 1.</div>
+    <div class="blk"><b>Клиент</b>контакты, объекты, список работ. Без вкладок «Сметы» и «Счета».</div>
+    <div class="blk"><b>Суммы по всем работам</b>блок «Деньги» на Главной: ждём · просрочено → «Ещё → Деньги» (отчёт, не папка).</div></div>` },
+
+  /* ===== Перестройка: экран работы — одна лента, без вкладок ===== */
+  J: { cap: "Работа: одна лента, без вкладок", html: `<div class="scroll">
+    <div class="hdr">${circ("back")}<span class="who">Sarah Mitchell</span><span class="sp"></span>${circ("more")}</div>
+    <div class="title" style="margin:6px 0 4px"><h1 style="font-size:28px">Bathroom remodel</h1></div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">${st("info","half","В работе")}<span style="color:var(--mut);font-size:13px">· 1420 Oak Grove Ave</span></div>
+    <div class="phrase">Предоплата 2 ждёт оплаты до 25 нояб.</div>
+    <span class="b acc" style="width:100%;flex:none">Взять оплату</span>
+    <div class="gt" style="margin-top:16px"><h3>Деньги</h3></div>
+    <div class="card ladder" style="padding:14px 16px"><div style="color:var(--mut);font-size:13px">Осталось получить</div><div class="big">$2,220 <span style="font-size:15px;color:var(--mut);font-weight:500">из $3,420</span></div><div class="bar2"><i style="width:35%"></i></div></div>
+    <div class="lg" style="margin-top:8px">
+      ${row("doc","Смета","подписана 12 нояб.","$3,420", st("ok","ok","Подписана"))}
+      ${row("inv","Предоплата 1","наличные $500 · Zelle $700","$1,200", st("ok","ok","Оплачено"))}
+      ${row("inv","Предоплата 2","ссылка отправлена · до 25 нояб.","$1,000", st("warn","half","Ждём"))}
+      ${row("inv","Остаток","после работы","$1,220", st("neutral","minus","Не выставлен"))}
+      ${add("Ещё предоплата")}
+    </div>
+    <div class="gt" style="margin-top:14px"><h3>Выезды</h3><span style="color:var(--mut);font-size:13px">Все · 2 ›</span></div>
+    <div class="lg">${row("cal","пт, 20 нояб. 8:30 AM","Alex Petrov","", "")}</div>
+    </div>${tabbar}` },
+
+  /* Вариант 1: список «Работы» с этапами и новая панель */
+  V1L: { cap: "Вариант 1: «Работы» — один список, этапы фильтром", html: `<div class="scroll">
+    <div class="hdr"><span class="av">AP</span><span class="sp"></span>${circ("plus")}</div>
+    <div class="bigt" style="margin-bottom:10px">Работы</div>
+    <div class="chips"><span class="on">Все</span><span>Лиды</span><span>Смета</span><span>В работе</span><span>Ждём денег</span><span>Закрыты</span></div>
+    <div class="lg">
+      ${row("doc","Gutter replacement","Tom Baker · новый лид, 2 ч","", st("info","half","Лид"))}
+      ${row("doc","Fence repair + gate","Linda Alvarez · смета отправлена","$2,980", st("warn","half","Смета"))}
+      ${row("doc","Bathroom remodel","Sarah Mitchell · ждём $1,000","$3,420", st("info","half","В работе"))}
+      ${row("doc","Kitchen faucet","David Kim · просрочен 9 дн","$1,840", st("bad","x","Ждём денег"))}
+      ${row("doc","Deep clean","Maria Gonzalez · оплачено","$780", st("ok","ok","Закрыта"))}
+    </div></div>
+    <div class="tabbar">${[["home","Сегодня"],["doc","Работы",1]].map(([k,l,on])=>`<div class="${on?"on":""}">${svg(k)}<span>${l}</span></div>`).join("")}<div><span class="plus">${svg("plus")}</span></div>${[["people","Клиенты"],["more","Ещё"]].map(([k,l])=>`<div>${svg(k)}<span>${l}</span></div>`).join("")}</div>` },
+
+  /* Вариант 2: Главная с блоком денег, нижняя панель без «Деньги» */
+  V2H: { cap: "Вариант 2: «Деньги» — блок на Главной, не вкладка", html: `<div class="scroll">
+    <div class="hdr"><span class="av">AP</span><span class="sp"></span>${circ("plus")}</div>
+    <div class="bigt" style="margin-bottom:10px">Главная</div>
+    <div class="gt"><h3>Деньги</h3><span style="color:var(--mut);font-size:13px">Все ›</span></div>
+    <div class="lg">
+      ${row("inv","Ждём оплаты","3 работы","$3,800", st("warn","half","Ждём"))}
+      ${row("inv","Просрочено","Kitchen faucet · 9 дн","$1,840", st("bad","x","Просрочено"))}
+      ${row("doc","Можно выставить","2 работы закончены","$1,420", st("neutral","minus","Не выставлено"))}
+    </div>
+    <div class="gt" style="margin-top:14px"><h3>Требует внимания</h3></div>
+    <div class="lg">${row("doc","Tom Baker — новый лид","нет ответа 2 ч","", st("bad","x","Ответить"))}${row("doc","Bathroom remodel","выезд сегодня 8:30","", st("info","half","Выезд"))}</div>
+    </div>
+    <div class="tabbar">${[["home","Главная",1],["cal","План"],["people","Клиенты"],["target","Лиды"],["more","Ещё"]].map(([k,l,on])=>`<div class="${on?"on":""}">${svg(k)}<span>${l}</span></div>`).join("")}</div>` },
+
 };
 
+// экран работы с нижней панелью своего варианта
+const barOf = (k) => S[k].html.slice(S[k].html.lastIndexOf('<div class="tabbar">'));
+S.J1 = { cap: "Вариант 1: экран работы", html: S.J.html.replace(tabbar, barOf("V1L")) };
+S.J2 = { cap: "Вариант 2: экран работы", html: S.J.html.replace(tabbar, barOf("V2H")) };
 const q = new URLSearchParams(location.search);
 const one = q.get("s"), th = q.get("t") || "dark";
 document.documentElement.dataset.theme = th;
