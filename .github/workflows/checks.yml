@@ -279,6 +279,9 @@ jobs:
         working-directory: apps/mobile
         env:
           SPECS: ${{ needs.changes.outputs.specs }}
+          # CHECKS §9 №87: a failed run of these specs keeps a Playwright trace in the artifact (e2e/traceOnFail.cjs); only the
+          # specs whose red is not understood yet — tracing costs CPU. Take a spec off once its cause is found
+          E2E_TRACE_SPECS: 37-service-categories.cjs
         run: |
           bash ../../scripts/aptRetries.sh
           bash ../../scripts/playwrightInstall.sh
