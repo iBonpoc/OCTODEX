@@ -310,6 +310,7 @@ export function InvoiceObject({ inv, back, pay: payNow, frame }: { inv: Invoice;
         // #2995 (layout review 27.11): «Просрочен…» was cut right of the rule on 390 — the status and the balance are one whole line
         // under the name («Просрочен 9 дн · $1,840.00»), never cut
         subtitle={balance > 0 ? money(balance) : money(inv.totalCents)}
+        statusLine
         main={main}
         second={second}
         sections={[]}

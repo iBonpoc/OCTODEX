@@ -57,6 +57,9 @@ export interface ObjectScreenProps<S extends string> {
   /** a whole line UNDER the name instead of the two lines right of the rule (DS §12.13 «Шапка», ревью design/crm #2841: the visit's
    *  «8:30–12:30 · Alex · Sarah Mitchell» is never cut in a narrow column) */
   subtitle?: string;
+  /** #3012: the status from the header and `subtitle` as ONE line under the name («✓ Оплачено · $342.00») — the screen asks for it
+   *  (the invoice). A screen with its own status in `lead` (the visit's pill) does not: its status would be said twice (#3013 review) */
+  statusLine?: boolean;
   /** what stands under the header instead of the quick actions row (макет 4 «Выезд»: «◷ Идёт · Код … · ☎ ✉ ◎») */
   lead?: ReactNode;
   /** the open section's content */
@@ -107,7 +110,7 @@ function useObjectParts<S extends string>(p: ObjectScreenProps<S>) {
   );
   // the whole line under the name with the status (#3012/#3031 review: «Оплачено» stood a grey word without its icon — rule 2):
   // the status with its icon first, then the line («✓ Оплачено · $342.00»); never cut — it wraps whole
-  const statusLine = p.subtitle && p.header.status ? (
+  const statusLine = p.statusLine && p.subtitle && p.header.status ? (
     <View testID={`${p.testID}-subtitle`} style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: space[1] }}>
       {objectHeadSub(p.header).line2}
       {p.subtitle ? <T v="caption" w="medium" tone="mut">{`· ${p.subtitle}`}</T> : null}
@@ -169,7 +172,7 @@ function ObjectLive<S extends string>(p: ObjectScreenProps<S>) {
       footer={bar ?? undefined}
       testID={p.testID}
       title={p.header.title}
-      subtitle={p.header.status ? undefined : p.subtitle}
+      subtitle={p.statusLine && p.header.status ? undefined : p.subtitle}
       head={head}
       back={p.back}
       right={right}
