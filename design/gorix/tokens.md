@@ -314,6 +314,13 @@
 | `component.modeRow.fieldW` | 96 |
 | `component.modeRow.sumW` | 80 |
 | `component.modeRow.titleW` | 112 |
+| `component.modeToggle.cell` | 30 |
+| `component.modeToggle.h` | 30 |
+| `component.modeToggle.knob` | 24 |
+| `component.modeToggle.dot` | 4 |
+| `component.modeToggle.titleMinW` | 64 |
+| `component.modeToggle.fieldNarrowW` | 80 |
+| `component.modeToggle.sumMinW` | 60 |
 | `component.tab.h` | 30 |
 | `component.tab.fadeW` | 32 |
 | `component.switch.w` | 42 |
