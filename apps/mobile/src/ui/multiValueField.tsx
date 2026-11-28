@@ -95,11 +95,11 @@ function KindButton<L extends string>({
 
 /**
  * Repeated values — phones, emails of a person (DS §9 А14а, spec 56 §3а.3; founder 21.11, #2350 «просто иконки… корзинка
- * удалить»): rows `[📞⌄] [value] [🗑]`, the last one ending in a compact «＋» (an `IconButton`, «Добавить телефон» for the screen reader;
- * #2954 — no line of its own; with no row at all the «＋» stands alone). The type — the value's icon with a small arrow, a menu (Мобильный · Домашний · …; then, as its own
+ * удалить»): rows `[📞⌄] [value] [🗑]` and under them a compact «＋» (an `IconButton`, «Добавить телефон» for the screen reader),
+ * always, also with no value. The type — the value's icon with a small arrow, a menu (Мобильный · Домашний · …; then, as its own
  * group, «Сделать основным»); the word only in the menu. The value — the screen's own (`renderValue`) or a `TextField` of
  * `valueType`. «🗑» — `IconButton` bare, zone 44, `ink` («Удалить номер»; the screen offers «Вернуть», rule 5). No words where
- * the icon is clear. The model stays the screen's: the first row is the main one. Width on 390: icon 44 + field + 🗑 40 (+ «＋» 44 in the last row).
+ * the icon is clear. The model stays the screen's: the first row is the main one. Width on 390: icon 44 + field + 🗑 40.
  */
 export function MultiValueField<L extends string>({
   rows,
@@ -162,22 +162,7 @@ export function MultiValueField<L extends string>({
                   <TextField type={valueType} value={r.value} onChangeText={(v) => onChange(r.id, { value: v })} placeholder={placeholder} label={typeName} testID={id ? `${id}-value` : undefined} />
                 )}
               </View>
-              {/* #2954 (founder 26.11: «почему это всё в отдельной строке?»): «＋» stands in the last row, after «🗑» and a gap — no line
-                  of its own; every row keeps both places, so the fields and the «🗑» stand in one column (design review). A lone empty
-                  row has no «🗑»: removing it would leave a bare «＋» (crm-reviewer) */}
-              {ro ? null : (
-                <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
-                  {/* no «🗑» (a lone empty row): its place goes to the field, the «＋» stays at the right edge (design review) */}
-                  {rows.length === 1 && !r.value.trim() ? null : (
-                    <View style={{ width: size.hitMin, alignItems: "center" }}>
-                      <IconButton bare icon="trash" label={removeLabel} onPress={() => onRemove(r.id)} testID={id ? `${id}-remove` : undefined} />
-                    </View>
-                  )}
-                  <View style={{ width: size.hitMin, alignItems: "center" }}>
-                    {i === rows.length - 1 ? <IconButton icon="plus" label={addLabel} onPress={onAdd} testID={testID ? `${testID}-add` : undefined} /> : null}
-                  </View>
-                </View>
-              )}
+              {ro ? null : <IconButton bare icon="trash" label={removeLabel} onPress={() => onRemove(r.id)} testID={id ? `${id}-remove` : undefined} />}
             </View>
             {note ? (
               <View testID={id ? `${id}-note` : undefined} style={{ marginLeft: size.hitMin + space[1] }}>
@@ -189,7 +174,7 @@ export function MultiValueField<L extends string>({
           </View>
         );
       })}
-      {ro || rows.length ? null : (
+      {ro ? null : (
         <View style={{ width: size.hitMin, alignItems: "center" }}>
           <IconButton icon="plus" label={addLabel} onPress={onAdd} testID={testID ? `${testID}-add` : undefined} />
         </View>
