@@ -2,12 +2,14 @@ import { useState } from "react";
 import { router } from "expo-router";
 import { sumCents } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
+import { shortAddress } from "@/features/shortAddress";
+import { memberName } from "@/features/team";
 import type { Advance, DB, Payment } from "@/data/types";
 import { ADVANCES_COLLECTED } from "@/features/payments/collected";
 import { useI18n, type DictKey } from "@/i18n";
 import { canSeePayments, paymentsIn } from "@/features/moneyLists";
 import { initialsOf } from "@/features/invoice/moneySummary";
-import { MoneyTiles, useMoneyChips, useMoneyCreate } from "@/features/moneyTabs";
+import { MoneyTotal, useMoneyChips, useMoneyCreate } from "@/features/moneyTabs";
 import type { GroupRowProps } from "@/ui/groupedList";
 import { Empty, Screen } from "@/ui/surfaces";
 import { ListScreen } from "@/ui/templates";
@@ -28,14 +30,14 @@ const WHEN_TITLE: Record<When, DictKey> = { today: "proto.money.g.today", week: 
 /**
  * «Деньги → Оплаты» — the List template (prototype v2 #2350, BUILD-SPEC §2.9): what came in, each with its receipt.
  * Payment → receipt → invoice → job → client. Owner, admin, office only (13 §4).
- * «Деньги» · search · «＋» → «Сметы · Счета · Оплаты» → the tiles → groups by the company's days «Сегодня · На этой неделе ·
+ * «Деньги» · search · «＋» → «Сметы · Счета · Оплаты» → one line «Получено» (MoneyTotal, #2993) → groups by the company's days «Сегодня · На этой неделе ·
  * В этом месяце · Раньше» with their sums (no period filter to set: the groups are the periods) → rows 56: initials, the client,
  * «способ · номер · день · INV», the sum once. Advances without an invoice — their own group, outside the sums (spec 35 §4г).
  */
 export default function Payments() {
   const { db, role } = useStore();
   const [q, setQ] = useState("");
-  const { t, money, day } = useI18n();
+  const { t, money, day, time, moneyWhole } = useI18n();
   const chips = useMoneyChips("payments");
   const { create, onCreate } = useMoneyCreate();
   if (!canSeePayments(role))
@@ -50,7 +52,7 @@ export default function Payments() {
   const all = paymentsIn(db, "all").items.filter((x) => matchPayment(db, x, q));
   const groups = WHEN.map((w) => {
     const rows = all.filter((x) => whenOf(x) === w);
-    return { key: w, title: `${t(WHEN_TITLE[w])} · ${money(sumCents(rows.map((x) => x.amountCents)))}`, rows: rows as (Payment | Advance)[] };
+    return { key: w, title: `${t(WHEN_TITLE[w])} · ${moneyWhole(sumCents(rows.map((x) => x.amountCents)))}`, rows: rows as (Payment | Advance)[] };
   });
   // spec 35 §4г: the clients' advances (no invoice) — their own group, outside every sum while they are «to check»
   const advances = ADVANCES_COLLECTED ? [] : (db.advances ?? []).filter((x) => matchPayment(db, { ...x, invoiceId: "" }, q));
@@ -63,27 +65,39 @@ export default function Payments() {
     // how it was paid once: a reference that already names the way («Check #1042») stands alone
     const how = t(`pay.${x.method}` as DictKey);
     const way = ref && (ref.toLowerCase().includes(x.method) || ref.toLowerCase().includes(how.toLowerCase())) ? ref : [how, ref].filter(Boolean).join(" ");
-    // visual v2 «цифры справа»: «Способ Карта · Сумма $678»; the line — the reference (when it is more than the way), the day, the invoice
-    const sub = [review, way !== how ? way : undefined, day(x.at), inv?.number, x.refundedCents ? t("mny.refunded", { amount: money(x.refundedCents) }) : undefined];
+    // #2992 (lists B): the sum alone on the right; the way («Чек #1042», «Zelle») leads the line, then the day and the invoice
+    // the group «Сегодня» already says the day (layout review 27.11, Д-строка-5)
+    // #3018 (founder #3017): 1 — the client · the way («Check #1042»); 2 — the address; 3 — the invoice · when · who took it
+    const prop = db.properties.find((p) => p.customerId === x.customerId);
+    const who = "receivedBy" in x && x.receivedBy ? memberName(db, x.receivedBy, t) : undefined;
+    // review #3038: line 3 was cut — who took it lives in the receipt
+    void who;
+    const sub = [review, inv?.number, whenOf(x as Payment) === "today" ? time(x.at) : day(x.at), x.refundedCents ? t("mny.refunded", { amount: moneyWhole(x.refundedCents) }) : undefined];
     return {
       key: x.id,
       testID: `payment-row-${x.id}`,
       title: c?.name ?? "—",
-      subtitle: sub.filter(Boolean).join(" · "),
+      refNo: x.receiptNumber || undefined,
+      subtitle: prop ? shortAddress(prop.address, prop.city) : undefined,
+      addressLine: true,
+      // #3038: the client's rule — 1 the client + the sum; 2 the address + RCT; 3 the way · the invoice · when · who
+      extra: [way, ...sub].filter(Boolean).join(" · ") || undefined,
+      valueTop: true,
       lead: { initials: initialsOf(c?.name) },
-      value: money(x.amountCents),
-      cols: [{ label: t("w2m.col.way"), value: how }, { label: t("w2m.col.sum"), value: money(x.amountCents) }],
+      value: moneyWhole(x.amountCents),
       onPress: () => router.push(`/receipt/${x.id}`),
     };
   };
   return (
     <ListScreen
       testID="payments-list"
+      // #3018 (founder #3017): each payment its own card
+      separate
       title={t("nav.money")}
       search={{ placeholder: t("card.filter.searchPayments"), value: q, onChange: setQ }}
       chips={chips}
       chipsAs="segment"
-      filters={<MoneyTiles />}
+      filters={<MoneyTotal tab="payments" />}
       create={create}
       onCreate={onCreate}
       groups={groups}

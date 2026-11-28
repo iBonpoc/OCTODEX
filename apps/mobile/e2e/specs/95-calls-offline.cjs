@@ -28,7 +28,10 @@ exports.run = async (h) => {
   await h.sheet().getByText("Поговорили", { exact: true }).last().click();
   await h.sheet().getByRole("button", { name: "Сохранить звонок" }).click(); await p.waitForTimeout(600);
   await h.expectText(/Без сети\. Сохранено, отправится позже/, "offline: the call is saved and queued");
-  await h.expectText(/Tom Becker.*Поговорили/, "the call is in the list at once");
+  // #3033: the outcome is the row's icon, its word the icon's label
+  const callRow = p.locator('[data-testid^="comms-"]').locator("visible=true").filter({ hasText: "Tom Becker" }).filter({ has: p.locator('[data-testid="row-status-icon"][aria-label="Поговорили"]') }).first();
+  await callRow.waitFor({ timeout: 8000 });
+  h.expect((await callRow.count()) === 1, "the call is in the list at once");
   const q1 = await queue(p);
   h.expect(q1.length === before + 1, `the call waits in the queue (${before} → ${q1.length})`);
   // «Отменить»: the call leaves the queue and the list (rule 5)

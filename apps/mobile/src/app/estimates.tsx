@@ -6,14 +6,14 @@ import { EstimateCardBody, estimateSubtitle } from "@/features/EstimateCard";
 import { useEstimateList } from "@/features/boards";
 import { useListPanel } from "@/nav/listPanel";
 import { ListPanel } from "@/ui/listPanel";
-import { MoneyTiles, useMoneyChips, useMoneyCreate } from "@/features/moneyTabs";
+import { MoneyTotal, useMoneyChips, useMoneyCreate } from "@/features/moneyTabs";
 import { Empty } from "@/ui/surfaces";
 import { ListScreen } from "@/ui/templates";
 
 /**
  * «Деньги → Сметы» — the List template (prototype v2 #2350, LAYOUT-RULES §2–§3, BUILD-SPEC §2.9, wireframes-v2 №8).
  * The screen's one job: see which estimates wait for me or for the client, and open the one needed.
- * «Деньги» · search icon · «＋» (new estimate / from a template) → «Сметы · Счета · Оплаты» one strip → the money tiles 2×2 →
+ * «Деньги» · search icon · «＋» (new estimate / from a template) → «Сметы · Счета · Оплаты» one strip → one line of its sums (MoneyTotal, #2993) →
  * grouped rows 56 (initials, name, «работа · что с ней», the sum once). No main button: making a new one is «＋».
  */
 export default function Estimates() {
@@ -45,19 +45,18 @@ export default function Estimates() {
     <ListScreen
       testID="est-list"
       title={t("nav.money")}
+      // #3018 (founder #3017): each estimate its own card
+      separate
       search={{ placeholder: t("card.filter.searchEstimates"), value: q, onChange: setQ }}
       chips={chips}
       chipsAs="segment"
-      filters={<MoneyTiles />}
+      filters={<MoneyTotal tab="estimates" />}
       create={create}
       onCreate={onCreate}
       groups={groups}
       aside={aside}
-      // visual v2 «цифры справа»: «Сумма $3,420» in the column of the group (FigureRow)
-      row={(e) => {
-        const r = { ...row(e), onPress: () => panel.open(e.id), selected: e.id === panel.openId };
-        return r.value ? { ...r, cols: [{ label: t("w2m.col.sum"), value: r.value }] } : r;
-      }}
+      // #2992 (lists B): the sum alone on the right — no «Сумма» word over it in every row (DS §5.5: the words of the columns stand once)
+      row={(e) => ({ ...row(e), onPress: () => panel.open(e.id), selected: e.id === panel.openId })}
       empty={<Empty icon="invoice" title={t("board.noEstimates")} />}
     />
   );

@@ -12,8 +12,8 @@ exports.run = async (h) => {
   const db = await h.db();
   const live = db.invoices.filter((i) => i.totalCents > i.paidCents);
   const owed = live.reduce((s, i) => s + i.totalCents - i.paidCents, 0);
-  // #2888: the tile with cents, never rounded to dollars (founder #2672)
-  const sum = `$${(owed / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  // #3029/#3030 (founder 27.11): a KPI tile is an overview — whole dollars (was #2888 «with cents»)
+  const sum = `$${Math.floor((owed + 50) / 100).toLocaleString("en-US")}`;
   h.expect((await tid("money-tile-owed").innerText()).includes(sum), `«Должны» says ${sum}`);
   await tid("money-tile-estimates").waitFor({ timeout: 3000 });
   h.expect((await p.getByTestId("money-tiles-small").locator("visible=true").count()) === 1, "the three small tiles");

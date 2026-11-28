@@ -4,6 +4,7 @@ import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useListPanel } from "@/nav/listPanel";
 import { ListPanel } from "@/ui/listPanel";
 import { LeadObject, leadSectionOf, type LeadSectionKey } from "@/features/lead/LeadCard";
+import { shortAddress } from "@/features/shortAddress";
 import { useStore } from "@/data/store";
 import { usePersistentState } from "@/data/persist";
 import type { Lead } from "@/data/types";
@@ -92,7 +93,8 @@ function LeadsList() {
   const wanted = (OLD[kept] ?? kept) as Chip;
   const chip: Chip = chips.includes(wanted) ? wanted : "open";
   const label = (c: Chip) => {
-    const n = c === "archive" || c === "open" ? 0 : pass[c]().length;
+    // «Все N» (DS §12.13 «Шапка», ревью design/crm #2841): the title has no number — the first chip says how many, as «Клиенты»
+    const n = c === "archive" ? 0 : pass[c]().length;
     return n ? `${t(CHIP_LABEL[c])} ${n}` : t(CHIP_LABEL[c]);
   };
   const list = pass[chip]().sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
@@ -132,11 +134,20 @@ function LeadsList() {
       key: l.id,
       testID: `lead-row-${l.id}`,
       title: l.name || "—",
-      // how long the client waits — the first word of the line (wireframes №16); late — the pill on the right (leadWaitPlace)
-      subtitle: [place === "line" ? wait : null, leadRowLine(l, turn, { t, day, source: sourceName(db, l.sourceId) })].filter(Boolean).join(" · "),
+      // #3017 (founder 27.11): line 1 — the name and the phone; line 2 — the address; line 3 — what is going on (how long the client
+      // waits first, wireframes №16; late — the pill on the right, leadWaitPlace). No line for what is not there (no «—»)
+      // #3038 (founder 27.11: «так же, как клиенты»): 1 — the name, on the right how long the client waits with its icon (no word —
+      // said to VoiceOver); 2 — the address of the work (none — no line); 3 — what is needed; no phone — the call is on the right
+      value: wait || undefined,
+      valueTop: true,
+      subtitle: shortAddress(l.address, l.city),
+      addressLine: true,
+      extra: leadRowLine({ ...l, city: "" }, turn, { t, day, source: sourceName(db, l.sourceId) }) || undefined,
+      refNo: l.number || undefined,
       lead: { initials: initials(l.name) },
       // a closed or won lead says its status
-      status: wait && place === "pill" ? { status: turn.status, label: wait } : !isOpenLead(l) ? { status: sv.status, label: t(sv.label) } : undefined,
+      // the word with the figure (rule 2, design-review 27.11): «Без ответа 22 мин», not a bare «22 мин»
+      status: wait ? { status: turn.status, label: t("lead.waiting", { time: wait }), iconOnly: true } : !isOpenLead(l) ? { status: sv.status, label: t(sv.label), iconOnly: true } : undefined,
       actions:
         isOpenLead(l) && tel
           ? [
@@ -160,8 +171,9 @@ function LeadsList() {
       <ListScreen<Lead>
         testID="leads"
         title={t("sales.leads")}
+        // #3017 (founder 27.11, on the stand): each lead its own card
+        separate
         // #2763 (DS §12 «Список»): the title counts what is shown — the chip and the search, not all open leads
-        count={list.length}
         create={{ a11y: t("quick.lead"), items: [{ key: "new", label: t("quick.lead"), icon: "leads", testID: "leads-create-new" }] }}
         onCreate={newLead}
         search={{ placeholder: t("lead.search"), value: q, onChange: setQ }}

@@ -30,9 +30,11 @@ exports.run = async (h) => {
   // v2 (#2350): the rows of the list are GroupRows `client-row-<id>`; the mark is the row's status
   const twinCard = p.getByTestId(`client-row-${TWIN}`).locator("visible=true").first();
   await twinCard.waitFor({ timeout: 5000 });
-  h.expect(/Возможный дубль/.test(await twinCard.innerText()), "the list: the twin is marked «Возможный дубль»");
+  // #3033: a row's status is its icon, the words are the icon's label
+  const says = async (loc) => `${await loc.innerText()} ${(await loc.locator('[data-testid="row-status-icon"]').first().getAttribute("aria-label", { timeout: 1000 }).catch(() => null)) ?? ""}`;
+  h.expect(/Возможный дубль/.test(await says(twinCard)), "the list: the twin is marked «Возможный дубль»");
   const sarahCard = p.getByTestId("client-row-c1").locator("visible=true").first();
-  h.expect(/Возможный дубль/.test(await sarahCard.innerText()), "the list: Sarah is marked too");
+  h.expect(/Возможный дубль/.test(await says(sarahCard)), "the list: Sarah is marked too");
   await h.shot("list");
 
   // the card: the duplicate → the sheet → «Слить» → confirm
@@ -74,7 +76,7 @@ exports.run = async (h) => {
   await h.go("/clients");
   await p.getByTestId("client-row-c1").locator("visible=true").first().waitFor({ timeout: 5000 });
   h.expect((await p.getByTestId(`client-row-${TWIN}`).count()) === 0, "the merged card is not in the list");
-  h.expect(!/Возможный дубль/.test(await p.getByTestId("client-row-c1").locator("visible=true").first().innerText()), "Sarah has no mark now");
+  h.expect(!/Возможный дубль/.test(await says(p.getByTestId("client-row-c1").locator("visible=true").first())), "Sarah has no mark now");
   await h.go(`/client/${TWIN}`);
   await h.expectText(/Карточка слита/, "the old link: the card was merged");
   await h.expectText(/Всё перешло в «Sarah Mitchell»/, "…and where everything went");

@@ -44,7 +44,7 @@ exports.run = async (h) => {
   h.expect((await totals.sumIs(h, "est-discount-row", "−$10.00")) === "−$10.00", "the discount: −$10.00");
   await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="est-tax-row-sum"]')].some((e) => e.offsetParent !== null && e.innerText.trim() === "$7.99"), null, { timeout: 3000 });
   h.expect((await totals.sumOf(h, "est-tax-row")) === "$7.99", "the tax after the discount: $90.00 × 8.875 % = $7.99");
-  await h.expectText(/Итого \| \$97\.99/, "the total agrees");
+  await h.expectText(/Итого(?: · налог \$[\d,.]+)?[ |]*\$97\.99/, "the total agrees");
 
   // saved: the next estimate offers «как в прошлой»
   await tid("ue-save").click();

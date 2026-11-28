@@ -64,6 +64,7 @@ export function ProtoObject() {
     act("w-more", "more", t("ds.proto.more")),
   ];
   const [step, setStep] = useState(1);
+  const [sumOn, setSumOn] = useState<"" | "w" | "o">("o");
   const steps = [
     { key: "way", label: t("ds.proto.stWay") },
     { key: "here", label: t("ds.proto.stHere") },
@@ -125,6 +126,14 @@ export function ProtoObject() {
           { label: t("ds.proto.lastVisit"), value: "Nov 12", testID: "showcase-sum-visit" },
         ]}
       />
+      {/* Д-факты-2 (#2993): the money total over «Счета» — a part that narrows the list, chosen = the «Заливка» surf2; press — on/off */}
+      <SummaryLine
+        testID="showcase-summary-filter"
+        items={[
+          { label: t("proto.money.tile.waiting"), value: "$960.00", onPress: () => setSumOn((x) => (x === "w" ? "" : "w")), selected: sumOn === "w", testID: "showcase-sum-waiting" },
+          { label: t("proto.money.tile.overdue"), value: "$1,840.00", status: "bad", onPress: () => setSumOn((x) => (x === "o" ? "" : "o")), selected: sumOn === "o", testID: "showcase-sum-overdue" },
+        ]}
+      />
       <Collapsible testID="showcase-collapsible" title={t("ds.proto.details")}>
         <T v="body">{t("ds.proto.detailsText")}</T>
       </Collapsible>
@@ -153,6 +162,23 @@ export function ProtoObject() {
           main={{ label: t("proto.est.done"), onPress: said(t("proto.est.done")), testID: "showcase-main-done" }}
           total={{ label: t("ue.total"), value: "$772.36", testID: "showcase-main-total" }}
           aside={{ label: t("k1.cancel"), onPress: said(t("k1.cancel")), testID: "showcase-main-aside" }}
+        />
+      </View>
+      {/* #2935 (founder 27.11, «как у Джобер»): the estimate editor's bar — «Итого» on the left, «Готово» (unfilled) before «Отправить» */}
+      <View style={{ gap: space[2] }}>
+        <T v="heading">{t("ds.proto.sendBar")}</T>
+        <MainStep
+          placement="bar"
+          main={{ label: t("est.bar.send"), onPress: said(t("est.bar.send")), testID: "showcase-main-send" }}
+          total={{ label: t("ue.total"), value: "$772.36", testID: "showcase-main-send-total" }}
+          aside={{ label: t("proto.est.done"), onPress: said(t("proto.est.done")), outline: true, testID: "showcase-main-send-done" }}
+        />
+        {/* review 27.11: a sent one — «Отправить изменения»; «Итого · налог» on the caption line; no room beside the buttons — the total's own line */}
+        <MainStep
+          placement="bar"
+          main={{ label: t("r1.est.sendChanges"), onPress: said(t("r1.est.sendChanges")), testID: "showcase-main-resend" }}
+          total={{ label: t("ue.total"), value: "$123,456.78", sub: t("px3.est.tax", { sum: "$9,144.95" }), testID: "showcase-main-resend-total" }}
+          aside={{ label: t("proto.est.done"), onPress: said(t("proto.est.done")), outline: true, testID: "showcase-main-resend-done" }}
         />
       </View>
       <View style={{ gap: space[2] }}>
