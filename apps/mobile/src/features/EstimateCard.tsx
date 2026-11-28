@@ -29,7 +29,7 @@ import { Button, IconButton, Segmented, StatusChip, TextField } from "@/ui/contr
 import { T } from "@/ui/primitives";
 import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, RowView, SectionTitle } from "@/ui/surfaces";
-import { canChangeEstimateCategory, estimateStatusView, estimateView, isEstimateEditable, sentOnceAt } from "@/features/estimateStatus";
+import { canChangeEstimateCategory, draftWentOut, estimateStatusView, estimateView, isEstimateEditable, sentOnceAt } from "@/features/estimateStatus";
 import { ServiceCategoryRow } from "@/features/ServiceCategoryPicker";
 import { canCountersign, canManageLink, canSeeClientLink, canSignDraftOnSite, hisWarning, mySignature } from "@/features/estimateSign";
 import { EstimateReasonSheet } from "@/features/EstimateReasonSheet";
@@ -361,7 +361,10 @@ export function EstimateObject({ e, openSend, back }: { e: Estimate; openSend?: 
     canSend
       ? e.status === "sent"
         ? { label: t("proto.est.main.remind"), onPress: () => setSendOpen(true), reason: sentReason, outline: !remind?.overdue, testID: "est-send" }
-        : { label: t("ue.send"), onPress: () => setSendOpen(true), reason: t("proto.est.reason.notSeen"), testID: "est-send" }
+        : draftWentOut(e)
+          ? // #3160: it went out before and was edited — the client has the older version (the chip: «Изменена после отправки»)
+            { label: t("r1.est.sendChanges"), onPress: () => setSendOpen(true), reason: t("proto.est.reason.sentOn", { date: day(sentOnceAt(e)!) }), testID: "est-send" }
+          : { label: t("ue.send"), onPress: () => setSendOpen(true), reason: t("proto.est.reason.notSeen"), testID: "est-send" }
       : countersign && signer
         ? {
             label: t("est.countersign.sign"),

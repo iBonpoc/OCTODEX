@@ -1,6 +1,7 @@
 /**
  * e2e 558 — an estimate that went out remembers it after an edit (#3058; map S6). Every view, the director, the sent EST-0006 (e6):
  * - edit it and press «Готово»: it is a draft again (the server's rule), yet its header says «Изменена после отправки» (not «Черновик»);
+ * - its card's main step is «Отправить изменения» with when it went out, never «Клиент её ещё не видел» (#3160);
  * - open the editor again: the main button is «Отправить изменения», not «Отправить» (the client has the older version).
  * Before the fix the save wiped the moment it was sent: «Черновик» and «Отправить». By testID; waits on what it checks.
  */
@@ -23,6 +24,11 @@ exports.run = async (h) => {
   await tid("estimate-head").waitFor({ timeout: 8000 });
   const head = await tid("estimate-screen").innerText();
   h.expect(/Изменена после отправки/.test(head), "the header says «Изменена после отправки»");
+  // #3160: the card's main step says the same as the chip and the editor
+  await tid("est-send").waitFor({ timeout: 8000 });
+  const step = await tid("estimate-screen").innerText();
+  h.expect(/Отправить изменения/.test(step), "the card's step: «Отправить изменения»");
+  h.expect(!/ещё не видел/.test(step), "the card never says «Клиент её ещё не видел» to an estimate that went out");
   await h.shot("changed-after-send");
 
   await h.go("/estimate/new?id=e6");

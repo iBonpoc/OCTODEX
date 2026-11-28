@@ -4,7 +4,7 @@
  */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { changedAfterSend, estimateView, laterIso, sentOnceAt } from "../src/features/estimateStatus";
+import { changedAfterSend, draftWentOut, estimateView, laterIso, sentOnceAt } from "../src/features/estimateStatus";
 import { normalizeDB } from "../src/data/normalize";
 import { makeSeed } from "../src/data/seed";
 
@@ -52,5 +52,25 @@ describe("an estimate that went out (#3058)", () => {
     expect(n6.lastSentAt).toBeUndefined();
     expect(sentOnceAt(n6)).toBe(n6.sentAt);
     expect(n6.status).toBe(e6.status);
+  });
+});
+
+describe("#3160: the card's step of a draft that went out", () => {
+  it("a draft sent before (lastSentAt or sentAt) went out — «Отправить изменения»; a never-sent draft did not — «Отправить»", () => {
+    expect(draftWentOut({ status: "draft", lastSentAt: SENT })).toBe(true);
+    expect(draftWentOut({ status: "draft", sentAt: SENT })).toBe(true);
+    expect(draftWentOut({ status: "draft" })).toBe(false);
+  });
+  it("only a draft: a sent one has its own step («Напомнить»), a signed one has none", () => {
+    expect(draftWentOut({ status: "sent", sentAt: SENT })).toBe(false);
+    expect(draftWentOut({ status: "approved", sentAt: SENT })).toBe(false);
+  });
+  it("the card uses the rule and the words of the editor (the step never says «ещё не видел» to a draft that went out)", () => {
+    const card = readFileSync(new URL("../src/features/EstimateCard.tsx", import.meta.url), "utf8");
+    const at = card.indexOf("draftWentOut(e)");
+    expect(at).toBeGreaterThan(0);
+    const branch = card.slice(at, card.indexOf("proto.est.reason.notSeen", at));
+    expect(branch).toContain('t("r1.est.sendChanges")');
+    expect(branch).not.toContain("notSeen");
   });
 });

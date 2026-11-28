@@ -45,6 +45,12 @@ export const laterIso = (a?: string, b?: string): string | undefined => (a && b 
 export const sentOnceAt = (e: { sentAt?: string; lastSentAt?: string }): string | undefined => laterIso(e.lastSentAt, e.sentAt);
 
 /**
+ * #3160: a draft that already went to the client (edited after «Отправить», #3058) — its next step is «Отправить изменения», never
+ * «Отправить … клиент её ещё не видел»; the moment it went out is `sentOnceAt` (the same rule as the editor's «sentBefore»)
+ */
+export const draftWentOut = (e: { status: EstimateStatus; sentAt?: string; lastSentAt?: string }): boolean => e.status === "draft" && !!sentOnceAt(e);
+
+/**
  * #3058 (founder: «изменена после отправки»; map S6): the client has an older version than this one — a draft that went out before and
  * was saved since, or a sent one saved after it went (the editor, before «Готово»)
  */
