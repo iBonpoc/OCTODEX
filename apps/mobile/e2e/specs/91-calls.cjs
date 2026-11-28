@@ -33,7 +33,10 @@ exports.run = async (h) => {
   h.expect(l2.status === "new" && (l2.callAttempts ?? 0) === 1, `«Не ответил»: the lead stays new, one attempt (${l2.status}, ${l2.callAttempts})`);
   const a = db.activities.find((x) => x.kind === "call" && x.subjectId === "l2");
   h.expect(a && a.meta.outcome === "no_answer" && a.meta.duration_min === "2" && a.body === "Left no message", "the call keeps its outcome, minutes and note");
-  await h.expectText(/Angela Rossi.*Не ответил/, "the call is in «Звонки» with its outcome");
+  // #3033: the outcome is the row's icon, its word the icon's label
+  const callRow = (name, word) => p.locator('[data-testid^="comms-"]').locator("visible=true").filter({ hasText: name }).filter({ has: p.locator(`[data-testid="row-status-icon"][aria-label="${word}"]`) }).first();
+  await callRow("Angela Rossi", "Не ответил").waitFor({ timeout: 8000 });
+  h.expect((await callRow("Angela Rossi", "Не ответил").count()) === 1, "the call is in «Звонки» with its outcome");
   await h.expectText(/2 мин/, "and its minutes");
 
   // «Отменить» (rule 5): the call leaves the list, the lead is back to its attempts (the queue — spec 95, offline)
@@ -69,7 +72,8 @@ exports.run = async (h) => {
   // the phone: the toast covers the chips for its 5 s — wait until it is gone
   await p.getByTestId("toast-undo").last().waitFor({ state: "hidden", timeout: 8000 });
   await p.getByText("Не ответил · 1", { exact: true }).locator("visible=true").first().click(); await p.waitForTimeout(350);
-  h.expect((await p.getByText("Поговорили", { exact: true }).locator("visible=true").count()) === 0, "the chip shows only missed calls");
+  h.expect((await p.locator('[data-testid^="comms-"] [data-testid="row-status-icon"][aria-label="Поговорили"]').locator("visible=true").count()) === 0
+    && (await p.locator('[data-testid^="comms-"] [data-testid="row-status-icon"][aria-label="Не ответил"]').locator("visible=true").count()) > 0, "the chip shows only missed calls");
   await h.shot("list");
   await p.locator('[data-testid^="comms-"]:visible').first().click(); await p.waitForTimeout(700);
   h.expect(new URL(p.url()).pathname === "/lead/l2", `the card opens the lead (${p.url()})`);
