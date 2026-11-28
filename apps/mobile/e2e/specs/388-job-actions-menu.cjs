@@ -64,7 +64,15 @@ exports.run = async (h) => {
   h.expect(JSON.stringify(order) === JSON.stringify(want), `the menu: ${order.join(", ")}`);
   const words = await p.evaluate(() => [...document.querySelectorAll('[data-testid="menu-items"] [data-testid^="job-act-"]')].filter((e) => e.offsetParent !== null).map((e) => e.innerText.trim()));
   for (const w of ["Сообщить «В пути»", "Завершить работу", "Добавить фото на выезде…", "Отменить работу…"]) h.expect(words.includes(w), `a verb in «⋯»: «${w}» (${words.join(" | ")})`);
-  h.expect((await p.getByTestId("menu-divider").locator("visible=true").count()) === 1, "one line, before the only dangerous item («Отменить работу…», #2015)");
+  // two lines (#3124 В1): one before the look's own group («Вид: обычный / линия работы»), one before the only dangerous item
+  // («Отменить работу…», #2015) — that last line stands between the look and «Отменить работу…»
+  const lines = await p.evaluate(() => {
+    const y = (sel) => [...document.querySelectorAll(`[data-testid="menu-items"] ${sel}`)].filter((e) => e.offsetParent !== null).map((e) => e.getBoundingClientRect().y);
+    return { dividers: y('[data-testid="menu-divider"]'), look: y('[data-testid^="job-look-"]'), cancel: y('[data-testid="job-act-cancel"]') };
+  });
+  h.expect(lines.dividers.length === 2, `two lines in «⋯»: the look's group and the dangerous one (${lines.dividers.length})`);
+  const last = Math.max(...lines.dividers);
+  h.expect(lines.look.length === 2 && Math.max(...lines.look) < last && last < lines.cancel[0], "the last line stands right before «Отменить работу…», after the look");
   await h.shot("menu");
   await closeMenu();
   // «＋»: what is made from the job — «Создать смету» among them
