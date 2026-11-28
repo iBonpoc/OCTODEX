@@ -156,7 +156,6 @@ export default function Clients() {
       // #3017 (founder 27.11, on the stand): each client its own card
       separate
       // #2763 (DS §12 «Список»): the title counts what is shown — the chip and the search, not all of the kind
-      count={list.length}
       create={office ? { a11y: t("clients.new"), items: [{ key: "new", label: t("path.clientNew"), icon: "user", testID: "clients-create-new" }] } : undefined}
       onCreate={() => router.push("/client/edit")}
       search={{ placeholder: t("clients.search"), value: q, onChange: setQ }}

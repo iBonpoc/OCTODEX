@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { component, graphite, print, themes, type ThemeName } from "../src/index";
+import { component, graphite, highContrast, print, themes, withHighContrast, type StatusName, type ThemeName } from "../src/index";
 
 /** WCAG 2.x contrast. Translucent colours are composited over the solid background first. */
 type RGBA = [number, number, number, number];
@@ -92,6 +92,7 @@ describe.each(names)("%s visual v2: accent text and tone, layers, tab bar (text 
   });
   it("the paler words on the yellow tile ≥ 4.5:1", () => expect(ratio(over(c.onAccMut, c.acc), parse(c.acc))).toBeGreaterThanOrEqual(4.5));
   it("the open checklist ring is seen on its cell (≥ 3:1)", () => expect(ratio(parse(c.dash), cell)).toBeGreaterThanOrEqual(3));
+  it("GoRix этап 3: the ring is seen on the chosen cell too (≥ 3:1; was 2.94 / 2.77)", () => expect(ratio(parse(c.dash), chosen)).toBeGreaterThanOrEqual(3));
   it("the layers go one way: bg → card → cell → chosen", () => {
     const l = [parse(c.bg), card, cell, chosen].map(lum);
     const up = name === "dark";
@@ -106,6 +107,14 @@ describe.each(names)("%s input frame (DS §8.1, #1594: ≥ 3:1 to the screen, WC
   it("the field frame stands out from the screen and from the field's own fill", () => {
     expect(ratio(over(c.bdField, c.bg), parse(c.bg))).toBeGreaterThanOrEqual(3);
     expect(ratio(over(c.bdField, c.bg), over(c.in, c.bg))).toBeGreaterThanOrEqual(2.5);
+  });
+});
+
+describe.each(names)("%s outline button edge (#2935 п.3: «Готово» on the estimate bar, WCAG 1.4.11)", (name) => {
+  const c = themes[name];
+  it("`dash` stands out ≥ 3:1 from the bar's cell `surf2` and from the screen", () => {
+    expect(ratio(parse(c.dash), parse(c.surf2))).toBeGreaterThanOrEqual(3);
+    expect(ratio(parse(c.dash), parse(c.bg))).toBeGreaterThanOrEqual(3);
   });
 });
 
@@ -253,5 +262,57 @@ describe.each(names)("«Графит» %s contrast (#2254)", (name) => {
   });
   it("§2.9: the selected nav label on the glass ≥ 7", () => {
     for (const s of scene) expect(ratio(parse(g.text), over(g.glDim, rgb(over(g.gl, s))))).toBeGreaterThanOrEqual(7);
+  });
+});
+
+/** GoRix этап 3 «Основа» (опись 26.11.2026; design-reviewer 27.11): «Повышение контраста» — слова ≥ 7:1, оттенок тот же */
+describe.each(names)("%s high contrast (iOS «Повышение контраста»)", (name) => {
+  const c = themes[name];
+  const h = withHighContrast(c, name);
+  const str = (x: RGBA) => `rgb(${x[0]},${x[1]},${x[2]})`;
+  const card = over(c.surf, c.bg);
+  const all = { bg: parse(c.bg), card, cell: over(c.surf2, str(card)), chosen: over(c.surf3, str(card)) };
+  // light: every surface; dark: the screen and the card (the dark theme already holds ~5–6:1 on the cells)
+  const grounds = name === "light" ? all : { bg: all.bg, card: all.card };
+  for (const [g, ground] of Object.entries(grounds)) {
+    it(`mut and status words ≥ 7:1 on ${g}`, () => {
+      expect(ratio(parse(h.mut), ground), "mut").toBeGreaterThanOrEqual(7);
+      for (const st of Object.keys(highContrast[name].status) as StatusName[]) expect(ratio(parse(h.status[st].text), ground), st).toBeGreaterThanOrEqual(7);
+    });
+  }
+  // GORIX-DS §3.1: the word on a status plate (`status.*.on` over `status.*.fill` on the card) — light ≥ 7:1; dark never weaker than plain
+  it("status words on their own plate (status.*.on over status.*.fill)", () => {
+    for (const st of ["ok", "info", "warn", "bad"] as const) {
+      const plate = over(c.status[st].fill, str(card));
+      const r = ratio(parse(h.status[st].on), plate);
+      if (name === "light") expect(r, st).toBeGreaterThanOrEqual(7);
+      else expect(r, st).toBeGreaterThanOrEqual(ratio(parse(c.status[st].on), plate) - 0.01);
+    }
+  });
+  it("never weaker than the plain theme, on every surface", () => {
+    for (const ground of Object.values(all)) {
+      expect(ratio(parse(h.mut), ground)).toBeGreaterThanOrEqual(ratio(parse(c.mut), ground) - 0.01);
+      for (const st of ["ok", "info", "warn", "bad", "neutral"] as const) expect(ratio(parse(h.status[st].text), ground), st).toBeGreaterThanOrEqual(ratio(parse(c.status[st].text), ground) - 0.01);
+    }
+  });
+  it("status words keep their hue — the tones stay apart (≥ 20° between neighbours — as far as the plain theme, design-reviewer 27.11)", () => {
+    const hue = (hex: string) => {
+      const [r, g, b] = parse(hex).slice(0, 3).map((v) => v / 255) as [number, number, number];
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+      if (!d) return 0;
+      const x = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+      return (x * 60 + 360) % 360;
+    };
+    for (const st of ["ok", "info", "warn", "bad"] as const) expect(Math.abs(hue(h.status[st].text) - hue(c.status[st].text)), st).toBeLessThanOrEqual(6);
+    const hs = (["bad", "warn", "ok", "info"] as const).map((st) => hue(h.status[st].text));
+    for (let i = 1; i < hs.length; i++) expect(hs[i]! - hs[i - 1]!, `${i}`).toBeGreaterThanOrEqual(20);
+  });
+  it("only words change: grounds, the accent, accText, ink and the plates stay", () => {
+    expect(h.bg).toBe(c.bg);
+    expect(h.surf).toBe(c.surf);
+    expect(h.acc).toBe(c.acc);
+    expect(h.accText).toBe(c.accText);
+    expect(h.ink).toBe(c.ink);
+    expect(h.status.bad.fill).toBe(c.status.bad.fill);
   });
 });

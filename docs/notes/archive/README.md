@@ -8,4 +8,5 @@
 | `samples-pending.md` | образец «Interactive map» внесён в `docs/design/DS-V2-COMPLETENESS.md`, задача #2367 |
 | `HANDOVER-2026-11-23-leader24.md` | хроника смены руководителя №24 (23.11); итог — `docs/ai/HANDOVER-2026-11-24-leader24.md` |
 | `HANDOVER-2026-11-24-leader24-FINAL.md` | дубль `docs/ai/HANDOVER-2026-11-24-leader24.md` (отличие в одной строке) |
+| `MAC-BRIDGE-HANDOVER.md` | памятка «мост GoRix 2» следующему мосту (25.11); выписана в `docs/ai/MAC.md` «Как работает чат-мост» |
 | `matrix-2349/`, `matrix-2368/` | списки падений проверок; оба PR влиты, списки больше не нужны в работе |

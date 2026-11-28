@@ -128,6 +128,7 @@ export default function Team() {
       back={back}
       help={t("team.help")}
       hintKey="team"
+      // DS §12.13 «Шапка» Д-шапка-6 (ревью design/crm #2841): «Пригласить» is the screen's main action, not a «создать» — said with its word
       right={store.role === "director" ? <Button label={t("team.invite")} icon="plus" size="sm" onPress={() => setOpen(true)} /> : undefined}
     >
       {device === "phone" ? <CardList>{people.map(card)}</CardList> : <CardGrid>{people.map(card)}</CardGrid>}
