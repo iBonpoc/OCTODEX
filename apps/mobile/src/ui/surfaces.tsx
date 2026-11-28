@@ -1203,7 +1203,13 @@ export function Screen({
                 </View>
                 </Animated.View>
               ) : null}
-              {tabs ? <View style={[column, { gap: space[3], paddingTop: space[2], minHeight: winH - top - navInsets.bottom - (pinned ? barH : 0) - stickOff }]}>{below}</View> : null}
+              {/* #3154: the open tab gets the scroll lock too (a signature on the estimate's «Подпись» stops the page under the finger);
+                  its own provider, not one around all children — the sticky tabs stay child 1 (stickyHeaderIndices) */}
+              {tabs ? (
+                <ScrollLockCtx.Provider value={setScrollLocked}>
+                  <View style={[column, { gap: space[3], paddingTop: space[2], minHeight: winH - top - navInsets.bottom - (pinned ? barH : 0) - stickOff }]}>{below}</View>
+                </ScrollLockCtx.Provider>
+              ) : null}
             </Animated.ScrollView>
           </KeyboardAvoidingView>
         ) : (

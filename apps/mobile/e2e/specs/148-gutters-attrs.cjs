@@ -79,7 +79,8 @@ exports.run = async (h) => {
   await openAttrs();
   // #2412 G1 (every width): the tape, Размер · Цвет · Этаж, the profile on top; the hanger, material, gauge, roof edge under «Ещё»
   for (const id of ["attr-story", "attr-size", "attr-color", "attr-length", "attr-profile"]) h.expect((await tid(id).count()) === 1, `${id} on top`);
-  for (const id of ["attr-size", "attr-color", "attr-story", "attr-profile"]) h.expect((await tid(`${id}-button`).count()) === 1, `${id} is a field (no chips)`);
+  for (const id of ["attr-size", "attr-color", "attr-story"]) h.expect((await tid(`${id}-button`).count()) === 1, `${id} is a field (no chips)`);
+  h.expect((await tid("attr-profile-k").count()) === 1 && (await tid("attr-profile-button").count()) === 0, "the profile: tiles with icons (#2986)");
   h.expect((await tid("attr-finish").count()) === 0, "no separate painted / bare: «Без покраски» is a colour (founder 09.11)");
   h.expect((await tid("attr-hanger").count()) === 0 && (await tid("attr-mount").count()) === 0, "hangers and the roof edge under «Ещё»");
   h.expect((await tid("attr-more").count()) === 1, "one «Ещё», closed");
@@ -87,13 +88,13 @@ exports.run = async (h) => {
   await more();
   for (const id of ["attr-hanger", "attr-material", "attr-mount"]) h.expect((await tid(id).count()) === 1, `«Ещё»: ${id}`);
   h.expect((await tid("attr-length-reset").count()) === 0, "a drawn length: no «По рисунку» (П20.16: the accuracy is the drawing's, not a line's)");
-  h.expect((await chosen("attr-profile")) === "K", "K-style by default");
+  h.expect((await chosen("attr-profile")) === "K-Style", "K-Style by default");
   await choose("attr-profile", "half_round");
-  await waitFor(async () => (await chosen("attr-profile")) === "Полукруглый", "half round picked");
+  await waitFor(async () => (await chosen("attr-profile")) === "Half Round", "Half Round picked (the supplier's name, #2979)");
   h.expect((await chosen("attr-size")) === "5″", "the size follows: 5″");
-  h.expect((await chosen("attr-hanger")) === "Shank #10 (доска)", "the hanger follows the profile: shank #10 on fascia");
+  h.expect((await chosen("attr-hanger")) === "#10 Shank (fascia)", "the hanger follows the profile: shank #10 on fascia");
   await choose("attr-color", "brown");
-  await waitFor(async () => (await chosen("attr-color")) === "Коричневый", "brown picked");
+  await waitFor(async () => (await chosen("attr-color")) === "Brown", "brown picked");
   await h.shot("run");
 
   h.expect(/^Gutter № \d+$/.test((await tid("attr-title").innerText()).trim()), "v43: the window's title is «Gutter № N»");
@@ -144,14 +145,14 @@ exports.run = async (h) => {
   for (const id of ["attr-ds-kind", "attr-ds-size", "attr-elbow-qty", "attr-bottom", "attr-head"]) h.expect((await tid(id).count()) === 1, `${id} on top`);
   for (const id of ["attr-color", "attr-wall", "attr-wall-kit"]) h.expect((await tid(id).count()) === 0, `${id} under «Ещё»`);
   h.expect((await tid("attr-more").count()) === 1, "one «Ещё», closed for the new element");
-  // the kind is a field (no tiles): its menu marks the chosen one (a check, read as selected)
+  // the kind: tiles with icons (#2980), the chosen one checked
   h.expect((await attrChosen(p, "attr-ds-kind")) === "rectPlain", "rectangular, smooth by default");
   await choose("attr-ds-kind", "roundPlain"); // the kind: round
-  h.expect((await attrChosen(p, "attr-ds-kind")) === "roundPlain", "the menu marks the round kind now");
+  h.expect((await attrChosen(p, "attr-ds-kind")) === "roundPlain", "the round tile is checked now");
   await waitFor(async () => (await chosen("attr-ds-size")) === "3″", "round: the size follows (3″)");
   await more();
   await choose("attr-wall", "brick");
-  await waitFor(async () => (await chosen("attr-wall-kit")) === "Conductor band + анкеры", "brick: its default wall kit");
+  await waitFor(async () => (await chosen("attr-wall-kit")) === "Conductor band + anchors", "brick: its default wall kit");
   await h.shot("downspout");
   await waitFor(async () => {
     const d = (await stored()).find((e) => e.kind === "downspout");
@@ -175,5 +176,5 @@ exports.run = async (h) => {
   await openAttrs();
   await more();
   h.expect((await tid("attr-length-reset").count()) === 1, "after a reload: still taped"); // i18n-old: ok — «taped» is the data value, not a label
-  h.expect((await chosen("attr-profile")) === "Полукруглый" && (await chosen("attr-color")) === "Коричневый", "after a reload: profile and colour");
+  h.expect((await chosen("attr-profile")) === "Half Round" && (await chosen("attr-color")) === "Brown", "after a reload: profile and colour");
 };
