@@ -1,14 +1,17 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { View } from "react-native";
 import { component, space } from "@octo/design-tokens";
-import { ReadOnly, Segmented } from "./controls";
+import { ReadOnly } from "./controls";
+import { modeRowShape } from "./modeRowLayout";
+import { ModeToggle, modeToggleW } from "./modeToggle";
 import { T } from "./primitives";
 
 /**
  * A totals row of a group (DS §8.7а, founder 23.11 — audit MAP §12 п.8: «одной строкой: слово · [% · выкл · $] · значение · сумма»):
  * the word, the switch of how the value is set, the value field right in the row and the sum on the right — no sheet. A chosen «%»
  * or «$» is yellow (the founder: «на % или $ переключатель с акцентом»), «Выкл.» in the middle is the neutral cell. Where the row is
- * narrow (a phone, a long word in ES) the field and the sum go to a second line, on the right. `note` — a line under the row (why the
+ * narrow: still one line — the word takes what is left, the switch is the small toggle `ModeToggle` (#2954); only a large font
+ * that leaves no room puts «слово · сумма» first and the toggle with the field under it. `note` — a line under the row (why the
  * switch does not turn, a suggestion). `locked` — read only (a signed estimate): the switch and the field do not change.
  */
 export function ModeRow<K extends string>({
@@ -37,31 +40,64 @@ export function ModeRow<K extends string>({
   locked?: boolean;
   testID?: string;
 }) {
+  // DS §8.7а (#2954, founder 26.11): «Депозит · маленький переключатель · поле 10 % · сумма» — one line; two only when nothing fits
+  const [w, setW] = useState(0);
+  const [tw, setTw] = useState(0);
+  const shape = modeRowShape(w, tw);
+  const withField = !!field && mode !== off;
+  const items = modes.map((m) => ({ ...m, sign: m.key !== off && m.label.length <= 2 ? m.label : undefined }));
+  const word = (
+    <T v="body" numberOfLines={2} style={shape === "wide" ? { width: component.modeRow.titleW } : { flex: 1, minWidth: 0 }}>
+      {title}
+    </T>
+  );
+  const sw = (
+    // the toggle stands in a slot of the widest one (3 positions): a 2-position toggle (tax) starts there too and its field starts
+    // where the deposit's does — the fields stand in one column (design review of #2954)
+    <View onLayout={(e) => setTw(e.nativeEvent.layout.width)} style={{ width: modeToggleW(3) }}>
+      <ReadOnly value={!!locked}>
+        {/* a press on the chosen position changes nothing (it never resets a value or asks a question again — code review of #2454) */}
+        <ModeToggle items={items} value={mode} off={off} onChange={onMode} label={title} testID={testID ? `${testID}-mode` : undefined} />
+      </ReadOnly>
+    </View>
+  );
+  const fieldBox = withField ? (
+    <ReadOnly value={!!locked}>
+      <View testID={testID ? `${testID}-field` : undefined} style={{ width: shape === "wide" ? component.modeRow.fieldW : component.modeToggle.fieldNarrowW }}>{field}</View>
+    </ReadOnly>
+  ) : null;
+  const total = (
+    <View testID={testID ? `${testID}-sum` : undefined} style={{ minWidth: shape === "wide" ? component.modeRow.sumW : component.modeToggle.sumMinW, alignItems: "flex-end", marginLeft: "auto" }}>
+      <T v="body" w="semibold" tabular>
+        {sum}
+      </T>
+    </View>
+  );
   return (
-    <View testID={testID} style={{ paddingHorizontal: space[4], paddingVertical: space[2], gap: space[2], minHeight: component.listRow.h, justifyContent: "center" }}>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", rowGap: space[2], columnGap: space[3] }}>
-        {/* the word is a column of one width in the group: the switches stand one under another (design review); a long word wraps */}
-        <T v="body" numberOfLines={2} style={{ width: component.modeRow.titleW }}>
-          {title}
-        </T>
-        <ReadOnly value={!!locked}>
-          {/* a press on the chosen position changes nothing (it never resets a value or asks a question again — code review of #2454) */}
-          <Segmented items={modes} value={mode} onChange={(k) => k !== mode && onMode(k)} accent={mode !== off} radio onCard label={title} testID={testID ? `${testID}-mode` : undefined} />
-        </ReadOnly>
-        {/* with no field (off) the sum stays on the first line; with one, the field and the sum go together (under it where narrow) */}
-        <View style={{ flexDirection: "row", alignItems: "center", columnGap: space[3], marginLeft: "auto" }}>
-          {field && mode !== off ? (
-            <ReadOnly value={!!locked}>
-              <View style={{ width: component.modeRow.fieldW }}>{field}</View>
-            </ReadOnly>
-          ) : null}
-          <View testID={testID ? `${testID}-sum` : undefined} style={{ minWidth: field && mode !== off ? component.modeRow.sumW : undefined, alignItems: "flex-end" }}>
-            <T v="body" w="semibold" tabular>
-              {sum}
-            </T>
+    <View testID={testID} onLayout={(e) => setW(e.nativeEvent.layout.width - 2 * space[4])} style={{ paddingHorizontal: space[4], paddingVertical: space[2], gap: space[2], minHeight: component.listRow.h, justifyContent: "center" }}>
+      {shape !== "two" ? (
+        <View testID={testID ? `${testID}-head` : undefined} style={{ flexDirection: "row", alignItems: "center", columnGap: space[2] }}>
+          {word}
+          {/* the toggle and the field are a block of one width in every row: the toggles stand one under another, a row with no
+              field (off, «Скидка —») keeps its toggle in the same column (design review of #2954) */}
+          <View style={{ width: modeToggleW(3) + space[2] + (shape === "wide" ? component.modeRow.fieldW : component.modeToggle.fieldNarrowW), flexDirection: "row", alignItems: "center", columnGap: space[2] }}>
+            {sw}
+            {fieldBox}
           </View>
+          {total}
         </View>
-      </View>
+      ) : (
+        <>
+          <View testID={testID ? `${testID}-head` : undefined} style={{ flexDirection: "row", alignItems: "center", columnGap: space[2] }}>
+            {word}
+            {total}
+          </View>
+          <View style={{ flexDirection: "row", alignItems: "center", columnGap: space[2] }}>
+            {sw}
+            {fieldBox}
+          </View>
+        </>
+      )}
       {note}
     </View>
   );

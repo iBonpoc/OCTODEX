@@ -41,7 +41,8 @@ exports.run = async (h) => {
   await h.go("/client/c536?tab=money");
   await seen("client-money-figures").waitFor({ timeout: 8000 });
   const figures = (await seen("client-money-figures").innerText()).replace(/\s+/g, " ");
-  h.expect(figures.includes("$400.00") && !figures.includes("$200.00"), `С1 «Ещё выставить» $400.00 — the standalone $200.00 does not lower the contract's rest: ${figures}`);
+  // #3029/#3030: the card's figures are an overview — whole dollars; each sum is matched whole (not as the start of «$400.50»)
+  h.expect(/\$400(?![.\d])/.test(figures) && !/\$200(?![\d])/.test(figures), `С1 «Ещё выставить» $400 — the standalone $200 does not lower the contract's rest: ${figures}`);
   await seen("client-next-bill").waitFor({ timeout: 8000 });
   await h.shot("client-to-bill-400");
 

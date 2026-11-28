@@ -39,7 +39,7 @@ export function chipTags(src: string): { tag: string; line: number }[] {
 }
 
 /** how many <ChoiceChips> are still the old chips (no `label`). Lower it as screens move over; never raise it. */
-const LEGACY_MAX = 49; // 50 → 49 (21.11): `layout="strip"` is counted as one line, as `nowrap`; 72 → 59: spec 56 wave 4 (client) took 8 old chips away; 59 → 56: wave 4б (/f/, «Местоположение»); 56 → 55: the catalog item type (§3а.4); 55 → 52: wave 5а (task sheet); 52 → 50: wave 5б (the visit day and start — DateField, SelectField)
+const LEGACY_MAX = 44; // 49 → 44 (27.11, #2998 founder «нет полотна чипов»): «Когда нужно» лида — SelectField (#2991) and the waves of other chats; only down // 50 → 49 (21.11): `layout="strip"` is counted as one line, as `nowrap`; 72 → 59: spec 56 wave 4 (client) took 8 old chips away; 59 → 56: wave 4б (/f/, «Местоположение»); 56 → 55: the catalog item type (§3а.4); 55 → 52: wave 5а (task sheet); 52 → 50: wave 5б (the visit day and start — DateField, SelectField)
 
 describe("ChoiceChips name their field (#1095)", () => {
   const legacy: string[] = [];

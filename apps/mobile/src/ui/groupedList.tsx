@@ -39,13 +39,15 @@ export function groupRows(children: ReactNode): ReactNode[] {
 }
 
 /** One group: its title (and «Все ›»), the rows in one card with inset hairlines between them. */
-export function ListGroup({ title, count, all, children, inset = component.listRow.inset, bare, testID }: {
+export function ListGroup({ title, count, all, children, inset = component.listRow.inset, bare, separate, testID }: {
   title?: string;
   /** #2363 F08: the number of the group beside its title — the same CountPill as «Позиции 7» and «Выезды сегодня 6» */
   count?: number;
   /** visual v2 Главная (макет 1): the block's children stand as their own cards `rhythm.cardGap` 8 apart (tiles, FigureRows) — no
    *  card around them, no hairlines */
   bare?: boolean;
+  /** founder 27.11 (#3017, on the stand): each row is its OWN card `rhythm.cardGap` apart — no one card round the group, no hairlines */
+  separate?: boolean;
   /** «Все ›» on the right of the title: the whole list */
   all?: { label: string; onPress: () => void; testID?: string };
   children: ReactNode;
@@ -61,6 +63,14 @@ export function ListGroup({ title, count, all, children, inset = component.listR
       {title || all || count != null ? <GroupHead title={title ?? ""} count={count} countTestID={testID ? `${testID}-count` : undefined} all={all} /> : null}
       {bare ? (
         <View style={{ gap: rhythm.cardGap }}>{rows}</View>
+      ) : separate ? (
+        <View style={{ gap: rhythm.cardGap }}>
+          {rows.map((r, i) => (
+            <Card key={i} style={{ padding: 0, gap: 0, overflow: "hidden" }}>
+              {r}
+            </Card>
+          ))}
+        </View>
       ) : (
       <Card style={{ padding: 0, gap: 0 }}>
         {rows.map((r, i) => (
@@ -173,6 +183,22 @@ export type RowDone = { done: boolean; onToggle: (done: boolean) => void; label:
 
 export interface GroupRowProps {
   title: string;
+  /** #3017: a quiet fact in the title's own line, after the name — the phone («Sarah Mitchell  (626) 555-0142»); never cut: when the
+   *  two do not fit (a pill on the right), the phone goes under the name, the name is never cut for it */
+  titleNote?: string;
+  /** #3017: a third line under the subtitle — what is going on with it («Выезд сегодня · Panel upgrade»); no line when empty */
+  extra?: string;
+  /** #3018 (design/crm review): a money list keeps its sum on the right, big — a column read top to bottom (Jobber, Wallet); with
+   *  `titleNote` and without it the sum goes to line 3 (clients, leads, jobs: the right side is the call) */
+  figureRight?: boolean;
+  /** #3035 (founder 27.11; design/crm review — В): the object's own number («CLT-0008», «EST-0006»), right-aligned in line 2 under
+   *  the sum, `micro` `mut`, never cut — the address gives way; a linked document's number stays in line 3 */
+  refNo?: string;
+  /** #3038 (review 27.11: «пропадает город»): the subtitle is an address «street, town» — the street gives way («4512 Ventura Can…,
+   *  Sherman Oaks»), the town is never cut */
+  addressLine?: boolean;
+  /** #3033: the sum in the name's own line, at the right end (with the status icon when there is one) — the clients' list */
+  valueTop?: boolean;
   /** the line under the title: «работа · адрес · когда» */
   subtitle?: string;
   lead?: RowLead;
@@ -182,7 +208,9 @@ export interface GroupRowProps {
    *  Сумма $1,840»; each but the last at least `figureRow.colW` wide (a floor, not a fixed width: a wide word «Просрочен 9 дн» widens its column, never overlaps the line — the subtitle shrinks and is cut with «…») */
   cols?: FigureCol[];
   /** a StatusPill on the right */
-  status?: { status: StatusName; label: string; draft?: boolean };
+  /** `iconOnly` (founder #3033, on the stand): the status as its icon only — the shape of the icon tells the state, not the colour alone;
+   *  the words are said to VoiceOver (`label`); beside the sum on the right («⊗ $1,840») */
+  status?: { status: StatusName; label: string; draft?: boolean; iconOnly?: boolean };
   /** small quick actions on the right (call, SMS): ≤ 2, the label names the object (П6) */
   actions?: IconAction[];
   /** the swipe (native): `left` — revealed by a swipe right, `right` — by a swipe left; the same on a long press and to VoiceOver */
@@ -207,7 +235,7 @@ export interface GroupRowProps {
  * The inside of a GroupRow — the lead, the title 15/600 over its line 13 `mut`, the figure or columns, a StatusPill and «›» — for a
  * row whose press is its owner's (an estimate's line: it opens in place, it is held to be carried). One look for every row (#2387).
  */
-export function GroupRowBody({ title, subtitle, lead, value, cols, status, compact, wrap, selected, chevron, quiet, valueMark, padRight = space[4], below, ids }: Pick<GroupRowProps, "title" | "subtitle" | "lead" | "value" | "cols" | "status" | "compact" | "wrap" | "selected" | "chevron" | "valueMark"> & {
+export function GroupRowBody({ title, titleNote, extra, figureRight, valueTop, refNo, addressLine, subtitle, lead, value, cols, status, compact, wrap, selected, chevron, quiet, valueMark, padRight = space[4], below, ids }: Pick<GroupRowProps, "title" | "titleNote" | "extra" | "figureRight" | "valueTop" | "refNo" | "addressLine" | "subtitle" | "lead" | "value" | "cols" | "status" | "compact" | "wrap" | "selected" | "chevron" | "valueMark"> & {
   /** a row that counts for nothing now (a hidden line, a line on the client's choice): the title and the figure `mut` */
   quiet?: boolean;
   padRight?: number;
@@ -218,13 +246,44 @@ export function GroupRowBody({ title, subtitle, lead, value, cols, status, compa
 }) {
   const { c } = useTheme();
   const check = lead && "done" in lead ? lead : null;
+  const top = !!value && !titleNote && (!!status?.iconOnly || !!valueTop);
+  /** #3035: where the sum stands in the right column, the number goes under it there; else at the end of line 2 */
+  // #3046 (founder 27.11: «номер — под значком слева»): with an avatar or an icon on the left the number stands under it, centred,
+  // `micro`; the line under the lead is as wide as the lead and the gap after it, so the text column does not move
+  const refLead = !!refNo && !!lead && ("initials" in lead || "icon" in lead);
+  const refRight = !refLead && !!refNo && !!value && !top && !(titleNote && !figureRight) && !cols?.length;
+  const refLine2 = refNo && !refRight && !refLead ? refNo : undefined;
+  const refUnder = refRight ? (
+    <View testID="row-ref-no">
+      <T v="micro" tone="mut" tabular numberOfLines={1}>
+        {refNo}
+      </T>
+    </View>
+  ) : null;
   /** a column with a status word («Просрочен 9 дн», DS §3.3) is wide and never shrinks: the name takes a second line, the subtitle is cut first */
   const wordCol = !!cols?.some((x) => x.tone);
   const pad = { minHeight: compact ? component.rowCompact : component.listRow.h, paddingVertical: space[2], gap: space[3] };
   return (
     <RowView style={[pad, { paddingLeft: check ? 0 : space[4], paddingRight: padRight }]}>
       {selected ? <SelectedCheck left /> : null}
-      {!lead || check ? null : "initials" in lead ? (
+      {!lead || check ? null : refLead ? (
+        <View style={{ width: component.avatar.md, alignItems: "center", gap: spaceHalf.hair }}>
+          {"initials" in lead ? (
+            <Avatar initials={lead.initials} s={component.avatar.md} />
+          ) : (
+            <View style={{ width: component.avatar.md, height: component.avatar.md, borderRadius: radius.pill, backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}>
+              <Icon name={(lead as { icon: IconKey }).icon} s={size.iconMd} color={c.ink} />
+            </View>
+          )}
+          {/* the short form under the lead — «0008», the lead and the list already say what it is (#3046; «CLT-0008» was wider than the
+              lead and ran into line 3); the whole number is said to VoiceOver */}
+          <View testID="row-ref-no" accessible accessibilityLabel={refNo} style={{ width: component.avatar.md, alignItems: "center" }}>
+            <T v="micro" tone="mut" tabular numberOfLines={1}>
+              {refNo.replace(/^[A-Z]{2,4}-/, "")}
+            </T>
+          </View>
+        </View>
+      ) : "initials" in lead ? (
         <Avatar initials={lead.initials} s={component.avatar.md} />
       ) : "time" in lead ? (
         <View style={{ width: component.listRow.timeW }}>
@@ -243,23 +302,90 @@ export function GroupRowBody({ title, subtitle, lead, value, cols, status, compa
         </View>
       ) : null}
       <View style={{ flex: 1, minWidth: 0 }}>
-        <View testID={ids?.title}>
-          <T v="body" w="semibold" tone={check?.done || quiet ? "mut" : "ink"} numberOfLines={wrap || wordCol ? 2 : 1} style={check?.done ? { textDecorationLine: "line-through" } : undefined}>
+        {/* #3033 (founder 27.11: «имя в одной строке и сумма в другом углу»): with an icon-only status the sum and its icon stand in the
+            name's own line, at the right end; lines 2–3 keep the whole width */}
+        <View testID={ids?.title} style={titleNote ? { flexDirection: "row", flexWrap: "wrap", alignItems: "baseline", columnGap: space[2] } : top ? { flexDirection: "row", alignItems: "center", gap: space[2] } : undefined}>
+          <T v="body" w="semibold" tone={check?.done || quiet ? "mut" : "ink"} numberOfLines={wrap || wordCol || titleNote ? 2 : 1} style={[check?.done ? { textDecorationLine: "line-through" } : null, titleNote || top ? { flexShrink: 1 } : null]}>
             {title}
           </T>
-        </View>
-        {subtitle ? (
-          <View testID={ids?.subtitle}>
-            <View testID={ids?.subtitleInner}>
-              <T v="caption" tone="mut" tabular numberOfLines={wrap ? 2 : 1}>
-                {subtitle}
+          {titleNote ? (
+            <T v="caption" tone="mut" tabular numberOfLines={1} style={{ flexShrink: 0 }}>
+              {titleNote}
+            </T>
+          ) : null}
+          {top ? (
+            <View testID={ids?.value} style={{ flexDirection: "row", alignItems: "center", gap: space[1], flexShrink: 0, marginLeft: "auto" }}>
+              {/* with the sum in the name's line the status is its icon, the word said to VoiceOver (#3033) — a status without iconOnly
+                  was dropped here (the jobs on «Все» lost their status) */}
+              {status ? (
+                <View accessible accessibilityLabel={status.label} testID="row-status-icon">
+                  <Icon name={statusIcon[status.status]} s={size.iconSm} color={c.status[status.status].text} />
+                </View>
+              ) : null}
+              <T v="body" w="semibold" tabular tone={quiet ? "mut" : "ink"} numberOfLines={1}>
+                {value}
               </T>
             </View>
+          ) : null}
+        </View>
+        {subtitle || refLine2 ? (
+          <View testID={ids?.subtitle} style={refLine2 ? { flexDirection: "row", alignItems: "baseline", gap: space[2] } : undefined}>
+            <View testID={ids?.subtitleInner} style={refLine2 ? { flex: 1, minWidth: 0 } : undefined}>
+              {subtitle && addressLine && subtitle.lastIndexOf(", ") > 0 ? (
+                <View style={{ flexDirection: "row", minWidth: 0 }}>
+                  <T v="caption" tone="mut" tabular numberOfLines={1} style={{ flexShrink: 1 }}>
+                    {subtitle.slice(0, subtitle.lastIndexOf(", "))}
+                  </T>
+                  <T v="caption" tone="mut" tabular numberOfLines={1} style={{ flexShrink: 0 }}>
+                    {subtitle.slice(subtitle.lastIndexOf(", "))}
+                  </T>
+                </View>
+              ) : subtitle ? (
+                <T v="caption" tone="mut" tabular numberOfLines={wrap ? 2 : 1}>
+                  {subtitle}
+                </T>
+              ) : null}
+            </View>
+            {refLine2 ? (
+              <View testID="row-ref-no" style={{ flexShrink: 0 }}>
+                <T v="micro" tone="mut" tabular numberOfLines={1}>
+                  {refLine2}
+                </T>
+              </View>
+            ) : null}
           </View>
+        ) : null}
+        {/* #3017: with the phone in the name's line the right side keeps only the call — the status and the sum go to line 3
+            («⊗ Просрочен 9 дн  $1,840.00 · Сегодня 1:30 PM · …»): the name, the phone and the address keep the whole width */}
+        {/* #3026 (founder 27.11: «не помещается сумма… не помещается уведомление»; design/crm review — B): a card with a mark keeps
+            3 lines — line 3 is the sum and the mark, whole; the deeds then live in the object (Jobber, HCP: one mark in a list row) */}
+        {(titleNote && !figureRight && status ? false : !!extra) || (titleNote && (status || (value && !figureRight))) ? (
+          // the deeds keep at least 40 % of the line; less left after the sum and the status — they take their own line (never «С…»);
+          // the sum first and never cut (#2672, design-review 27.11)
+          <RowView gap={space[2]} style={{ flexWrap: "wrap", rowGap: 0 }}>
+            {titleNote && value && !figureRight ? (
+              <T v="caption" w="semibold" tabular numberOfLines={1} style={{ flexShrink: 0 }}>
+                {value}
+              </T>
+            ) : null}
+            {titleNote && status ? <StatusPill status={status.status} label={status.label} draft={status.draft} /> : null}
+            {extra && !(titleNote && !figureRight && status) ? (
+              <T v="caption" tone="mut" numberOfLines={1} style={{ flexShrink: 1, flexGrow: 1, flexBasis: 0, minWidth: "40%" }}>
+                {extra}
+              </T>
+            ) : null}
+          </RowView>
         ) : null}
         {below}
       </View>
-      {cols?.length
+      {titleNote && figureRight && value ? (
+        <View testID={ids?.value} style={{ flexShrink: 0, alignItems: "flex-end" }}>
+          <T v="body" w="bold" tabular tone={quiet ? "mut" : "ink"} numberOfLines={1}>
+            {value}
+          </T>
+          {refUnder}
+        </View>
+      ) : titleNote ? null : cols?.length
         ? cols.map((x, i, all) => (
             <View key={x.label} style={{ alignItems: "flex-end", flexShrink: 0, minWidth: i < all.length - 1 ? component.figureRow.colW : undefined }}>
               <T v="micro" tone="mut" numberOfLines={1}>
@@ -274,8 +400,20 @@ export function GroupRowBody({ title, subtitle, lead, value, cols, status, compa
               </RowView>
             </View>
           ))
+        : top ? null
+        : value && status ? (
+            // #2992 (lists B, design/crm review 27.11): a sum and its status stand as ONE column on the right — the sum, under it the
+            // status word with its icon (Jobber, Housecall Pro) — not side by side: the name keeps its room on 390
+            <View testID={ids?.value} style={{ alignItems: "flex-end", flexShrink: 0, gap: spaceHalf.hair }}>
+              <T v="body" w="semibold" tabular tone={quiet ? "mut" : "ink"} numberOfLines={1}>
+                {value}
+              </T>
+              {refUnder}
+              <StatusPill status={status.status} label={status.label} draft={status.draft} />
+            </View>
+          )
         : value ? (
-            <View testID={ids?.value}>
+            <View testID={ids?.value} style={refUnder ? { alignItems: "flex-end" } : undefined}>
               {valueMark ? (
                 <T v="caption" tone="mut" numberOfLines={1}>
                   {value}
@@ -285,24 +423,30 @@ export function GroupRowBody({ title, subtitle, lead, value, cols, status, compa
                   {value}
                 </T>
               )}
+              {refUnder}
             </View>
           ) : null}
-      {status ? <StatusPill status={status.status} label={status.label} draft={status.draft} /> : null}
+      {status?.iconOnly && !value && !titleNote ? (
+        <View accessible accessibilityLabel={status.label} testID="row-status-icon">
+          <Icon name={statusIcon[status.status]} s={size.iconSm} color={c.status[status.status].text} />
+        </View>
+      ) : null}
+      {status && !status.iconOnly && !(value && !cols?.length) && !titleNote ? <StatusPill status={status.status} label={status.label} draft={status.draft} /> : null}
       {chevron ? <Icon name="chevronRight" s={size.iconSm} color={c.mut} /> : null}
     </RowView>
   );
 }
 
-export function GroupRow({ title, subtitle, lead, value, cols, status, actions = [], swipe, onPress, compact, wrap, selected, chevron, valueTestID, valueMark, testID }: GroupRowProps) {
+export function GroupRow({ title, titleNote, extra, figureRight, valueTop, refNo, addressLine, subtitle, lead, value, cols, status, actions = [], swipe, onPress, compact, wrap, selected, chevron, valueTestID, valueMark, testID }: GroupRowProps) {
   const { c } = useTheme();
   const [down, setDown] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const more = rowActions(swipe);
-  const said = rowSaid({ title, subtitle, value: cols?.length ? cols.map((x) => `${x.label} ${x.value}`).join(", ") : value, status, when: lead && "time" in lead ? [lead.time, lead.sub].filter(Boolean).join(" ") : undefined });
+  const said = rowSaid({ title: titleNote ? `${title}, ${titleNote}` : title, subtitle: extra ? [subtitle, extra].filter(Boolean).join(", ") : subtitle, value: cols?.length ? cols.map((x) => `${x.label} ${x.value}`).join(", ") : value, status, when: lead && "time" in lead ? [lead.time, lead.sub].filter(Boolean).join(" ") : undefined });
   const onLong = more.length ? (e: GestureResponderEvent) => setMenu({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY, w: 0, h: 0 }) : undefined;
   const onAction = (e: AccessibilityActionEvent) => more.find((a) => a.key === e.nativeEvent.actionName)?.onPress();
   const check = lead && "done" in lead ? lead : null;
-  const main = <GroupRowBody title={title} subtitle={subtitle} lead={lead} value={value} cols={cols} status={status} compact={compact} wrap={wrap} selected={selected} chevron={chevron} padRight={actions.length ? 0 : space[4]} ids={valueTestID ? { value: valueTestID } : undefined} valueMark={valueMark} />;
+  const main = <GroupRowBody title={title} titleNote={titleNote} extra={extra} figureRight={figureRight} valueTop={valueTop} refNo={refNo} addressLine={addressLine} subtitle={subtitle} lead={lead} value={value} cols={cols} status={status} compact={compact} wrap={wrap} selected={selected} chevron={chevron} padRight={actions.length ? 0 : space[4]} ids={valueTestID ? { value: valueTestID } : undefined} valueMark={valueMark} />;
   const tap = onPress || onLong ? (
     <Press
       onPress={onPress}

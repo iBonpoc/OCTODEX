@@ -1,0 +1,36 @@
+# A new push to a PR takes off the label «принято» (#3117 В): the founder accepted the commit he saw on the stand, not the new one.
+# The line «принято снято: новый пуш <SHA>» goes into the PR description (scripts/acceptedReset.cjs; an edit sends no e-mail).
+# It checks out main (the script of main, not of the PR), runs no code of the PR and holds no key.
+name: Accepted reset
+
+on:
+  pull_request:
+    types: [synchronize]
+
+permissions: {}
+
+concurrency:
+  group: accepted-reset-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  reset:
+    # forks get a read-only token: nothing to do there
+    if: github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.labels.*.name, 'принято')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Take «принято» off, write the line in the PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/acceptedReset.cjs

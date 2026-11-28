@@ -1,4 +1,5 @@
 import { View } from "react-native";
+import { HeaderButton } from "@/ui/headerIcon";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
@@ -20,7 +21,7 @@ export default function Notifications() {
   return (
     <Screen
       title={t("notice.title")}
-      right={anyServerUnread ? <Button label={t("nav.notices.readAll")} icon="check" size="sm" variant="ghost" onPress={readNotices} /> : undefined}
+      right={anyServerUnread ? <HeaderButton icon="check" label={t("nav.notices.readAll")} testID="notices-read-all" onPress={readNotices} /> : undefined}
     >
       {!unread.length && !read.length ? (
         <Empty icon="bell" title={t("nav.notices.empty")} hint={t("nav.notices.emptyHint")} />

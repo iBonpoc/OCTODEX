@@ -23,7 +23,9 @@ describe("the two Overviews are the template «Обзор»", () => {
       expect(s).not.toMatch(/<Screen\b/);
       expect(s).toMatch(/\bnext=\{nextCard\}/);
       expect(s).toMatch(/useHomeHeader\(\)/);
-      expect(s).toMatch(/useGreeting\(\)/);
+      // DS §12.13 «Шапка» (#2841, #2844 (б)): the big title is the tab's word; the greeting is in the 13 line (useHomeHeader → kicker)
+      expect(s).toMatch(/title=\{t\("nav\.home"\)\}/);
+      expect(s).not.toMatch(/useGreeting\(\)/);
     });
     it(`${name}: nothing own — no Button, Press, Card or ListCard on the screen; rows are GroupRow / FigureRow, tiles StatTile`, () => {
       expect(s).not.toMatch(/<(Button|Press|ListCard|CardGrid)\b/);

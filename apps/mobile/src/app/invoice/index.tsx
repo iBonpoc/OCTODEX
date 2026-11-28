@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
+import { shortAddress } from "@/features/shortAddress";
+import { telHref } from "@/features/contactLinks";
+import { openContact } from "@/ui/listCard";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import type { DB, Invoice } from "@/data/types";
@@ -8,16 +11,14 @@ import { invoiceBalance } from "@/features/invoiceStatus";
 import { invoiceSigns } from "@/features/listSigns";
 import { remindersOf } from "@/features/invoiceRemind";
 import { sumCents } from "@octo/estimating-engine";
-import { daysBetween, dayKeyIn, dueDayKey, formatDayKey, getZone } from "@/features/zone";
+import { daysBetween, dayKeyIn, dueDayKey, getZone } from "@/features/zone";
 import { initialsOf, remindAll, type MoneyTile } from "@/features/invoice/moneySummary";
 import { useInvoiceRemind } from "@/features/invoice/useRemind";
-import { MoneyTiles, useMoneyChips, useMoneyCreate } from "@/features/moneyTabs";
+import { MoneyTotal, useMoneyChips, useMoneyCreate } from "@/features/moneyTabs";
 import { InvoiceObject } from "@/features/invoice/InvoiceCard";
 import { useListPanel } from "@/nav/listPanel";
 import { ListPanel } from "@/ui/listPanel";
 import type { GroupRowProps } from "@/ui/groupedList";
-import type { FigureCol } from "@/ui/figures";
-import { invoiceTitle } from "@/features/invoiceTitle";
 import { Empty, Screen } from "@/ui/surfaces";
 import { ListScreen } from "@/ui/templates";
 
@@ -32,7 +33,9 @@ function matchInvoice(db: DB, i: Invoice, q: string): boolean {
 }
 
 const WEEK_DAYS = 7;
-const GROUP_TITLE = { overdue: "proto.money.g.overdue", waiting: "proto.money.g.waiting", paid: "proto.money.g.paid" } as const;
+// crm-review 27.11 (via «Открытые карточки»): «Должны» here was the overdue only, on «Главная» — all unpaid: one word, two sums —
+// the group is «Просрочено», as the part of the total line over it
+const GROUP_TITLE = { overdue: "proto.money.tile.overdue", waiting: "proto.money.g.waiting", paid: "proto.money.g.paid" } as const;
 
 /**
  * «Деньги → Счета» and «Кто должен» — the List template (prototype v2 #2350, BUILD-SPEC §2.9, §2.13, wireframes-v2 №17).
@@ -46,7 +49,7 @@ const GROUP_TITLE = { overdue: "proto.money.g.overdue", waiting: "proto.money.g.
 export default function Invoices() {
   const { f: fParam, customer, g: gParam } = useLocalSearchParams<{ f?: string; customer?: string; g?: string }>();
   const { db, role } = useStore();
-  const { t, money, day } = useI18n();
+  const { t, tn, money, day, moneyWhole } = useI18n();
   const remind = useInvoiceRemind();
   const chips = useMoneyChips("invoices");
   const { create, onCreate } = useMoneyCreate();
@@ -70,7 +73,7 @@ export default function Invoices() {
   const canRemind = true;
   const groups = shown.map(({ g, items, all }) => ({
     key: g,
-    title: `${t(g === "paid" && owedOnly ? "proto.money.g.paidWeek" : GROUP_TITLE[g])} · ${money(sumCents(items.map((i) => (g === "paid" ? i.paidCents : invoiceBalance(i).owesCents))))}`,
+    title: `${t(g === "paid" && owedOnly ? "proto.money.g.paidWeek" : GROUP_TITLE[g])} · ${moneyWhole(sumCents(items.map((i) => (g === "paid" ? i.paidCents : invoiceBalance(i).owesCents))))}`,
     rows: items,
     // «Напомнить всем · N» — on the debtors' line (the List template has no main button; BUILD-SPEC §2.13)
     all:
@@ -91,20 +94,35 @@ export default function Invoices() {
     const sign = invoiceSigns(i, now, tz)[0];
     const left = i.dueDate ? daysBetween(dayKeyIn(now, tz), dueDayKey(i.dueDate, tz)) : 0;
     const late = owes > 0 && sign?.tone === "bad";
-    // visual v2 «цифры справа»: «Срок Просрочен 9 дн» (red word, not a fill) · «Сумма $1,840»; the line — the number, the work, the reminders
-    const due: FigureCol =
-      owes <= 0
-        ? { label: t("w2m.col.paid"), value: i.paidAt ? formatDayKey(dayKeyIn(i.paidAt, tz), { month: "numeric", day: "numeric" }) : "—" }
-        : { label: t("w2m.col.due"), value: left < 0 ? t("w2m.due.late", { d: -left }) : left > 0 ? t("w2m.due.in", { d: left }) : t("w2m.due.today"), tone: late || left < 0 ? "bad" : undefined };
-    const sub = [i.number, invoiceTitle(i, t), late ? t("proto.money.reminders", { n: remindersOf(db, i.id).length }) : undefined].filter(Boolean).join(" · ");
+    // #2992 (lists B): on the right the sum, under it the sign of the map §5 — the one rule `invoiceSigns` (listSigns.ts): «Просрочен
+    // N дн» (bad), «срок сегодня / завтра» (warn); a debt further off says «Срок N дн» in its line, a paid one — the day it was paid;
+    // no «Срок / Сумма» words in every row (DS §5.5)
+    // a paid one says «Оплачен <день>» — one word, kept by #1427 (e2e 78), though the group says «Оплачено» too
+    const when = owes <= 0 ? (i.paidAt ? `${t("w2m.col.paid")} ${day(i.paidAt)}` : undefined) : sign ? undefined : left > 0 ? `${t("w2m.col.due")} ${t("w2m.due.in", { d: left })}` : undefined;
+    // the number and when; the invoice's kind word («Остаток по договору») repeated in every row and cut it mid-word (layout review 27.11)
+    // #3018: line 3 — the sign, «из $2,000.00» when part is paid, when; the number is in the name's line, the address under it
+    const job = db.jobs.find((j) => j.id === i.jobId);
+    const prop = db.properties.find((x) => x.id === job?.propertyId) ?? db.properties.find((x) => x.customerId === i.customerId);
+    const partOf = owes > 0 && i.paidCents > 0 ? t("lst.ofTotal", { amount: moneyWhole(i.totalCents) }) : undefined;
+    // #3038: the icon by the sum has no word — the overdue days are said in line 3 («Просрочен 12 дн»)
+    const lateWord = owes > 0 && sign?.tone === "bad" ? t(sign.key, sign.params) : undefined;
+    const sub = [lateWord, partOf, when, late && remindersOf(db, i.id).length ? tn("lst.reminded", remindersOf(db, i.id).length) : undefined].filter(Boolean).join(" · ");
     return {
       key: i.id,
       testID: `invoice-row-${i.id}`,
       title: c?.name ?? "—",
-      subtitle: sub,
+      refNo: i.number || undefined,
+      subtitle: prop ? shortAddress(prop.address, prop.city) : undefined,
+      addressLine: true,
+      extra: sub || undefined,
+      valueTop: true,
+      // #3038 (review: «смете без ответа и просроченному счёту звонок нужнее всего»): the call on the right, as the client's
+      actions: telHref(c?.phone) ? [{ icon: "phone" as const, a11y: `${t("client.call")} ${c?.name ?? ""}`, onPress: () => openContact({ kind: "call", icon: "phone", url: telHref(c?.phone)!, value: c?.phone ?? "" }), testID: `invoice-call-${i.id}` }] : undefined,
       lead: { initials: initialsOf(c?.name) },
-      value: money(owes > 0 ? owes : i.paidCents),
-      cols: [due, { label: t("w2m.col.sum"), value: money(owes > 0 ? owes : i.paidCents) }],
+      // the rest to pay, big on the right (Jobber, HCP: the office calls by the balance)
+      value: moneyWhole(owes > 0 ? owes : i.paidCents),
+      // #3038: the client's rule — the sign as its icon by the sum (no word; said to VoiceOver)
+      status: owes > 0 && sign ? { status: sign.tone, label: t(sign.key, sign.params), iconOnly: true } : undefined,
       onPress: () => panel.open(i.id),
       selected: i.id === panel.openId,
       swipe:
@@ -125,12 +143,14 @@ export default function Invoices() {
   return (
     <ListScreen
       testID="invoice-list"
+      // #3018 (founder #3017): each invoice its own card
+      separate
       title={client ? client.name : t("nav.money")}
       back={client ? () => (router.canGoBack() ? router.back() : router.setParams({ customer: "" })) : undefined}
       search={{ placeholder: t("card.filter.searchInvoices"), value: q, onChange: setQ }}
       chips={client ? undefined : chips}
       chipsAs="segment"
-      filters={client ? undefined : <MoneyTiles selected={tile} onSelect={(k) => router.setParams({ g: k ?? "", f: "owed" })} />}
+      filters={client ? undefined : <MoneyTotal tab="invoices" selected={tile} onSelect={(k) => router.setParams({ g: k ?? "", f: "owed" })} />}
       create={create}
       onCreate={onCreate}
       groups={groups}
