@@ -19757,7 +19757,7 @@ rollback;
 -- T474 (#3161): a client's photo without a visit, as the app sends it from «Фото и файлы» of the client (cloud/ops.ts file.add:
 -- {kind photo, customer_id}): the office adds it; a tech — only to a client of his (a visit of his on the client's job,
 -- app.is_customer_assignee); never a tech to another client, never a subcontractor (app.sub_file_ok: no customer_id), even of
--- a client he works for. The app shows «＋» by the same rule (features/client/clientMedia.ts). The rule is 20261115170000.
+-- a client he works for. The rule is 20261115170000; the app is to show «＋» by the same rule (#3161, its own PR).
 -- Its own people and clients (a tech, a subcontractor; «his» client with a job and a visit of both, «another» client).
 \set as_tech474 'reset role; set request.jwt.claim.sub = ''a4740000-0000-4000-8000-000000000001''; set role authenticated;'
 \set as_sub474 'reset role; set request.jwt.claim.sub = ''a4740000-0000-4000-8000-000000000002''; set role authenticated;'
@@ -19791,13 +19791,19 @@ insert into public.files (id, company_id, kind, customer_id) values
   ('f4740000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'photo', 'c4740000-0000-4000-8000-000000000001');
 select tst.ok(tst.cnt($q$select 1 from public.files where id = 'f4740000-0000-4000-8000-000000000002'$q$) = 1,
               'T474 a tech adds a photo to a client of his (his visit on the client''s job)');
-select tst.fails($q$insert into public.files (company_id, kind, customer_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', 'c4740000-0000-4000-8000-000000000002')$q$,
-                 'T474 a tech does not add a photo to another client');
+select tst.fails_like($q$insert into public.files (company_id, kind, customer_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', 'c4740000-0000-4000-8000-000000000002')$q$, '%row-level security%',
+                      'T474 a tech does not add a photo to another client');
 :as_sub474
-select tst.fails($q$insert into public.files (company_id, kind, customer_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', 'c4740000-0000-4000-8000-000000000001')$q$,
-                 'T474 a subcontractor does not add a photo to the client, even one he works for');
-select tst.fails($q$insert into public.files (company_id, kind, customer_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', 'c4740000-0000-4000-8000-000000000002')$q$,
-                 'T474 nor to another client');
+select tst.fails_like($q$insert into public.files (company_id, kind, customer_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', 'c4740000-0000-4000-8000-000000000001')$q$, '%row-level security%',
+                      'T474 a subcontractor does not add a photo to the client, even one he works for');
+select tst.fails_like($q$insert into public.files (company_id, kind, customer_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', 'c4740000-0000-4000-8000-000000000002')$q$, '%row-level security%',
+                      'T474 nor to another client');
+-- the visit stops counting (cancelled): the client is not his any more — refused
+:as_super
+update public.visits set status = 'cancelled' where id = 'f4740000-0000-4000-8000-000000000011';
+:as_tech474
+select tst.fails_like($q$insert into public.files (company_id, kind, customer_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', 'c4740000-0000-4000-8000-000000000001')$q$, '%row-level security%',
+                      'T474 a tech whose visit is cancelled: no photo to that client');
 rollback;
 \echo 'T474 a client''s photo without a visit: the office, a tech of the client — never a subcontractor ok'
 
